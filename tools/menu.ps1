@@ -1,12 +1,13 @@
 ﻿$root = Split-Path -Parent $PSScriptRoot
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-function GetVer { (Get-Content "$root\version.json" -Raw -Encoding UTF8 | ConvertFrom-Json).version }
+$UTF8 = [System.Text.Encoding]::UTF8
+function GetVer { ([System.IO.File]::ReadAllText("$root\version.json", $UTF8) | ConvertFrom-Json).version }
 while($true){
  $v = GetVer
  Clear-Host
  Write-Host "=================================="
- Write-Host "   ServiceCRM   current: v$v"
+ Write-Host "   ServiceCRM   v$v   (menu v4.1)"
  Write-Host "=================================="
  Write-Host " [1] Создать бэкап"
  Write-Host " [2] Список бэкапов"
@@ -23,14 +24,14 @@ while($true){
   '3'{ $bk=Read-Host "Имя папки бэкапа"; if(Test-Path "$root\backups\$bk"){ robocopy "$root\backups\$bk" $root /E /XD .git backups | Out-Null; Write-Host "Восстановлено: $bk" } else { Write-Host "Не найдено: $bk" }; Read-Host "Enter" }
   '4'{ & "$root\tools\patch.ps1"; Read-Host "Enter" }
   '5'{ & "$root\tools\bump.ps1"; & "$root\tools\patch.ps1"
-       $html = Get-Content "$root\index.html" -Raw -Encoding UTF8
+       $html = [System.IO.File]::ReadAllText("$root\index.html", $UTF8)
        if($html -match '<<<<<<<'){ Write-Host "ОШИБКА: маркеры конфликта в index.html — деплой остановлен"; Read-Host "Enter"; break }
        if(!(Get-Command git -ErrorAction SilentlyContinue)){ Write-Host "Установи Git: git-scm.com"; Read-Host "Enter"; break }
-       $vj = Get-Content "$root\version.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+       $vj = [System.IO.File]::ReadAllText("$root\version.json", $UTF8) | ConvertFrom-Json
        $dep = 1; if($vj.deploy){ $dep = [int]$vj.deploy + 1 }
        $dt = Get-Date -Format "dd.MM.yyyy HH:mm"
        $text = ""
-       if(Test-Path "$root\tools\release_notes.txt"){ $text = (Get-Content "$root\tools\release_notes.txt" -Raw -Encoding UTF8).Trim(); Remove-Item "$root\tools\release_notes.txt" }
+       if(Test-Path "$root\tools\release_notes.txt"){ $text = [System.IO.File]::ReadAllText("$root\tools\release_notes.txt", $UTF8).Trim(); Remove-Item "$root\tools\release_notes.txt" }
        $obj = [ordered]@{version=$vj.version; x=$vj.x; y=$vj.y; z=$vj.z; deploy=$dep; dt=$dt; text=$text}
        [System.IO.File]::WriteAllText("$root\version.json", ($obj | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding $false))
        Push-Location $root
