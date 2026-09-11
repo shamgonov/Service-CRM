@@ -38,6 +38,7 @@ const APP_VERSION='$Version';
  $h = $h.Replace('</body>', $block + "</body>")
 } else {
  $h = [regex]::Replace($h, "const APP_VERSION=[^\r\n]*", "const APP_VERSION='$Version';")
+$h = [regex]::Replace($h, "Демо-прототип v[0-9][0-9.]*[^<]*", "Версия v$Version")
 }
 if($h -notmatch 'rel="manifest"'){
  $head = "<link rel=`"manifest`" href=`"manifest.json`">`n<meta name=`"theme-color`" content=`"#2563eb`">`n<link rel=`"apple-touch-icon`" href=`"icon.png`">`n</head>"

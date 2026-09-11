@@ -152,7 +152,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Демо-прототип v0.1 — 11.09.2026</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.0.7</div></div>
 <div class="card"><div class="sec-title">Войти как:</div>
  ${[['admin','👑 Дмитрий — Админ','дележка прибыли, отчеты, шаблоны, все права'],
     ['operator','📞 Оля — Оператор','заявки, календарь, закупки, отчеты'],
@@ -430,7 +430,7 @@ render();
 <!-- CRM-UPDATER -->
 <div id="updBanner" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:10px 16px;font:600 14px sans-serif;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)">&#128260; Обновление v<span id="updVer"></span> — применяю...</div>
 <script>
-const APP_VERSION='1.0.7';
+const APP_VERSION='1.0.8';
 (function(){
  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js');navigator.serviceWorker.addEventListener('controllerchange',function(){location.reload()});}
  function check(){fetch('version.json?'+Date.now(),{cache:'no-store'}).then(function(r){return r.json()}).then(function(v){
