@@ -215,7 +215,3 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - Проблема: firebase-access.js содержал 520 байт — только хвостовые патчи, основной код (renderAccess, ownerPanel, checkApproved) был потерян в процессе экранирования PowerShell.
 - Фикс: файл переписан через single-quoted here-string (без backticks/template literals) — без интерполяции, без экранирований. JS без template literals, обычная конкатенация.
 - fbpatch.ps1 пересоздан: подключает локальный SDK (tools/*.js) и firebase-access.js перед </body>.
-
-### 11.09.2026 — Видимая диагностика CRM-DBG
-- Чёрная полоса сверху страницы: печатает статус слоёв (firebase/auth/accessJs/mode/ownerFlag/role) и перехватывает JS-ошибки с номером строки.
-- Цель: по скрину полосы точно видеть, какой слой доступа умер, без консоли браузера.

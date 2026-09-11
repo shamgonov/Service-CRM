@@ -1,5 +1,3 @@
-// DBG-START
-if(window.__dbg)window.__dbg('access.js ZAPUSTILSAYA, firebase='+typeof firebase);
 // firebase-access.js
 var auth = firebase.auth();
 var fs = firebase.firestore();
