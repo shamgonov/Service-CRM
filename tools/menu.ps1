@@ -24,17 +24,25 @@ while($true){
   '4'{ & "$root\tools\patch.ps1"; Read-Host "Enter" }
   '5'{ & "$root\tools\bump.ps1"; & "$root\tools\patch.ps1"
        $html = Get-Content "$root\index.html" -Raw -Encoding UTF8
-       if($html -match '<<<<<<<'){ Write-Host "ОШИБКА: в index.html маркеры конфликта — деплой остановлен"; Read-Host "Enter"; break }
+       if($html -match '<<<<<<<'){ Write-Host "ОШИБКА: маркеры конфликта в index.html — деплой остановлен"; Read-Host "Enter"; break }
        if(!(Get-Command git -ErrorAction SilentlyContinue)){ Write-Host "Установи Git: git-scm.com"; Read-Host "Enter"; break }
+       $vj = Get-Content "$root\version.json" -Raw | ConvertFrom-Json
+       $dep = 1; if($vj.deploy){ $dep = [int]$vj.deploy + 1 }
+       $dt = Get-Date -Format "dd.MM.yyyy HH:mm"
+       $text = ""
+       if(Test-Path "$root\tools\release_notes.txt"){ $text = (Get-Content "$root\tools\release_notes.txt" -Raw).Trim(); Remove-Item "$root\tools\release_notes.txt" }
+       $obj = [ordered]@{version=$vj.version; x=$vj.x; y=$vj.y; z=$vj.z; deploy=$dep; dt=$dt; text=$text}
+       [System.IO.File]::WriteAllText("$root\version.json", ($obj | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding $false))
        Push-Location $root
        git config --local core.autocrlf false
        if(!(Test-Path .git)){ git init | Out-Null; git branch -M main; git remote add origin https://github.com/shamgonov/Service-CRM.git }
        git add -A
-       git commit -m ("деплой v"+(GetVer)) 2>&1 | Out-Null
+       git commit -m ("деплой №$dep v"+(GetVer)) 2>&1 | Out-Null
        git push -u origin main --force-with-lease 2>&1 | Out-Null
        Pop-Location
-       Write-Host "ДЕПЛОЙ ГОТОВ: v$(GetVer)"
-       Write-Host "Ссылка: https://shamgonov.github.io/Service-CRM/"; Read-Host "Enter" }
+       Write-Host "ДЕПЛОЙ №$dep ГОТОВ: v$(GetVer)"
+       Write-Host "Баннер увидят все: localhost:8000 и на телефоне"
+       Read-Host "Enter" }
   '6'{ if(!(Get-Command firebase -ErrorAction SilentlyContinue)){ Write-Host "Нужно: npm i -g firebase-tools, затем firebase init hosting" } else { firebase deploy --only hosting }; Read-Host "Enter" }
   '7'{ & "$root\tools\fbpatch.ps1"; Read-Host "Enter" }
   '0'{ exit }
