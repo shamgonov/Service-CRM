@@ -1,6 +1,7 @@
 ﻿param([string]$Version)
 $root = Split-Path -Parent $PSScriptRoot
 $noBom = New-Object System.Text.UTF8Encoding $false
+$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 if(!$Version){ $Version = (Get-Content "$root\version.json" -Raw | ConvertFrom-Json).version }
 $sw = @"
 const VERSION='$Version';const CACHE='crm-'+VERSION;const CORE=['./','index.html','manifest.json','icon.png','version.json'];
@@ -20,7 +21,7 @@ $h = Get-Content "$root\index.html" -Raw -Encoding UTF8
 if($h -notmatch 'CRM-UPDATER'){
 $block = @"
 <!-- CRM-UPDATER -->
-<div id="updBanner" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:10px 16px;font:600 14px sans-serif;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)">&#128260; ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ v<span id="updVer"></span> â€” Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÑÑŽ...</div>
+<div id="updBanner" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:10px 16px;font:600 14px sans-serif;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)">&#128260; Обновление v<span id="updVer"></span> — применяю...</div>
 <script>
 const APP_VERSION='$Version';
 (function(){
@@ -42,4 +43,4 @@ if($h -notmatch 'rel="manifest"'){
  $h = $h.Replace('</head>', $head)
 }
 [System.IO.File]::WriteAllText("$root\index.html", $h, $noBom)
-Write-Host "ÐŸÐ°Ñ‚Ñ‡ Ð¿Ñ€Ð¸Ð¼ÐµÐ½Ñ‘Ð½: v$Version"
+Write-Host "Патч применён: v$Version"

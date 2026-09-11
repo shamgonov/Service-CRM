@@ -1,5 +1,4 @@
 ﻿$root = Split-Path -Parent $PSScriptRoot
-$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 function GetVer { (Get-Content "$root\version.json" -Raw | ConvertFrom-Json).version }
 while($true){
  $v = GetVer
@@ -23,11 +22,11 @@ while($true){
   '5'{ & "$root\tools\bump.ps1"; & "$root\tools\patch.ps1"
        if(!(Get-Command git -ErrorAction SilentlyContinue)){ Write-Host "Установи Git: git-scm.com"; Read-Host "Enter"; break }
        Push-Location $root
-       git config --local core.autocrlf false
        if(!(Test-Path .git)){ git init | Out-Null; git branch -M main; git remote add origin https://github.com/shamgonov/Service-CRM.git }
        git add -A
-       git commit -m ("deploy v"+(GetVer)) 2>&1 | Out-Null
-       git push -u origin main --force-with-lease
+       git commit -m ("deploy v"+(GetVer)) | Out-Null
+       git pull origin main --allow-unrelated-histories --no-edit 2>&1 | Out-Null
+       git push -u origin main
        Write-Host "ДЕПЛОЙ ГОТОВ: v$(GetVer)"; Pop-Location; Read-Host "Enter" }
   '6'{ if(!(Get-Command firebase -ErrorAction SilentlyContinue)){ Write-Host "Нужно: npm i -g firebase-tools, затем firebase init hosting" } else { firebase deploy --only hosting }; Read-Host "Enter" }
   '0'{ exit }
