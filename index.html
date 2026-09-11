@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -68,7 +67,6 @@ h1,h2,h3{font-weight:600}
 <div id="app"></div>
 <nav id="nav" style="display:none"></nav>
 <script>
-// ================= ДАННЫЕ =================
 const fmt=d=>d.toISOString().slice(0,10);
 const d0=fmt(new Date()),d1=fmt(new Date(Date.now()+864e5)),d2=fmt(new Date(Date.now()+2*864e5)),d7=fmt(new Date(Date.now()+7*864e5));
 const ST={
@@ -120,8 +118,6 @@ function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()
 function save(){localStorage.setItem('crm_db',JSON.stringify(DB))}
 function reset(){localStorage.removeItem('crm_db');load();render();alert('Демо-данные сброшены')}
 load();
-
-// ================= УТИЛИТЫ =================
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
 const total=o=>(+o.price||0)+o.extras.reduce((s,e)=>s+(+e.price||0),0);
 function dur(ms){const h=Math.floor(ms/36e5),m=Math.floor(ms%36e5/6e4);return h>=24?Math.floor(h/24)+' д '+(h%24)+' ч':h+' ч '+m+' мин';}
@@ -145,8 +141,6 @@ function badges(o){
  return b;
 }
 const byId=id=>DB.orders.find(o=>o.id==id);
-
-// ================= НАВИГАЦИЯ =================
 const NAVS={
  admin:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
  operator:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['create','➕','Новая'],['reports','📊','Отчеты']],
@@ -156,8 +150,6 @@ const NAVS={
 function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create')state.newMats=[];render()}
 function login(role,name){state.role=role;state.user=name;state.screen=role==='worker'?'tasks':'orders';render()}
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
-
-// ================= ЭКРАНЫ =================
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
  <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Демо-прототип v0.1 — 11.09.2026</div></div>
@@ -166,9 +158,8 @@ function renderLogin(){return `
     ['operator','📞 Оля — Оператор','заявки, календарь, закупки, отчеты'],
     ['manager','📐 Анна — Менеджер','осмотры, сметы, материалы'],
     ['worker','🔨 Вася — Работник','мои задачи, взять в работу, закупки']]
-  .map(r=>`<div class="role-card" onclick="login('${r[0]}','${r[2].split(' — ')[1]}')"><b>${r[1]}</b><div class="muted">${r[2].split(' — ')[0]===''?'':''}${r[2].split('—')[0]}${r[2].includes('—')?'':' '}</div><div class="muted">${r[2].split('—').slice(1).join('—')}</div></div>`).join('')}
+  .map(r=>`<div class="role-card" onclick="login('${r[0]}','${r[1].split('— ')[1]}')"><b>${r[1]}</b><div class="muted">${r[2]}</div></div>`).join('')}
 </div>`}
-
 function renderOrders(){
  let list=DB.orders.slice();
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
@@ -187,7 +178,6 @@ ${list.map(o=>`<div class="ord" onclick="go('details',${o.id})">
  <div style="margin-top:6px">${badges(o)}</div>
  <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
 </div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
-
 function renderDetails(id){
  const o=byId(id);if(!o)return '<div class="card">Не найдено</div>';
  const canManage=['admin','operator','manager'].includes(state.role);
@@ -207,13 +197,11 @@ function renderDetails(id){
   ${Object.keys(ST).map(k=>`<option value="${k}" ${o.status===k?'selected':''}>${ST[k].t}</option>`).join('')}
  </select></div>`:''}
 </div>
-
 <div class="card"><div class="sec-title">📸 Фото</div>
  <div class="photos">${o.photos.map(p=>`<div class="photo">${p}</div>`).join('')}
  ${o.photoReport||canManage?`<div class="photo photo-add" onclick="addPhoto(${o.id})">＋</div>`:''}</div>
  <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчет обязателен — без фото заказ не закроется':'Фотоотчет не требуется'}</div>
 </div>
-
 <div class="card"><div class="sec-title">🛒 Материалы <button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button></div>
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
@@ -239,7 +227,6 @@ function renderDetails(id){
   <button class="btn-sm btn-blue" onclick="addMat(${o.id})">＋ Добавить</button></div>
  </div>
 </div>
-
 <div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  <div class="info-row"><span>Основная работа</span><b>${money(o.price)}</b></div>
  ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${e.name} <span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span></span><b>${money(e.price)}</b></div>`).join('')}
@@ -249,13 +236,11 @@ function renderDetails(id){
   ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
  </div>
 </div>
-
 ${isW||canManage?`<div class="card">
  ${!o.worker&&o.status==='approved'?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}
  ${o.status==='approved'&&o.worker?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
  ${o.status==='in_progress'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
 </div>`:''}`}
-
 function renderCreate(){
  return `
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
@@ -291,7 +276,6 @@ function renderCreate(){
  <button class="btn btn-outline" onclick="addNewMat()">＋ Добавить материал</button></div>
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
-
 function renderCalendar(){
  const list=DB.orders.filter(o=>o.date===state.calDate).sort((a,b)=>a.t1.localeCompare(b.t1));
  return `
@@ -307,7 +291,6 @@ function renderCalendar(){
     :'<div class="muted" style="margin-top:2px">🟩 свободно</div>'}
    </div>`}).join('')}
 </div>`}
-
 function renderTasks(){
  const mine=DB.orders.filter(o=>o.worker===state.user);
  const free=DB.orders.filter(o=>!o.worker&&o.status==='approved');
@@ -335,7 +318,6 @@ ${free.length?`<div class="card"><div class="sec-title">🆓 Свободные 
  <div class="mat"><b>${o.client}</b> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
  <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
 </div>`}
-
 function renderShopping(){
  const rows=[];
  DB.orders.forEach(o=>o.materials.forEach((m,i)=>{const s=matState(o,m);if(s.k!=='bought')rows.push({o,m,i,s})}));
@@ -355,7 +337,6 @@ function renderShopping(){
    <button class="btn-sm btn-red" onclick="matAct(${r.o.id},${r.i},'issue')">❌ Не найти</button></div>`:''}
  </div>`).join('')||'<div class="muted">Все материалы закуплены 🎉</div>'}
 </div>`}
-
 function renderReports(){
  const done=DB.orders.filter(o=>['completed','paid'].includes(o.status));
  const rev=done.reduce((s,o)=>s+total(o),0);
@@ -378,7 +359,6 @@ function renderReports(){
 <div class="card"><div class="sec-title">Материалы (расходы)</div>
  <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
 </div>`}
-
 function renderAdmin(){
  return `
 <div class="header dark"><h1>⚙️ Админ-панель</h1></div>
@@ -396,8 +376,6 @@ function renderAdmin(){
 </div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
-
-// ================= ДЕЙСТВИЯ =================
 function setStatus(id,s){byId(id).status=s;save();render()}
 function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='in_progress';save();alert('Заявка №'+id+' взята в работу');render()}
 function finishOrder(id){const o=byId(id);
@@ -424,8 +402,7 @@ function renderCreate2(){document.getElementById('newmats').innerHTML=state.newM
 function tplClick(i){const el=document.getElementById('tpl'+i),ta=document.getElementById('c-desc');
  el.classList.toggle('sel');const t=DB.templates[i];
  ta.value=el.classList.contains('sel')?(ta.value?ta.value+'; '+t.name:t.name):ta.value.split('; ').filter(x=>x!==t.name).join('; ');}
-function setDur(h,el){document.querySelectorAll('.chips .chip').forEach(c=>c!==el&&c.textContent.includes('ч')||c.textContent.includes('Полдня')?0:0);
- el.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');
+function setDur(h,el){el.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');
  const t1=document.getElementById('c-t1').value;const hh=+t1.split(':')[0]+h;
  document.getElementById('c-t2').value=String(Math.min(hh,23)).padStart(2,'0')+':00';}
 function saveOrder(){const g=x=>document.getElementById(x).value;
@@ -439,8 +416,6 @@ function setShare(id,v){DB.users.find(u=>u.id===id).share=+v;save()}
 function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
  if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
 function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.splice(i,1);save();render()}}
-
-// ================= РЕНДЕР =================
 function render(){
  const app=document.getElementById('app'),nav=document.getElementById('nav');
  if(!state.role){app.innerHTML=renderLogin();nav.style.display='none';return}
@@ -453,9 +428,9 @@ function render(){
 render();
 </script>
 <!-- CRM-UPDATER -->
-<div id="updBanner" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:10px 16px;font:600 14px sans-serif;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)">&#128260; ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ v<span id="updVer"></span> â€” Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÑÑŽ...</div>
+<div id="updBanner" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:10px 16px;font:600 14px sans-serif;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)">&#128260; Обновление v<span id="updVer"></span> — применяю...</div>
 <script>
-const APP_VERSION='1.0.4'''''''';
+const APP_VERSION='1.0.5'';
 (function(){
  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js');navigator.serviceWorker.addEventListener('controllerchange',function(){location.reload()});}
  function check(){fetch('version.json?'+Date.now(),{cache:'no-store'}).then(function(r){return r.json()}).then(function(v){
@@ -465,457 +440,4 @@ const APP_VERSION='1.0.4'''''''';
  check();setInterval(check,30000);
 })();
 </script></body>
-=======
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>ServiceCRM</title>
-<style>
-:root{--blue:#2563eb;--green:#10b981;--red:#dc2626;--dark:#1e293b}
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f5f5f5;max-width:430px;margin:0 auto;padding-bottom:72px;min-height:100vh}
-.header{background:var(--blue);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
-.header.dark{background:var(--dark)}.header.green{background:var(--green)}.header.red{background:var(--red)}
-.header h1{font-size:17px}
-.back{background:none;border:none;color:#fff;font-size:22px;cursor:pointer}
-.card{background:#fff;margin:12px 16px;padding:14px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.sec-title{font-weight:600;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
-.muted{font-size:12px;color:#666}
-.badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;margin:2px 4px 2px 0}
-.role-card{border:1px solid #e5e5e5;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer}
-.role-card:active{background:#f0f7ff}
-#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;display:flex;border-top:1px solid #e5e5e5;z-index:10}
-.nav-item{flex:1;text-align:center;padding:8px 2px;cursor:pointer;color:#666;font-size:10px}
-.nav-item span{display:block;font-size:20px}
-.nav-item.active{color:var(--blue)}
-.input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;background:#fff}
-textarea.input{min-height:60px;resize:vertical}
-.label{display:block;font-weight:500;font-size:13px;margin-bottom:5px;color:#333}
-.field{margin-bottom:12px}
-.row2{display:flex;gap:8px}.row2>*{flex:1}
-.btn{width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
-.btn-blue{background:var(--blue);color:#fff}.btn-green{background:var(--green);color:#fff}
-.btn-red{background:#fee2e2;color:#991b1b}.btn-purple{background:#8b5cf6;color:#fff}
-.btn-outline{background:#fff;border:1px solid var(--blue);color:var(--blue)}
-.btn-sm{padding:8px 10px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;flex:1}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.chip{padding:6px 11px;border:1px solid var(--blue);color:var(--blue);border-radius:14px;font-size:12px;cursor:pointer;background:#fff;user-select:none}
-.chip.sel{background:var(--blue);color:#fff}
-.mat{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px}
-.mat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-.mat-name{font-weight:600;font-size:13px}
-.ord{background:#fff;margin:10px 16px;padding:14px;border-radius:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.ord:active{transform:scale(.99)}
-.filters{display:flex;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid #eee;overflow-x:auto}
-.fbtn{padding:6px 12px;border:1px solid #ddd;border-radius:16px;background:#fff;font-size:12px;cursor:pointer;white-space:nowrap}
-.fbtn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
-.info-row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f5f5f5}
-.info-row:last-child{border:none}
-.total{display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:16px;border-top:2px solid #eee;margin-top:6px}
-.photos{display:flex;gap:8px;flex-wrap:wrap}
-.photo{width:64px;height:64px;border-radius:8px;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:22px}
-.photo-add{border:2px dashed var(--blue);background:#fff;color:var(--blue);cursor:pointer}
-.slot{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid #ccc}
-.switch{position:relative;width:44px;height:25px;flex-shrink:0}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;inset:0;background:#ccc;border-radius:25px;transition:.2s;cursor:pointer}
-.slider:before{content:'';position:absolute;height:19px;width:19px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-input:checked+.slider{background:var(--green)}
-input:checked+.slider:before{transform:translateX(19px)}
-.tgl{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #f0f0f0}
-h1,h2,h3{font-weight:600}
-</style>
-</head>
-<body>
-<div id="app"></div>
-<nav id="nav" style="display:none"></nav>
-<script>
-// ================= ДАННЫЕ =================
-const fmt=d=>d.toISOString().slice(0,10);
-const d0=fmt(new Date()),d1=fmt(new Date(Date.now()+864e5)),d2=fmt(new Date(Date.now()+2*864e5)),d7=fmt(new Date(Date.now()+7*864e5));
-const ST={
- new:{t:'Новая',c:'#fef3c7',tc:'#92400e'},
- inspection:{t:'Осмотр/диагностика',c:'#dbeafe',tc:'#1e40af'},
- approved:{t:'Смета согласована',c:'#ede9fe',tc:'#5b21b6'},
- in_progress:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
- waiting:{t:'Ожидание материала',c:'#fee2e2',tc:'#991b1b'},
- postponed:{t:'Перенос',c:'#e5e7eb',tc:'#374151'},
- completed:{t:'Выполнено',c:'#d1fae5',tc:'#065f46'},
- paid:{t:'Оплачено',c:'#a7f3d0',tc:'#064e3b'}
-};
-const BUYER={worker:'Работник перед выездом',manager:'Диагност/менеджер',delivery:'Доставка на адрес',stock:'Есть на складе'};
-function defaultData(){return{
- seq:270,
- users:[
-  {id:'u1',name:'Дмитрий',role:'admin',share:0},
-  {id:'u2',name:'Оля',role:'operator',share:0},
-  {id:'u3',name:'Анна',role:'manager',share:0},
-  {id:'u4',name:'Вася',role:'worker',share:50},
-  {id:'u5',name:'Петя',role:'worker',share:40}],
- templates:[
-  {id:'t1',name:'Осмотр и диагностика',price:1500},
-  {id:'t2',name:'Замеры',price:1000},
-  {id:'t3',name:'Установка кондиционера',price:12000},
-  {id:'t4',name:'Обслуживание вентиляции',price:6500},
-  {id:'t5',name:'Штробление стены (м.п.)',price:1500},
-  {id:'t6',name:'Демонтаж старого блока',price:2000}],
- orders:[
-  {id:248,client:'Иванов Иван',phone:'+7(900)123-45-67',address:'ул. Ленина, 15, кв. 42',desc:'Установка кондиционера, 2 комнаты',
-   status:'in_progress',date:d0,t1:'14:00',t2:'16:00',price:15000,extras:[{name:'Штробление 2 м.п.',price:3000}],
-   photoReport:true,worker:'Вася',photos:['🖼','🖼'],
-   materials:[
-    {name:'Кабель ВВГ 3×2.5',qty:'30 м',price:4500,buyer:'worker',where:'Электромир, ул. Мира 22',deadline:3,unit:'h',status:'todo'},
-    {name:'Кронштейны усиленные',qty:'2 шт',price:1200,buyer:'worker',where:'Строймаркет',deadline:3,unit:'h',status:'todo'}]},
-  {id:251,client:'Петров Петр',phone:'+7(901)222-33-44',address:'ул. Мира, 8',desc:'Замена розеток, 5 шт',
-   status:'approved',date:d1,t1:'10:00',t2:'12:00',price:7500,extras:[],photoReport:false,worker:'Вася',photos:[],
-   materials:[{name:'Розетки Legrand',qty:'5 шт',price:2500,buyer:'worker',where:'Электромир',deadline:12,unit:'h',status:'todo'}]},
-  {id:264,client:'Сидоров Сидор',phone:'+7(902)333-44-55',address:'ул. Гагарина, 3',desc:'Обслуживание вентиляции',
-   status:'approved',date:d7,t1:'12:00',t2:'14:00',price:6500,extras:[],photoReport:true,worker:null,photos:[],
-   materials:[{name:'Фильтр воздушный F5',qty:'2 шт',price:1800,buyer:'delivery',where:'Склад поставщика → адрес',deadline:2,unit:'d',status:'delivery'}]},
-  {id:266,client:'Козлова Анна',phone:'+7(903)444-55-66',address:'пр. Победы, 42',desc:'Осмотр перед установкой сплит-системы',
-   status:'inspection',date:d0,t1:'17:00',t2:'18:00',price:1500,extras:[],photoReport:true,worker:'Анна',photos:[],materials:[]},
-  {id:240,client:'Николаев Н.Н.',phone:'+7(904)555-66-77',address:'ул. Садовая, 1',desc:'Установка кондиционера',
-   status:'paid',date:d2,t1:'10:00',t2:'13:00',price:14000,extras:[{name:'Демонтаж старого',price:2000}],photoReport:false,worker:'Петя',photos:[],materials:[]}
- ]};}
-let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:d0,newMats:[]};
-function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}}
-function save(){localStorage.setItem('crm_db',JSON.stringify(DB))}
-function reset(){localStorage.removeItem('crm_db');load();render();alert('Демо-данные сброшены')}
-load();
-
-// ================= УТИЛИТЫ =================
-const money=n=>(+n||0).toLocaleString('ru')+' ₽';
-const total=o=>(+o.price||0)+o.extras.reduce((s,e)=>s+(+e.price||0),0);
-function dur(ms){const h=Math.floor(ms/36e5),m=Math.floor(ms%36e5/6e4);return h>=24?Math.floor(h/24)+' д '+(h%24)+' ч':h+' ч '+m+' мин';}
-function matState(o,m){
- if(m.status==='bought')return{k:'bought',t:'✅ Закуплен',c:'#d1fae5',tc:'#065f46',cd:''};
- if(m.status==='delivery')return{k:'delivery',t:'🚚 В доставке',c:'#dbeafe',tc:'#1e40af',cd:''};
- if(m.status==='issue')return{k:'issue',t:'❌ Не найден',c:'#fee2e2',tc:'#991b1b',cd:'нужно решение'};
- const work=new Date(o.date+'T'+(o.t1||'09:00')).getTime();
- const dl=work-(m.unit==='h'?m.deadline:m.deadline*24)*36e5;
- const diff=dl-Date.now();
- if(diff<0)return{k:'critical',t:'🔴 Критично',c:'#fee2e2',tc:'#991b1b',cd:'просрочен на '+dur(-diff)};
- if(diff<3*36e5)return{k:'urgent',t:'⏳ Срок наступает',c:'#fef3c7',tc:'#92400e',cd:'осталось '+dur(diff)};
- return{k:'todo',t:'📋 К закупке',c:'#f0fdf4',tc:'#065f46',cd:'осталось '+dur(diff)};
-}
-function badges(o){
- let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
- if(o.photoReport)b+='<span class="badge" style="background:#ede9fe;color:#5b21b6">📸 фотоотчет</span>';
- const pend=o.materials.filter(m=>m.status!=='bought');
- if(pend.length){const iss=pend.some(m=>['issue','critical'].includes(matState(o,m).k));
-  b+=`<span class="badge" style="background:${iss?'#fee2e2':'#dbeafe'};color:${iss?'#991b1b':'#1e40af'}">🛒 ${pend.length}${iss?' ⚠':''}</span>`;}
- return b;
-}
-const byId=id=>DB.orders.find(o=>o.id==id);
-
-// ================= НАВИГАЦИЯ =================
-const NAVS={
- admin:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
- operator:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['create','➕','Новая'],['reports','📊','Отчеты']],
- manager:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
- worker:[['tasks','✅','Мои задачи'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
-};
-function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create')state.newMats=[];render()}
-function login(role,name){state.role=role;state.user=name;state.screen=role==='worker'?'tasks':'orders';render()}
-function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
-
-// ================= ЭКРАНЫ =================
-function renderLogin(){return `
-<div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Демо-прототип v0.1 — 11.09.2026</div></div>
-<div class="card"><div class="sec-title">Войти как:</div>
- ${[['admin','👑 Дмитрий — Админ','дележка прибыли, отчеты, шаблоны, все права'],
-    ['operator','📞 Оля — Оператор','заявки, календарь, закупки, отчеты'],
-    ['manager','📐 Анна — Менеджер','осмотры, сметы, материалы'],
-    ['worker','🔨 Вася — Работник','мои задачи, взять в работу, закупки']]
-  .map(r=>`<div class="role-card" onclick="login('${r[0]}','${r[2].split(' — ')[1]}')"><b>${r[1]}</b><div class="muted">${r[2].split(' — ')[0]===''?'':''}${r[2].split('—')[0]}${r[2].includes('—')?'':' '}</div><div class="muted">${r[2].split('—').slice(1).join('—')}</div></div>`).join('')}
-</div>`}
-
-function renderOrders(){
- let list=DB.orders.slice();
- if(state.filter==='today')list=list.filter(o=>o.date===d0);
- if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','waiting'].includes(o.status));
- if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
- return `
-<div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${state.user} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-<div class="filters">
- ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
-  `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
-</div>
-${list.map(o=>`<div class="ord" onclick="go('details',${o.id})">
- <div style="display:flex;justify-content:space-between"><b>${o.client}</b><span class="muted">№${o.id}</span></div>
- <div class="muted">📍 ${o.address}</div>
- <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+o.worker:''}</div>
- <div style="margin-top:6px">${badges(o)}</div>
- <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
-</div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
-
-function renderDetails(id){
- const o=byId(id);if(!o)return '<div class="card">Не найдено</div>';
- const canManage=['admin','operator','manager'].includes(state.role);
- const isW=state.role==='worker';
- return `
-<div class="header"><button class="back" onclick="go('${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1></div>
-<div class="card">
- <div>${badges(o)}</div>
- <div class="info-row"><span class="muted">Клиент</span><b>${o.client}</b></div>
- <div class="info-row"><span class="muted">Телефон</span><a href="tel:${o.phone}" style="color:var(--blue);font-weight:600">${o.phone}</a></div>
- <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${o.address}</b></div>
- <div class="info-row"><span class="muted">Время</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
- <div class="info-row"><span class="muted">Исполнитель</span><b>${o.worker||'— не назначен —'}</b></div>
- <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${o.desc}</span></div>
- ${canManage?`<div style="margin-top:10px"><label class="label">Сменить статус</label>
- <select class="input" onchange="setStatus(${o.id},this.value)">
-  ${Object.keys(ST).map(k=>`<option value="${k}" ${o.status===k?'selected':''}>${ST[k].t}</option>`).join('')}
- </select></div>`:''}
-</div>
-
-<div class="card"><div class="sec-title">📸 Фото</div>
- <div class="photos">${o.photos.map(p=>`<div class="photo">${p}</div>`).join('')}
- ${o.photoReport||canManage?`<div class="photo photo-add" onclick="addPhoto(${o.id})">＋</div>`:''}</div>
- <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчет обязателен — без фото заказ не закроется':'Фотоотчет не требуется'}</div>
-</div>
-
-<div class="card"><div class="sec-title">🛒 Материалы <button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button></div>
- ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
- <div class="mat" style="border-left:4px solid ${s.tc}">
-  <div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span>
-   <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
-  <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${m.where||'—'}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b>'+s.cd+'</b>':''}</div>
-  ${['todo'].includes(m.status)||['urgent','critical'].includes(s.k)?`
-  <div style="display:flex;gap:6px;margin-top:8px">
-   <button class="btn-sm btn-green" onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
-   <button class="btn-sm btn-red" onclick="matAct(${o.id},${i},'issue')">❌ Не найти</button>
-  </div>`:''}
-  ${m.status==='issue'?`<div style="background:#fef3c7;border-radius:6px;padding:8px;margin-top:8px;font-size:12px">
-   ⚠ Требуется решение: заменить / ждать / купить дороже / убрать<br>
-   <button class="btn-sm btn-outline" style="margin-top:6px" onclick="matAct(${o.id},${i},'todo')">↩ Вернуть в закупку</button></div>`:''}
- </div>`}).join(''):'<div class="muted">Материалы не требуются</div>'}
- <div id="matform" style="display:none;border:2px solid var(--blue);border-radius:8px;padding:10px;margin-top:8px;background:#f8faff">
-  <input class="input" id="mf-name" placeholder="Наименование *" style="margin-bottom:6px">
-  <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-qty" placeholder="Кол-во"><input class="input" id="mf-price" type="number" placeholder="Цена ₽"></div>
-  <select class="input" id="mf-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
-  <input class="input" id="mf-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
-  <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-dl" type="number" value="3" min="1"><select class="input" id="mf-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
-  <div class="row2"><button class="btn-sm btn-outline" onclick="document.getElementById('matform').style.display='none'">Отмена</button>
-  <button class="btn-sm btn-blue" onclick="addMat(${o.id})">＋ Добавить</button></div>
- </div>
-</div>
-
-<div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
- <div class="info-row"><span>Основная работа</span><b>${money(o.price)}</b></div>
- ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${e.name} <span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span></span><b>${money(e.price)}</b></div>`).join('')}
- <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
- <div class="row2" style="margin-top:8px">
-  <button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>
-  ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
- </div>
-</div>
-
-${isW||canManage?`<div class="card">
- ${!o.worker&&o.status==='approved'?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}
- ${o.status==='approved'&&o.worker?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
- ${o.status==='in_progress'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
-</div>`:''}`}
-
-function renderCreate(){
- return `
-<div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
-<div class="card">
- <div class="field"><label class="label">Клиент *</label><input class="input" id="c-client" placeholder="ФИО"></div>
- <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..."></div>
- <div class="field"><label class="label">Адрес *</label><input class="input" id="c-address" placeholder="улица, дом, квартира"></div>
- <div class="field"><label class="label">Дата и интервал</label>
-  <div class="row2"><input class="input" id="c-date" type="date" value="${d1}"><input class="input" id="c-t1" type="time" value="14:00"><input class="input" id="c-t2" type="time" value="16:00"></div>
-  <div class="chips" style="margin-top:8px">
-   <span class="chip" onclick="setDur(1,this)">Осмотр 1 ч</span><span class="chip" onclick="setDur(2,this)">2 ч</span>
-   <span class="chip" onclick="setDur(3,this)">3 ч</span><span class="chip" onclick="setDur(4,this)">Полдня</span></div>
- </div>
- <div class="field"><label class="label">Тип заявки</label>
-  <select class="input" id="c-type"><option value="new">Согласованная работа</option><option value="inspection">Осмотр / диагностика / замеры</option></select></div>
- <div class="field"><label class="label">Быстрые шаблоны работ</label>
-  <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${t.name}</span>`).join('')}</div>
-  <textarea class="input" id="c-desc" placeholder="Описание работ..."></textarea></div>
- <div class="field"><label class="label">Предварительная цена ₽</label><input class="input" id="c-price" type="number" placeholder="0"></div>
- <div class="field"><label class="label">Назначить исполнителя</label>
-  <select class="input" id="c-worker"><option value="">— не назначен —</option>
-  ${DB.users.filter(u=>u.role==='worker'||u.role==='manager').map(u=>`<option>${u.name}</option>`).join('')}</select></div>
- <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
-  <label class="switch"><input type="checkbox" id="c-photo" checked><span class="slider"></span></label></div>
-</div>
-<div class="card"><div class="sec-title">🛒 Материалы <span class="muted" id="matcount"></span></div>
- <div id="newmats"></div>
- <div class="field"><input class="input" id="nm-name" placeholder="Наименование *" style="margin-bottom:6px">
- <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-qty" placeholder="Кол-во"><input class="input" id="nm-price" type="number" placeholder="Цена ₽"></div>
- <select class="input" id="nm-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
- <input class="input" id="nm-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
- <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-dl" type="number" value="3" min="1"><select class="input" id="nm-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
- <button class="btn btn-outline" onclick="addNewMat()">＋ Добавить материал</button></div>
-</div>
-<div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
-
-function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate).sort((a,b)=>a.t1.localeCompare(b.t1));
- return `
-<div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
-<div class="card">
- <div class="sec-title">Загрузка на ${state.calDate.slice(8)}.${state.calDate.slice(5,7)}</div>
- ${['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'].map(slot=>{
-   const inSlot=list.filter(o=>o.t1<slot.split('–')[1]&&o.t2>slot.split('–')[0]);
-   return `<div class="slot" style="${inSlot.length?'border-left-color:var(--blue);background:#f8faff':''}">
-    <b style="font-size:13px">${slot}</b>
-    ${inSlot.length?inSlot.map(o=>`<div style="font-size:13px;margin-top:4px;cursor:pointer" onclick="go('details',${o.id})">
-     🟦 ${o.t1}–${o.t2} • ${o.client} • ${o.address} ${o.worker?'• <b>'+o.worker+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
-    :'<div class="muted" style="margin-top:2px">🟩 свободно</div>'}
-   </div>`}).join('')}
-</div>`}
-
-function renderTasks(){
- const mine=DB.orders.filter(o=>o.worker===state.user);
- const free=DB.orders.filter(o=>!o.worker&&o.status==='approved');
- return `
-<div class="header green"><h1>✅ Мои задачи</h1><span style="margin-left:auto;font-size:13px">${state.user} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-${free.length?`<div class="card"><div class="sec-title">🆓 Свободные заявки (можно взять)</div>
- ${free.map(o=>`<div class="mat"><b>${o.client}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${o.address}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${o.desc}</div>
-  <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
-  <button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button></div>`).join('')}
-</div>`:''}
-<div class="card"><div class="sec-title">📋 Мои активные</div>
- ${mine.filter(o=>['approved','in_progress','waiting'].includes(o.status)).map(o=>`
- <div class="mat" style="border-left:4px solid ${o.status==='in_progress'?'#f59e0b':'#8b5cf6'}">
-  <div style="cursor:pointer" onclick="go('details',${o.id})"><b>${o.client}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${o.address}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
-  <div style="margin:4px 0">${badges(o)}</div>
-  <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
-  ${o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (я на адресе)</button>`:''}
-  ${o.status==='in_progress'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
- </div>`).join('')||'<div class="muted">Активных нет</div>'}
-</div>
-<div class="card"><div class="sec-title">✔️ Завершенные (мои)</div>
- ${mine.filter(o=>['completed','paid'].includes(o.status)).map(o=>`
- <div class="mat"><b>${o.client}</b> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
- <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
-</div>`}
-
-function renderShopping(){
- const rows=[];
- DB.orders.forEach(o=>o.materials.forEach((m,i)=>{const s=matState(o,m);if(s.k!=='bought')rows.push({o,m,i,s})}));
- const order={critical:0,issue:1,urgent:2,delivery:3,todo:4};
- rows.sort((a,b)=>order[a.s.k]-order[b.s.k]);
- return `
-<div class="header dark"><h1>🛒 Закупки</h1></div>
-<div class="card">
- ${rows.map(r=>`<div class="mat" style="border-left:4px solid ${r.s.tc}">
-  <div class="mat-head"><span class="mat-name">${r.m.name} (${r.m.qty})</span>
-  <span class="badge" style="background:${r.s.c};color:${r.s.tc}">${r.s.t}</span></div>
-  <div class="muted">Заявка №${r.o.id} • ${r.o.client} • работы ${r.o.date.slice(8)}.${r.o.date.slice(5,7)} ${r.o.t1}<br>
-  ${BUYER[r.m.buyer]} • 📍 ${r.m.where||'—'} • ${money(r.m.price)}<br>
-  ⏳ Дедлайн: за ${r.m.deadline} ${r.m.unit==='h'?'ч':'дн'} ${r.s.cd?'• <b style="color:'+r.s.tc+'">'+r.s.cd+'</b>':''}</div>
-  ${['todo','urgent','critical'].includes(r.s.k)?`<div style="display:flex;gap:6px;margin-top:8px">
-   <button class="btn-sm btn-green" onclick="matAct(${r.o.id},${r.i},'bought')">✅ Куплено</button>
-   <button class="btn-sm btn-red" onclick="matAct(${r.o.id},${r.i},'issue')">❌ Не найти</button></div>`:''}
- </div>`).join('')||'<div class="muted">Все материалы закуплены 🎉</div>'}
-</div>`}
-
-function renderReports(){
- const done=DB.orders.filter(o=>['completed','paid'].includes(o.status));
- const rev=done.reduce((s,o)=>s+total(o),0);
- const workers=DB.users.filter(u=>u.role==='worker');
- return `
-<div class="header dark"><h1>📊 Отчеты</h1></div>
-<div class="card"><div class="sec-title">Сводка</div>
- <div class="info-row"><span class="muted">Всего заявок</span><b>${DB.orders.length}</b></div>
- <div class="info-row"><span class="muted">Выполнено / оплачено</span><b style="color:var(--green)">${done.length}</b></div>
- <div class="info-row"><span class="muted">В работе</span><b>${DB.orders.filter(o=>o.status==='in_progress').length}</b></div>
- <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(rev)}</b></div>
- <div class="info-row"><span class="muted">Средний чек</span><b>${money(done.length?Math.round(rev/done.length):0)}</b></div>
-</div>
-<div class="card"><div class="sec-title">По работникам (дележка)</div>
- ${workers.map(w=>{
-  const ws=done.filter(o=>o.worker===w.name).reduce((s,o)=>s+total(o),0);
-  return `<div class="info-row"><span>${w.name} (${w.share}%)<br><span class="muted">выполнено на ${money(ws)}</span></span>
-  <b style="color:var(--green)">${money(Math.round(ws*w.share/100))}</b></div>`}).join('')}
-</div>
-<div class="card"><div class="sec-title">Материалы (расходы)</div>
- <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
-</div>`}
-
-function renderAdmin(){
- return `
-<div class="header dark"><h1>⚙️ Админ-панель</h1></div>
-<div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
- ${DB.users.filter(u=>u.role==='worker').map(u=>`
- <div class="info-row"><span><b>${u.name}</b> <span class="muted">исполнитель</span></span>
- <span style="display:flex;align-items:center;gap:4px"><input type="number" value="${u.share}" min="0" max="100" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px" onchange="setShare('${u.id}',this.value)"><b>%</b></span></div>`).join('')}
-</div>
-<div class="card"><div class="sec-title">📝 Шаблоны работ</div>
- ${DB.templates.map((t,i)=>`<div class="info-row"><span>${t.name}</span>
- <span style="display:flex;gap:8px;align-items:center"><b>${money(t.price)}</b>
- <span style="cursor:pointer;color:var(--red)" onclick="delTpl(${i})">🗑</span></span></div>`).join('')}
- <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽"></div>
- <button class="btn btn-outline" onclick="addTpl()">＋ Создать шаблон</button>
-</div>
-<div class="card"><div class="sec-title">Данные</div>
- <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
-
-// ================= ДЕЙСТВИЯ =================
-function setStatus(id,s){byId(id).status=s;save();render()}
-function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='in_progress';save();alert('Заявка №'+id+' взята в работу');render()}
-function finishOrder(id){const o=byId(id);
- if(o.photoReport&&o.photos.length<1){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return}
- o.status='completed';save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
-function addPhoto(id){byId(id).photos.push('🖼');save();render()}
-function matAct(id,i,st){const o=byId(id);o.materials[i].status=st;
- if(st==='issue'){o.status='waiting';alert('Материал отмечен «Не найден». Заявка → «Ожидание материала». Требуется решение админа.')}
- save();render()}
-function addExtra(id){const n=prompt('Название доп. работы:');if(!n)return;const p=+prompt('Цена доп. работы ₽:','0')||0;
- byId(id).extras.push({name:n,price:p});save();render()}
-function delExtra(id,i){if(confirm('Удалить доп. работу?')){byId(id).extras.splice(i,1);save();render()}}
-function addMat(id){const g=x=>document.getElementById(x).value;
- if(!g('mf-name'))return alert('Введите наименование');
- byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
- save();render()}
-function addNewMat(){const g=x=>document.getElementById(x).value;
- if(!g('nm-name'))return alert('Введите наименование');
- state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
- ['nm-name','nm-qty','nm-price','nm-where'].forEach(x=>document.getElementById(x).value='');
- document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
- document.getElementById('matcount').textContent=state.newMats.length?'('+state.newMats.length+')':'';}
-function renderCreate2(){document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]}</div></div>`).join('')}
-function tplClick(i){const el=document.getElementById('tpl'+i),ta=document.getElementById('c-desc');
- el.classList.toggle('sel');const t=DB.templates[i];
- ta.value=el.classList.contains('sel')?(ta.value?ta.value+'; '+t.name:t.name):ta.value.split('; ').filter(x=>x!==t.name).join('; ');}
-function setDur(h,el){document.querySelectorAll('.chips .chip').forEach(c=>c!==el&&c.textContent.includes('ч')||c.textContent.includes('Полдня')?0:0);
- el.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');
- const t1=document.getElementById('c-t1').value;const hh=+t1.split(':')[0]+h;
- document.getElementById('c-t2').value=String(Math.min(hh,23)).padStart(2,'0')+':00';}
-function saveOrder(){const g=x=>document.getElementById(x).value;
- if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
- DB.orders.unshift({id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
-  status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
-  photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
-  materials:state.newMats.slice(),photos:[]});
- save();alert('Заявка №'+DB.seq+' создана');go('orders')}
-function setShare(id,v){DB.users.find(u=>u.id===id).share=+v;save()}
-function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
- if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
-function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.splice(i,1);save();render()}}
-
-// ================= РЕНДЕР =================
-function render(){
- const app=document.getElementById('app'),nav=document.getElementById('nav');
- if(!state.role){app.innerHTML=renderLogin();nav.style.display='none';return}
- nav.style.display='flex';
- nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
- const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin};
- app.innerHTML=(S[state.screen]||renderOrders)();
- window.scrollTo(0,0);
-}
-render();
-</script>
-</body>
->>>>>>> 6cbe332a7569f4ef5746969c5982114735e2010f
 </html>
