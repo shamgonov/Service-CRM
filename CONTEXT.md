@@ -191,3 +191,8 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - Запрещено присылать ручные правки в VS Code (кроме первичного создания больших файлов index.html/firebase-access.js).
 - Любая правка кода доставляется PowerShell-скриптом, который сам читает/меняет/сохраняет файл.
 - Фикс слоя доступа: владелец (флаг crm_owner_7f3a) теперь видит панель владельца вместо демо-ролей (window.__accessMode=true в ветке isOwner).
+
+### 11.09.2026 — Пункт меню [6] «Деплой Firebase» убран
+- Причина: ошибка «Not in a Firebase app directory (could not locate firebase.json)» — пункт пытался деплоить Firebase Hosting, который не используется.
+- Хостинг приложения: GitHub Pages (пункт 5). Firebase = только Firestore (база) + Auth (устройства).
+- Пункт [6] теперь выводит справку вместо команды firebase deploy.

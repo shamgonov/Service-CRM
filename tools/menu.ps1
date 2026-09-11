@@ -14,7 +14,7 @@ while($true){
  Write-Host " [3] Восстановить из бэкапа"
  Write-Host " [4] Патч приложения: баннер и realtime"
  Write-Host " [5] ДЕПЛОЙ GitHub: версия +1"
- Write-Host " [6] Деплой Firebase"
+ Write-Host " [6] Firebase: справка (хостинг не нужен)"
  Write-Host " [7] Подключить Firebase базу"
  Write-Host " [0] Выход"
  $ch = Read-Host "Выбор"
@@ -43,7 +43,7 @@ while($true){
        Pop-Location
        Write-Host "ДЕПЛОЙ №$dep ГОТОВ: v$(GetVer)"
        Read-Host "Enter" }
-  '6'{ if(!(Get-Command firebase -ErrorAction SilentlyContinue)){ Write-Host "Нужно: npm i -g firebase-tools, затем firebase init hosting" } else { firebase deploy --only hosting }; Read-Host "Enter" }
+  '6'{ Write-Host "Хостинг приложения = GitHub Pages (пункт 5)."; Write-Host "Firebase используется ТОЛЬКО как база (Firestore) и авторизация."; Write-Host "firebase.json не нужен, деплой Firebase не требуется."; Write-Host "Консоль базы: https://console.firebase.google.com"; Read-Host "Enter" }
   '7'{ & "$root\tools\fbpatch.ps1"; Read-Host "Enter" }
   '0'{ exit }
  }
