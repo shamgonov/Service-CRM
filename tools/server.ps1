@@ -1,5 +1,5 @@
 ﻿$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:8000/")
+$listener.Prefixes.Add("http://localhost:8080/")
 $listener.Start()
 $root = Split-Path -Parent $PSScriptRoot
 $mime = @{'.html'='text/html; charset=utf-8';'.js'='text/javascript; charset=utf-8';'.json'='application/json; charset=utf-8';'.png'='image/png';'.css'='text/css; charset=utf-8';'.md'='text/plain; charset=utf-8'}
