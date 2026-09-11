@@ -1,7 +1,8 @@
 ﻿param([string]$Version)
 $root = Split-Path -Parent $PSScriptRoot
 $noBom = New-Object System.Text.UTF8Encoding $false
-$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 if(!$Version){ $Version = (Get-Content "$root\version.json" -Raw | ConvertFrom-Json).version }
 $sw = @"
 const VERSION='$Version';const CACHE='crm-'+VERSION;const CORE=['./','index.html','manifest.json','icon.png','version.json'];

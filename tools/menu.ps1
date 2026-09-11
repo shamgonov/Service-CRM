@@ -1,6 +1,9 @@
 ﻿$root = Split-Path -Parent $PSScriptRoot
-$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 function GetVer { (Get-Content "$root\version.json" -Raw | ConvertFrom-Json).version }
+
 while($true){
  $v = GetVer
  Clear-Host
@@ -16,20 +19,76 @@ while($true){
  Write-Host " [0] Выход"
  $ch = Read-Host "Выбор"
  switch($ch){
-  '1'{ $st=Get-Date -f yyyyMMdd_HHmmss; $vv=GetVer; robocopy $root "$root\backups\v${vv}_$st" /E /XD .git backups | Out-Null; Write-Host "Бэкап создан: backups\v${vv}_$st"; Read-Host "Enter" }
-  '2'{ Get-ChildItem "$root\backups" -Name; Read-Host "Enter" }
-  '3'{ $bk=Read-Host "Имя папки бэкапа"; robocopy "$root\backups\$bk" $root /E /XD .git backups | Out-Null; Write-Host "Восстановлено: $bk"; Read-Host "Enter" }
-  '4'{ & "$root\tools\patch.ps1"; Read-Host "Enter" }
-  '5'{ & "$root\tools\bump.ps1"; & "$root\tools\patch.ps1"
-       if(!(Get-Command git -ErrorAction SilentlyContinue)){ Write-Host "Установи Git: git-scm.com"; Read-Host "Enter"; break }
-       Push-Location $root
-       git config --local core.autocrlf false
-       if(!(Test-Path .git)){ git init | Out-Null; git branch -M main; git remote add origin https://github.com/shamgonov/Service-CRM.git }
-       git add -A
-       git commit -m ("deploy v"+(GetVer)) 2>&1 | Out-Null
-       git push -u origin main --force-with-lease
-       Write-Host "ДЕПЛОЙ ГОТОВ: v$(GetVer)"; Pop-Location; Read-Host "Enter" }
-  '6'{ if(!(Get-Command firebase -ErrorAction SilentlyContinue)){ Write-Host "Нужно: npm i -g firebase-tools, затем firebase init hosting" } else { firebase deploy --only hosting }; Read-Host "Enter" }
+  '1'{ 
+    $st = Get-Date -f yyyyMMdd_HHmmss
+    $vv = GetVer
+    $dest = "$root\backups\v${vv}_$st"
+    robocopy $root $dest /E /XD .git backups | Out-Null
+    Write-Host "Бэкап создан: $dest"
+    Read-Host "Enter"
+  }
+  '2'{ 
+    Get-ChildItem "$root\backups" -Name
+    Read-Host "Enter"
+  }
+  '3'{ 
+    $bk = Read-Host "Имя папки бэкапа"
+    $src = "$root\backups\$bk"
+    if(Test-Path $src){
+      robocopy $src $root /E /XD .git backups | Out-Null
+      Write-Host "Восстановлено из: $bk"
+    } else {
+      Write-Host "Папка не найдена: $bk"
+    }
+    Read-Host "Enter"
+  }
+  '4'{ 
+    & "$root\tools\patch.ps1"
+    Read-Host "Enter"
+  }
+  '5'{ 
+    Write-Host "Подготовка деплоя..."
+    & "$root\tools\bump.ps1"
+    & "$root\tools\patch.ps1"
+    
+    if(!(Get-Command git -ErrorAction SilentlyContinue)){
+      Write-Host "ОШИБКА: Git не установлен. Скачай: https://git-scm.com"
+      Read-Host "Enter"
+      break
+    }
+    
+    Push-Location $root
+    git config --local core.autocrlf false
+    git config --local core.quotepath false
+    
+    if(!(Test-Path .git)){
+      git init | Out-Null
+      git branch -M main
+      git remote add origin https://github.com/shamgonov/Service-CRM.git
+    }
+    
+    $ver = GetVer
+    git add -A
+    git commit -m "деплой v$ver" 2>&1 | Out-Null
+    
+    Write-Host "Пуш на GitHub..."
+    git push -u origin main --force-with-lease 2>&1 | Out-Null
+    
+    Pop-Location
+    Write-Host "ДЕПЛОЙ ГОТОВ: v$ver"
+    Write-Host "Ссылка: https://shamgonov.github.io/Service-CRM/"
+    Read-Host "Enter"
+  }
+  '6'{ 
+    if(!(Get-Command firebase -ErrorAction SilentlyContinue)){
+      Write-Host "Firebase CLI не установлен."
+      Write-Host "Установка: npm install -g firebase-tools"
+      Write-Host "Затем: firebase init hosting"
+    } else {
+      firebase deploy --only hosting
+    }
+    Read-Host "Enter"
+  }
   '0'{ exit }
  }
 }
