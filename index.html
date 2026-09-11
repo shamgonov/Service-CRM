@@ -427,6 +427,34 @@ function render(){
 }
 render();
 </script>
+<!-- CRM-INSTALL -->
+<button id="crmInstallBtn" style="display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:60;background:#2563eb;color:#fff;border:none;border-radius:24px;padding:12px 22px;font:700 14px sans-serif;box-shadow:0 4px 14px rgba(37,99,235,.4);cursor:pointer">📲 Установить приложение</button>
+<div id="crmIosHint" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
+ <div style="background:#fff;border-radius:14px;max-width:340px;width:88%;padding:18px;font:14px sans-serif">
+  <div style="font-weight:700;font-size:16px;margin-bottom:10px">Установка на iPhone</div>
+  <div style="color:#333;line-height:1.7">1. Нажмите кнопку «Поделиться» (квадрат со стрелкой вверх)<br>2. Выберите «На экран “Домой”»<br>3. Нажмите «Добавить»<br><br>Иконка CRM появится на рабочем столе, приложение будет открываться полноэкранно.</div>
+  <button onclick="document.getElementById('crmIosHint').style.display='none'" style="width:100%;margin-top:12px;padding:11px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Понятно</button>
+ </div>
+</div>
+<script>
+(function(){
+ var deferred=null;
+ var isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+ var standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+ window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;tick();});
+ window.addEventListener('appinstalled',function(){document.getElementById('crmInstallBtn').style.display='none';});
+ function tick(){
+  var btn=document.getElementById('crmInstallBtn');
+  var onLogin=(typeof state!=='undefined'&&state.role===null);
+  btn.style.display=(!standalone&&onLogin&&(deferred||isIOS))?'block':'none';
+ }
+ document.getElementById('crmInstallBtn').onclick=function(){
+  if(deferred){deferred.prompt();deferred.userChoice.then(function(){deferred=null;tick();});}
+  else if(isIOS){document.getElementById('crmIosHint').style.display='flex';}
+ };
+ setInterval(tick,1500);
+})();
+</script>
 <!-- CRM-UPDATER -->
 <div id="updStrip" onclick="updOpenModal()" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:9px 16px;font:600 13px sans-serif;z-index:98;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)">🔄 Доступно обновление — нажмите для подробностей</div>
 <div id="updOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:99;align-items:center;justify-content:center">
@@ -441,7 +469,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.1.1';
+const APP_VERSION='1.1.2';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
