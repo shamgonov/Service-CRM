@@ -164,6 +164,115 @@ function reset(){localStorage.removeItem('crm_db');load();render();alert('Дем
 load();
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
 const total=o=>(+o.price||0)+o.extras.reduce((s,e)=>s+(+e.price||0),0);
+// === ТИПЫ ЗАЯВКИ, ЭТАПЫ, ПЛАТЕЖИ ===
+const OTYPE={standard:'Стандарт',manufacture:'С изготовлением',service:'Сервисный'};
+const STAGE_T={measure:'Замер',make:'Изготовление',install:'Монтаж',repair:'Ремонт',service:'Выезд'};
+const PAY_T={advance:'Аванс',partial:'Частичный',full:'Полный',materials:'На материалы'};
+const PAY_M={cash:'Наличные',card:'Карта',transfer:'Перевод'};
+function orderType(o){return o.type||'standard'}
+function orderStages(o){return (orderType(o)==='manufacture'&&o.stages)||[]}
+function orderPayments(o){return o.payments||[]}
+function totalPaid(o){return orderPayments(o).filter(p=>p.type!=='materials').reduce((s,p)=>s+(+p.sum||0),0)}
+function materialsPaid(o){return orderPayments(o).filter(p=>p.type==='materials').reduce((s,p)=>s+(+p.sum||0),0)}
+function balance(o){return total(o)-totalPaid(o)}
+function canFinance(){if(typeof can==='function')return isOwner()||can('finance_edit');return ['admin'].includes(state.role)}
+function stageDefault(type){
+ if(type==='manufacture')return [
+  {id:'st1',type:'measure',title:'Замер',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
+  {id:'st2',type:'make',title:'Изготовление',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
+  {id:'st3',type:'install',title:'Монтаж',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
+ if(type==='service')return [{id:'st1',type:'service',title:'Выезд',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
+ return [];
+}
+function currentStage(o){return orderStages(o).find(s=>!s.done)}
+function stageTimeline(o,editable){
+ var st=orderStages(o);
+ if(!st.length)return '';
+ var html='<div style="margin-top:8px">';
+ st.forEach(function(s,i){
+  var icon=s.done?'✅':(i===0||st[i-1].done)?'🟡':'⚪';
+  html+='<div style="border-left:3px solid '+(s.done?'var(--green)':(i===0||st[i-1].done)?'var(--blue)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px">'+
+   '<div class="mat-head"><b>'+icon+' '+escapeHtml(s.title||STAGE_T[s.type]||s.type)+'</b>'+
+   (editable?'<span style="display:flex;gap:4px">'+(i>0?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',-1)">↑</span>':'')+
+    (i<st.length-1?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',1)">↓</span>':'')+
+    '<span style="cursor:pointer;color:var(--red)" onclick="stageDel('+o.id+','+i+')">✕</span></span>':'')+'</div>'+
+   '<div class="muted">План: '+(s.plan_start?'с '+s.plan_start:'—')+(s.plan_ready?' до '+s.plan_ready:'')+(s.by?' • исполнитель: '+escapeHtml(s.by):'')+'</div>'+
+   (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
+   (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
+    ${!s.plan_start&&s.by?`<button class="btn-sm btn-blue" onclick="stageStart(${o.id},${i})">▶ Приступить</button>`:''}
+    <button class="btn-sm btn-green" onclick="stageDone(${o.id},${i})">✅ Этап готов</button></div>`:'')+
+  '</div>';
+ });
+ if(editable)html+='<button class="btn-sm btn-outline" style="margin-top:8px" onclick="stageAdd('+o.id+')">＋ Этап</button>';
+ return html+'</div>';
+}
+function stageStart(id,i){const o=byId(id);const s=orderStages(o)[i];if(!s)return;s.plan_start=s.plan_start||new Date().toISOString().slice(0,10);s.by=s.by||deviceId();markOrder(o);save();render()}
+function stageDone(id,i){
+ const o=byId(id);const st=orderStages(o);const s=st[i];if(!s)return;
+ s.done=true;s.ts_done=Date.now();
+ var nxt=st[i+1];
+ markOrder(o);save();render();
+ if(typeof pushEvent==='function'&&nxt&&nxt.by)pushEvent('stage','✅ Этап «'+escapeHtml(s.title)+'» готов — заявка №'+o.id,'Следующий этап: '+escapeHtml(nxt.title||'')+' — для '+escapeHtml(nxt.by),o.id);
+}
+function stageMove(id,i,d){const o=byId(id);if(!canEditRoute(o))return;const st=o.stages;const j=i+d;if(j<0||j>=st.length)return;const t=st[i];st[i]=st[j];st[j]=t;markOrder(o);save();render()}
+function stageDel(id,i){const o=byId(id);if(!canEditRoute(o))return;if(!confirm('Удалить этап?'))return;o.stages.splice(i,1);markOrder(o);save();render()}
+function stageAdd(id){
+ const o=byId(id);if(!canEditRoute(o))return;
+ const t=prompt('Название этапа:');if(!t)return;
+ o.stages.push({id:'st'+Date.now(),type:'custom',title:t,plan_start:'',plan_ready:'',done:false,by:'',ts_done:null});
+ markOrder(o);save();render();
+}
+function paymentsBlock(o){
+ var pays=orderPayments(o);
+ var canW=canFinance();
+ var html='<div class="card"><div class="sec-title">💰 Платежи</div>'+
+  '<div class="info-row"><span class="muted">Сумма заказа</span><b>'+money(total(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">'+money(totalPaid(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Баланс</span><b style="color:'+(balance(o)>0?'var(--red)':'var(--green)')+'">'+money(balance(o))+'</b></div>';
+ if(pays.length){
+  html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">';
+  pays.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(function(p){
+   html+='<div class="info-row"><span>'+(p.type==='materials'?'📤':'📥')+' '+PAY_T[p.type]+' • '+(PAY_M[p.method]||p.method)+'<br><span class="muted">'+(p.date||'')+(p.note?' • '+escapeHtml(p.note):'')+'</span></span><b style="color:'+(p.type==='materials'?'var(--red)':'var(--green)')+'">'+(p.type==='materials'?'-':'')+money(p.sum)+'</b></div>';
+  });
+  html+='</div>';
+ }
+ if(canW)html+='<div class="row2" style="margin-top:10px"><button class="btn-sm btn-green" onclick="payModal('+o.id+',\'in\')">＋ Приход</button><button class="btn-sm btn-red" onclick="payModal('+o.id+',\'materials\')">＋ Выдать на материалы</button></div>';
+ return html+'</div>';
+}
+function payModal(id,dir){
+ const o=byId(id);
+ const types=dir==='materials'?['materials']:['advance','partial','full'];
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
+   <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">${dir==='materials'?'📤 Выдать на материалы':'📥 Приход'}</b>
+    <select class="input" id="pay-type" style="margin-bottom:8px">${types.map(t=>`<option value="${t}">${PAY_T[t]}</option>`).join('')}</select>
+    <input class="input" id="pay-sum" type="number" placeholder="Сумма ₽ *" style="margin-bottom:8px">
+    <select class="input" id="pay-method" style="margin-bottom:8px">${Object.keys(PAY_M).map(m=>`<option value="${m}">${PAY_M[m]}</option>`).join('')}</select>
+    <input class="input" id="pay-note" placeholder="Примечание" style="margin-bottom:12px">
+    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
+    <button class="btn btn-green" onclick="payAdd(${id},'${dir}')">Сохранить</button></div>
+   </div></div>`);
+}
+function payAdd(id,dir){
+ const o=byId(id);if(!canFinance())return alert('Нет прав');
+ const t=document.getElementById('pay-type').value;
+ const sum=+document.getElementById('pay-sum').value||0;
+ if(sum<=0)return alert('Введите сумму');
+ const method=document.getElementById('pay-method').value;
+ const note=document.getElementById('pay-note').value.trim();
+ if(dir==='materials'&&!confirm('Выдать на материалы '+money(sum)+'?'))return;
+ o.payments=o.payments||[];
+ o.payments.push({id:'p'+Date.now(),sum:sum,type:t,method:method,date:new Date().toISOString().slice(0,10),note:note});
+ markOrder(o);save();
+ document.querySelector('#app > div[style*="z-index:99"]').remove();
+ render();
+ if(typeof pushEvent==='function'){
+  if(t==='materials')pushEvent('stage','📤 Аванс на материалы выдан — заявка №'+o.id,money(sum)+' для '+escapeHtml(o.worker||'исполнителя'),o.id);
+  else pushEvent('stage','📥 '+PAY_T[t]+' получен — заявка №'+o.id,money(sum)+' ('+(PAY_M[method]||method)+'), баланс '+money(balance(o)),o.id);
+ }
+}
 function dur(ms){const h=Math.floor(ms/36e5),m=Math.floor(ms%36e5/6e4);return h>=24?Math.floor(h/24)+' д '+(h%24)+' ч':h+' ч '+m+' мин';}
 function escapeHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function matState(o,m){
@@ -180,6 +289,9 @@ function matState(o,m){
 }
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
+ if(orderType(o)!=='standard')b+=`<span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span>`;
+ if(orderType(o)==='manufacture'&&orderStages(o).length){const d=orderStages(o).filter(s=>s.done).length;b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🔧 ${d}/${orderStages(o).length}</span>`;}
+ if(orderPayments(o).length&&balance(o)>0)b+=`<span class="badge" style="background:#fee2e2;color:#991b1b">💰 долг ${money(balance(o))}</span>`;
  if(o.photoReport)b+='<span class="badge" style="background:#ede9fe;color:#5b21b6">📸 фотоотчет</span>';
  const pend=o.materials.filter(m=>m.status!=='bought');
  if(pend.length){const iss=pend.some(m=>['issue','critical'].includes(matState(o,m).k));
@@ -193,12 +305,12 @@ const NAVS={
  manager:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
  worker:[['tasks','✅','Мои задачи'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
 };
-function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create')state.newMats=[];render()}
+function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}render()}
 function login(role,name){state.role=role;state.user=name;state.screen=role==='worker'?'tasks':'orders';render()}
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.6</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.7</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -309,6 +421,17 @@ function routeArrive(id,i){
  const p=o.route[i];
  var apply=function(geo){ p.status='arrived';p.ts_arrived=Date.now();if(geo)p.geo=geo;
   markOrder(o);save();routeScreen(id);
+  // связка «материалы ↔ аванс»: на точке поставщика предложить списать выданный аванс
+  if(p.type==='supplier'&&canFinance()&&materialsPaid(o)>0){
+   const spent=prompt('Подтвердите сумму закупки (выдано на материалы: '+money(materialsPaid(o))+'):','')||'';
+   const s=+spent||0;
+   if(s>0){
+    const rest=Math.max(0,materialsPaid(o)-s);
+    o.payments.push({id:'p'+Date.now(),sum:materialsPaid(o),type:'materials',method:'cash',date:new Date().toISOString().slice(0,10),note:'закупка '+p.title+': '+money(s)+', остаток '+money(rest)});
+    markOrder(o);save();
+    alert('Списано '+money(s)+', остаток аванса '+money(rest));
+   }
+  }
   if(typeof pushEvent==='function')pushEvent('route','📍 Прибытие — заявка №'+o.id,escapeHtml(o.worker||'')+' прибыл: '+escapeHtml(p.title),o.id,true); };
  if(navigator.geolocation){
   navigator.geolocation.getCurrentPosition(function(pos){apply({lat:pos.coords.latitude,lon:pos.coords.longitude});},function(){apply(null);},{timeout:5000});
@@ -396,10 +519,12 @@ function renderDetails(id){
  </div>
 </div>
 ${isW||canManage?`<div class="card">
+ ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
  ${!o.worker&&o.status==='approved'?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}
- ${o.status==='approved'&&o.worker?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
- ${o.status==='in_progress'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
-</div>`:''}`}
+ ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
+ ${o.status==='in_progress'&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
+</div>`:''}
+${paymentsBlock(o)}`}
 function renderCreate(){
  return `
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
@@ -415,6 +540,10 @@ function renderCreate(){
  </div>
  <div class="field"><label class="label">Тип заявки</label>
   <select class="input" id="c-type"><option value="new">Согласованная работа</option><option value="inspection">Осмотр / диагностика / замеры</option></select></div>
+ <div class="field"><label class="label">Вид заказа</label>
+  <select class="input" id="c-otype" onchange="otypeChange(this.value)"><option value="standard">Стандарт</option><option value="manufacture">С изготовлением</option><option value="service">Сервисный</option></select></div>
+ <div id="c-stages-box" style="display:none"><div class="card"><div class="sec-title">🔧 Этапы работ</div><div id="c-stages"></div>
+  <button class="btn-sm btn-outline" onclick="cStageAdd()">＋ Этап</button></div></div>
  <div class="field"><label class="label">Быстрые шаблоны работ</label>
   <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${escapeHtml(t.name)}</span>`).join('')}</div>
   <textarea class="input" id="c-desc" placeholder="Описание работ..."></textarea></div>
@@ -469,9 +598,10 @@ ${free.length?`<div class="card"><div class="sec-title">🆓 Свободные 
   <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
   <div style="margin:4px 0">${badges(o)}</div>
   <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
+  ${orderType(o)==='manufacture'&&orderStages(o).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
   <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
-  ${o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (я на адресе)</button>`:''}
-  ${o.status==='in_progress'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
+  ${o.status==='approved'&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (я на адресе)</button>`:''}
+  ${o.status==='in_progress'&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
  </div>`).join('')||'<div class="muted">Активных нет</div>'}
 </div>
 <div class="card"><div class="sec-title">✔️ Завершенные (мои)</div>
@@ -536,6 +666,15 @@ function exportCsv(){
  L.push('');
  L.push(['Дата','Клиент','Телефон','Адрес','Статус','Сумма','Исполнитель'].map(csvCell).join(';'));
  DB.orders.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||''].map(csvCell).join(';')));
+ L.push('');
+ L.push(['ПЛАТЕЖИ'].map(csvCell).join(';'));
+ L.push(['Дата','Заявка','Клиент','Тип','Метод','Сумма','Примечание'].map(csvCell).join(';'));
+ const pays=[];
+ DB.orders.forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
+ pays.sort((a,b)=>String(b.p.date).localeCompare(String(a.p.date)));
+ pays.forEach(x=>L.push([csvDate(x.p.date),'№'+x.o.id,x.o.client,PAY_T[x.p.type]||x.p.type,PAY_M[x.p.method]||x.p.method,x.p.sum,x.p.note||''].map(csvCell).join(';')));
+ L.push(['ИТОГО приход','','','','',pays.filter(x=>x.p.type!=='materials').reduce((s,x)=>s+(+x.p.sum||0),0),''].map(csvCell).join(';'));
+ L.push(['ИТОГО на материалы','','','','',pays.filter(x=>x.p.type==='materials').reduce((s,x)=>s+(+x.p.sum||0),0),''].map(csvCell).join(';'));
  const blob=new Blob(['\uFEFF'+L.join('\r\n')],{type:'text/csv;charset=utf-8'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='otchet_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
@@ -558,8 +697,31 @@ function renderAdmin(){
  <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽"></div>
  <button class="btn btn-outline" onclick="addTpl()">＋ Создать шаблон</button>
 </div>
+<div class="card"><div class="sec-title">💰 Финансы (платежи)</div>
+ <div class="row2" style="margin-bottom:8px"><input class="input" type="date" id="fin-from" onchange="renderFin()"><input class="input" type="date" id="fin-to" onchange="renderFin()"></div>
+ <div id="fin-list"></div>
+</div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
+function renderFin(){
+ const el=document.getElementById('fin-list');if(!el)return;
+ if(!canFinance()){el.innerHTML='<div class="muted">Нет права finance_edit</div>';return}
+ const from=document.getElementById('fin-from').value,to=document.getElementById('fin-to').value;
+ let pays=[];
+ DB.orders.forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
+ if(from)pays=pays.filter(x=>x.p.date>=from);
+ if(to)pays=pays.filter(x=>x.p.date<=to);
+ pays.sort((a,b)=>String(b.p.date).localeCompare(String(a.p.date)));
+ const inc=pays.filter(x=>x.p.type!=='materials').reduce((s,x)=>s+(+x.p.sum||0),0);
+ const out=pays.filter(x=>x.p.type==='materials').reduce((s,x)=>s+(+x.p.sum||0),0);
+ let html='<div class="info-row"><span class="muted">Приходы</span><b style="color:var(--green)">'+money(inc)+'</b></div>'+
+  '<div class="info-row"><span class="muted">Выдано на материалы</span><b style="color:var(--red)">'+money(out)+'</b></div>'+
+  '<div class="info-row"><span class="muted">Итого в кассе</span><b>'+money(inc-out)+'</b></div>';
+ if(pays.length)html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">'+pays.map(x=>
+  '<div class="info-row"><span>№'+x.o.id+' '+(x.p.type==='materials'?'📤':'📥')+' '+PAY_T[x.p.type]+' • '+(PAY_M[x.p.method]||x.p.method)+'<br><span class="muted">'+(x.p.date||'')+' • '+escapeHtml(x.o.client||'')+(x.p.note?' • '+escapeHtml(x.p.note):'')+'</span></span><b style="color:'+(x.p.type==='materials'?'var(--red)':'var(--green)')+'">'+(x.p.type==='materials'?'-':'')+money(x.p.sum)+'</b></div>').join('')+'</div>';
+ else html+='<div class="muted" style="margin-top:8px">Платежей за период нет</div>';
+ el.innerHTML=html;
+}
 function setStatus(id,s){const o=byId(id);
  if((s==='completed'||s==='paid')&&o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {o.status=s;markOrder(o);save();render();} });
@@ -568,6 +730,11 @@ function setStatus(id,s){const o=byId(id);
  o.status=s;markOrder(o);save();render()}
 function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';markOrder(o);save();routeGenerate(o);save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
 function finishOrder(id){const o=byId(id);
+ // manufacture: заказ завершается, когда все этапы готовы
+ if(orderType(o)==='manufacture'&&orderStages(o).length){
+  const und=orderStages(o).filter(s=>!s.done);
+  if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
+ }
  if(o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
    o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render(); });
@@ -659,15 +826,34 @@ function saveOrder(){const g=x=>document.getElementById(x).value;
 function closeConflictModal(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
 function doSaveOrder(force){const g=x=>document.getElementById(x).value;
  if(!force)closeConflictModal();
+ const otype=document.getElementById('c-otype')?document.getElementById('c-otype').value:'standard';
  const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
   status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
   photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
-  materials:state.newMats.slice(),photos:[]};
+  materials:state.newMats.slice(),photos:[],type:otype,payments:[]};
+ if(otype!=='standard')o.stages=(state.cStages||[]).slice();
  DB.orders.unshift(o);
  if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
  if(typeof saveSettings==='function')saveSettings();
  alert('Заявка №'+DB.seq+' создана');go('orders')}
 function setShare(id,v){DB.users.find(u=>u.id===id).share=+v;save()}
+// === этапы в форме создания ===
+function cStageAdd(){state.cStages.push({id:'st'+Date.now(),type:'custom',title:'Этап '+(state.cStages.length+1),plan_start:'',plan_ready:'',done:false,by:'',ts_done:null});cStageRender()}
+function cStageDel(i){state.cStages.splice(i,1);cStageRender()}
+function cStageRender(){
+ document.getElementById('c-stages').innerHTML=state.cStages.map(function(s,i){
+  return '<div class="mat"><div class="mat-head"><b>'+escapeHtml(s.title)+'</b>'+(state.cStages.length>1?'<span style="cursor:pointer;color:var(--red)" onclick="cStageDel('+i+')">✕</span>':'')+'</div>'+
+   '<div class="row2" style="margin-top:6px"><input class="input" type="date" value="'+s.plan_start+'" onchange="state.cStages['+i+'].plan_start=this.value" placeholder="начало">'+
+   '<input class="input" type="date" value="'+s.plan_ready+'" onchange="state.cStages['+i+'].plan_ready=this.value" placeholder="готовность"></div>'+
+   '<select class="input" style="margin-top:6px" onchange="state.cStages['+i+'].by=this.value"><option value="">— исполнитель этапа —</option>'+
+   DB.users.filter(u=>u.role==='worker'||u.role==='manager').map(u=>'<option '+(s.by===u.name?'selected':'')+'>'+u.name+'</option>').join('')+'</select></div>';
+ }).join('');
+}
+function otypeChange(v){
+ state.cStages=stageDefault(v);
+ document.getElementById('c-stages-box').style.display=v==='standard'?'none':'block';
+ if(v!=='standard')cStageRender();
+}
 function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
  if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
 function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.splice(i,1);save();render()}}
@@ -726,7 +912,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.4.6';
+const APP_VERSION='1.4.7';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -758,6 +944,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 

@@ -63,6 +63,8 @@ service cloud.firestore {
     }
     match /orders/{orderId} {
       allow read: if true;
+      // payments и stages — часть документа заявки: write по общим правилам orders
+      // (клиент дополнительно ограничен правом finance_edit для платежей, orders_edit для этапов)
       allow create, update, delete: if request.auth != null;
     }
     match /meta/{doc} {

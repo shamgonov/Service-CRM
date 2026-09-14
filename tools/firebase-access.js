@@ -18,6 +18,7 @@ var PERMS_CATALOG = [
  {key:'admin_templates',label:'Шаблоны и дележка'},
  {key:'staff_manage',label:'Управление сотрудниками'},
  {key:'roles_manage',label:'Управление ролями'},
+ {key:'finance_edit',label:'Финансы (платежи)'},
  {key:'profile_view',label:'Мой профиль'}
 ];
 function permLabel(k){ if(k==='all')return 'Все права'; var f=PERMS_CATALOG.find(function(x){return x.key===k;}); return f?f.label:k; }
