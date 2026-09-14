@@ -64,8 +64,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
 "@
 $marker = '<!-- CRM-UPDATER -->'
 $i = $h.IndexOf($marker); $j = $h.IndexOf('</body>')
-if($i -ge 0 -and $j -gt $i){ $h = $h.Substring(0,$i) + $block + "`n" + $h.Substring($j) }
-elseif($j -ge 0){ $h = $h.Substring(0,$j) + $block + "`n" + $h.Substring($j) }
+if($i -ge 0){ $k = $h.IndexOf("</script>", $i); if($k -ge 0){ $k = $k + 9 } else { $k = $i }; $h = $h.Substring(0,$i) + $block + "`n" + $h.Substring($k) }
 if($h -notmatch 'rel="manifest"'){
  $head = "<link rel=`"manifest`" href=`"manifest.json`">`n<meta name=`"theme-color`" content=`"#2563eb`">`n<link rel=`"apple-touch-icon`" href=`"icon.png`">`n</head>"
  $h = $h.Replace('</head>', $head)

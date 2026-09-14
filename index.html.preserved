@@ -473,7 +473,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.2.0';
+const APP_VERSION='1.1.9';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -505,8 +505,6 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
-
-
 <!-- FIREBASE-ACCESS -->
 <script src="tools/firebase-app-compat.js"></script>
 <script src="tools/firebase-firestore-compat.js"></script>
