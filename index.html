@@ -157,7 +157,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.3</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -284,10 +284,11 @@ function renderCalendar(){
  <div class="sec-title">Загрузка на ${state.calDate.slice(8)}.${state.calDate.slice(5,7)}</div>
  ${['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'].map(slot=>{
    const inSlot=list.filter(o=>o.t1<slot.split('–')[1]&&o.t2>slot.split('–')[0]);
-   return `<div class="slot" style="${inSlot.length?'border-left-color:var(--blue);background:#f8faff':''}">
+   const busy=inSlot.filter(o=>o.worker);
+   return `<div class="slot" style="${busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4'}">
     <b style="font-size:13px">${slot}</b>
     ${inSlot.length?inSlot.map(o=>`<div style="font-size:13px;margin-top:4px;cursor:pointer" onclick="go('details',${o.id})">
-     🟦 ${o.t1}–${o.t2} • ${escapeHtml(o.client)} • ${escapeHtml(o.address)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
+     ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} • ${escapeHtml(o.address)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
     :'<div class="muted" style="margin-top:2px">🟩 свободно</div>'}
    </div>`}).join('')}
 </div>`}
@@ -429,8 +430,38 @@ function setDur(h,el){el.parentNode.querySelectorAll('.chip').forEach(c=>c.class
  const t1=document.getElementById('c-t1').value||'14:00';const p=t1.split(':');const start=(+p[0])*60+(+p[1]||0);
  const end=Math.min(start+h*60,23*60+59);
  document.getElementById('c-t2').value=String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0');}
+function toMin(t){if(!t)return null;const p=String(t).split(':');return (+p[0])*60+(+p[1]||0)}
+function findConflicts(worker,date,t1,t2,skipId){
+ if(!worker||!date)return [];
+ const s1=toMin(t1),e1=toMin(t2);
+ if(s1==null||e1==null)return [];
+ return DB.orders.filter(o=>o.id!==skipId&&o.worker===worker&&o.date===date&&['new','inspection','approved','in_progress','waiting','postponed'].includes(o.status))
+  .filter(o=>{const s2=toMin(o.t1),e2=toMin(o.t2);return s2!=null&&e2!=null&&s1<e2&&s2<e1;});
+}
+function canOverrideConflict(){if(typeof can==='function')return isOwner()||can('orders_edit');return ['admin'].includes(state.role)}
 function saveOrder(){const g=x=>document.getElementById(x).value;
  if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
+ const worker=g('c-worker')||null,date=g('c-date'),t1=g('c-t1'),t2=g('c-t2');
+ const conf=worker?findConflicts(worker,date,t1,t2,null):[];
+ if(conf.length){
+  const c=conf[0];
+  const canOv=canOverrideConflict();
+  document.getElementById('app').insertAdjacentHTML('beforeend',
+   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px;text-align:center">
+     <div style="font-size:34px">⚠️</div>
+     <b style="display:block;margin:8px 0">Исполнитель занят ${c.t1||'?'}–${c.t2||'?'} (${escapeHtml(c.client)})</b>
+     <div class="muted" style="margin-bottom:14px">Заявок с пересечением: ${conf.length}</div>
+     ${canOv?`<button class="btn btn-blue" style="width:100%" onclick="doSaveOrder(true)">Всё равно назначить</button>`:''}
+     <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="closeConflictModal()">Отмена</button>
+    </div></div>`);
+  return;
+ }
+ doSaveOrder(false);
+}
+function closeConflictModal(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
+function doSaveOrder(force){const g=x=>document.getElementById(x).value;
+ if(!force)closeConflictModal();
  DB.orders.unshift({id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
   status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
   photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
@@ -493,7 +524,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.3.3';
+const APP_VERSION='1.3.4';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -525,6 +556,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
