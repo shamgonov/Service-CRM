@@ -242,3 +242,13 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
 - Реальные фото через Firebase Storage вместо заглушек 🖼.
 - Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.
+- Серверная проверка прав в firestore.rules по роли сотрудника (сейчас can() только на клиенте; правила дают write любому анониму — нужна сверка роли/uid).
+
+### 15.09.2026 — Админка ролей и прав (модель roles)
+- **Модель**: коллекция Firestore `roles` — документ на роль {id, name, perms:[...], builtin:bool}. При первом открытии админки, если коллекция пуста, сидируются 4 встроенные роли (admin/operator/manager/worker) из BUILTIN_ROLES; у встроенных builtin:true. employees.role хранит id роли (старые admin/operator/manager/worker совпадают — миграция не нужна).
+- **Каталог прав**: PERMS_CATALOG (12 ключей: orders_view/create/edit/status/delete, calendar, tasks, shopping, reports, admin_templates, staff_manage, roles_manage) — синхронизирован в firebase-access.js.
+- **UI (экран staff)**: три вкладки — Заявки | Сотрудники | Роли. Селекты ролей берутся из коллекции roles (не хардкод). У сотрудника показ строки прав роли. Вкладка Роли: матрица чекбоксов по PERMS_CATALOG (сохранение в Firestore сразу), «＋ Создать роль», «Удалить» только у builtin:false; при удалении занятой роли — «Сначала переведите сотрудников на другую роль»; admin защищён (надпись «все права», чекбоксы скрыты).
+- **Применение**: can(perm) — владелец всегда true, сотрудник по perms роли (кэш ROLES + ME.perms). Обёртки в слое доступа: guard go() по экранам, wrapGuard saveOrder/setStatus/deleteOrder и др. («Нет прав»), applyPermsUI() скрывает nav-пункты и кнопки создания/удаления без права. Навигация фильтруется по правам.
+- **Совместимость**: поток владелец→панель, сотрудник→запрос→приём не тронут; старые строковые роли работают. Все строки через esc()/escapeHtml().
+- **firestore.rules**: добавлена коллекция roles (read:true, write: request.auth!=null) — иначе админка не читает/не пишет роли.
+- **ВНИМАНИЕ**: после этой правки ОБЯЗАТЕЛЬНО задеплоить правила (firebase deploy --only firestore:rules) и приложение (menu.ps1 5). Правила roles нужны, иначе сид ролей упадёт с permission-denied.
