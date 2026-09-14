@@ -495,6 +495,15 @@ window.render = function(){
  if(_origRender)_origRender();
  addProfileNavItem();
  applyPermsUI();
+ // детали заявки: подтянуть фото из коллекции photos и перерисовать галерею
+ if(state.screen==='details' && state.orderId!=null && typeof fs!=='undefined' && fs){
+  var oid=state.orderId;
+  loadOrderPhotos(oid, function(){
+   if(state.screen==='details' && state.orderId===oid && typeof render==='function'){
+    setTimeout(function(){ if(state.screen==='details'&&state.orderId===oid)render(); },0);
+   }
+  });
+ }
 };
 window.save = function(){ saveCloud(); };
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
@@ -576,11 +585,22 @@ function avatarPick(inp){
 function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
 
 // === STORAGE: доступность и общие функции ===
-var STOR=null;
-try{ if(typeof firebase.storage==='function'){ STOR=firebase.storage(); STOR.ref('.noop').getDownloadURL?null:null; } }catch(e){ STOR=null; }
+// === ФОТО ЗАЯВОК: коллекция photos (без Blaze) + миграционный путь в Storage ===
+// Документ: {orderId, data (base64 JPEG), ts, by}, id = {orderId}_{ts}.
+// Если появится бакет Storage — новые фото уходят туда (url в data), старые читаются из photos.
+var PHOTOS_CACHE={};   // orderId -> [{id,data,ts,by}]
+var STOR_CHECKED=false, STOR_OK=false;
 function storReady(){
  if(!STOR) return false;
  try{ STOR.ref('probe-'+Date.now()).toString(); return true; }catch(e){ return false; }
+}
+// одноразовая проверка бакета реальной записью при старте
+function checkStorage(cb){
+ if(STOR_CHECKED){ cb(STOR_OK); return; }
+ if(!STOR){ STOR_CHECKED=true; cb(false); return; }
+ STOR.ref('.probe/check.txt').put(new Blob(['ok'],{type:'text/plain'}))
+  .then(function(){ STOR_OK=true; STOR_CHECKED=true; cb(true); })
+  .catch(function(){ STOR_OK=false; STOR_CHECKED=true; cb(false); });
 }
 function downscale(inp, maxSide, quality, square, cb){
  var f=inp.files&&inp.files[0]; if(!f)return;
@@ -610,25 +630,62 @@ function dataUrlToBlob(d){
  for(var i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);
  return new Blob([arr],{type:mime});
 }
-// Загрузка фото заявки: Storage (orders/{orderId}/{ts}.jpg), фолбэк — base64 в документе (лимит 3)
+function photoCount(id){
+ var n=(PHOTOS_CACHE[id]||[]).length;
+ var o=byId?byId(id):null;
+ if(o)n+=(o.photos||[]).length; // старые base64/заглушки в документе
+ return n;
+}
 function uploadPhoto(inp, id){
  var o=byId?byId(id):null; if(!o)return;
  if(!canAddPhoto(o))return alert('Нет прав');
- if(o.photos&&o.photos.length>=12)return alert('Слишком много фото');
- downscale(inp,1280,0.7,false,function(dataUrl){
-  var finish=function(url){ o.photos.push(url); save(); go('details',id); };
-  if(storReady()){
-   var ref=STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg');
-   ref.put(dataUrlToBlob(dataUrl)).then(function(s){ return s.ref.getDownloadURL(); })
-    .then(function(url){ finish(url); })
-    .catch(function(e){ console.warn('storage err',e); fallbackPhoto(o,dataUrl,id); });
-  } else fallbackPhoto(o,dataUrl,id);
+ if(photoCount(id)>=8)return alert('Лимит — 8 фото на заявку');
+ downscale(inp,1000,0.65,false,function(dataUrl){
+  var afterSize=function(url){
+   var ts=Date.now();
+   var doc={orderId:id, data:url, ts:ts, by:deviceId()};
+   fs.collection('photos').doc(id+'_'+ts).set(doc).then(function(){
+    PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
+    go('details',id);
+   }).catch(function(e){ alert('Ошибка сохранения фото: '+e.message); });
+  };
+  // base64 > 900 КБ — повторный даунскейл 800px/0.6
+  var finishSize=function(url){
+   if(url.indexOf('data:')===0 && url.length>900*1024/3*4){
+    downscale(inp,800,0.6,false,afterSize);
+   } else afterSize(url);
+  };
+  checkStorage(function(ok){
+   if(ok){
+    STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
+     .then(function(s){ return s.ref.getDownloadURL(); })
+     .then(function(url){ finishSize(url); })
+     .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
+   } else finishSize(dataUrl);
+  });
  });
 }
-function fallbackPhoto(o,dataUrl,id){
- if((o.photos||[]).length>=3){ alert('Storage недоступен: в заявке уже 3 фото (лимит для офлайн-режима).'); render(); return; }
- alert('Storage недоступен — фото сохранится в базе (лимит 3 фото на заявку).');
- o.photos.push(dataUrl); save(); go('details',id);
+// галерея: документы photos по orderId + старые фото из документа заявки
+function loadOrderPhotos(id, cb){
+ fs.collection('photos').where('orderId','==',id).get().then(function(snap){
+  var arr=[];
+  snap.forEach(function(d){ var p=d.data(); p.id=d.id; arr.push(p); });
+  arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  PHOTOS_CACHE[id]=arr;
+  cb(arr);
+ }).catch(function(e){ console.warn(e); PHOTOS_CACHE[id]=PHOTOS_CACHE[id]||[]; cb(PHOTOS_CACHE[id]); });
+}
+function orderHasPhotos(id, cb){
+ var o=byId?byId(id):null;
+ if(o&&o.photos&&o.photos.length){ cb(true); return; }
+ fs.collection('photos').where('orderId','==',id).limit(1).get().then(function(snap){
+  cb(!snap.empty);
+ }).catch(function(){ cb(false); });
+}
+function canDeletePhotoDoc(p){
+ if(isOwner())return true;
+ if(typeof can==='function'&&can('orders_delete'))return true;
+ return p && p.by===deviceId();
 }
 
 function saveProfile(){
@@ -725,6 +782,8 @@ function adminResetPin(dev){
 // ============================================================
 // Глобальный can() для index.html (если сам index его не задал)
 if(typeof window.can!=='function'){ window.can = can; }
+if(typeof window.isOwner!=='function'){ window.isOwner = isOwner; }
+if(typeof window.deviceId!=='function'){ window.deviceId = deviceId; }
 
 // Маппинг экран -> требуемое право (для навигации и go)
 var SCREEN_PERM = {

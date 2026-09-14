@@ -243,7 +243,7 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **UX**: при неверном PIN показывается «Неверный PIN», после 3 попыток — блокировка без дальнейших вводов.
 
 ## ДОЛГИ
-- Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid.
+- Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid. Также: серверная проверка автора фото в rules (delete photos) — deviceId анонима недоступен в request.auth.token, нужен custom claim или auth.uid-схема.
 - Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
 - True-push уведомления (FCM + Cloud Functions onCreate → topic staff): нужен Blaze-тариф проекта service-crm-9f785 — деплой functions отклонён. После апгрейда: функция + firebase-messaging-compat.js + токен в employees/{deviceId}.fcmToken.
 - Создать бакет Firebase Storage (консоль → Storage → Get Started) и выполнить firebase deploy --only storage:rules (storage.rules готовы в репо).
@@ -317,3 +317,10 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 | В. Уведомления | OK (in-app): onSnapshot, бейдж+бип+вибрация при новых заявках (orders_view, не владелец), гашение при открытии списка. True-push FCM — ДОЛГ (нужен Blaze) |
 | Г. Конфликты календаря | OK: findConflicts+модалка (override только владелец/админ), подсветка слотов (исполнитель—красный, без исполнителя—синий, свободно—зелёный); node-тесты 7/7 |
 | Целостность | OK: версии 1.3.4 согласованы (version.json=APP_VERSION=шапка=sw.js), маркеры целы, конфликтов 0, node --check OK, git чист, HEAD=origin/main (1461d37, деплой №25) |
+
+### 18.09.2026 — Фото в коллекции photos (без Blaze); лимит 8; путь миграции в Storage описан
+- **Коллекция photos**: документ {orderId, data (base64 JPEG ≤~900КБ), ts, by=deviceId}, id={orderId}_{ts}. uploadPhoto: даунскейл 1000px/0.65, если base64 > 900 КБ — повторный 800px/0.6. Лимит 8 фото на заявку (учитывает и старые фото в документе).
+- **Галерея**: двойное чтение — photos where orderId== (сорт. по ts) + старые o.photos из документа; просмотр на весь экран; удаление = delete документа (клиентская проверка: владелец/админ или автор by; в rules delete — auth!=null, т.к. deviceId анонима недоступен в token — серверная проверка автора в ДОЛГАХ).
+- **photoReport** для completed/paid: orderHasPhotos — документы photos по orderId ИЛИ старые o.photos.
+- **Миграция в Storage**: ветка сохранена; при старте checkStorage — пробная запись .probe/check.txt; если бакет появился — новые фото в Storage (URL в data), старые читаются из photos. Аватары — без изменений (base64 160px).
+- **firestore.rules**: match /photos/{id} (read: all; write: auth!=null) — ЗАДЕПЛОЕНЫ (18.09).

@@ -157,7 +157,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.4</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.5</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -197,7 +197,9 @@ function renderDetails(id){
  </select></div>`:''}
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
- <div class="photos">${o.photos.map((p,i)=>typeof p==='string'&&p.startsWith('data:')?`<div class="photo">${p}</div>`:`<div class="photo" style="padding:0;overflow:hidden"><img src="${p}" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto(${o.id},${i})"></div>`).join('')}
+ <div class="photos" id="photoGrid">${(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[${o.id}]?PHOTOS_CACHE[${o.id}]:[]).concat(o.photos||[]).map((p,i)=>{
+   const src=(p&&p.data)?p.data:p;
+   return typeof src==='string'&&src.startsWith('data:')?`<div class="photo">${src}</div>`:`<div class="photo" style="padding:0;overflow:hidden"><img src="${src}" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto(${o.id},${i})"></div>`;}).join('')}
  ${canAddPhoto(o)?`<div class="photo photo-add" onclick="document.getElementById('photoFile').click()">＋</div>`:''}</div>
  <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none" onchange="uploadPhoto(this,${o.id})">
  <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчет обязателен — без фото заказ не закроется':'Фотоотчет не требуется'}</div>
@@ -396,15 +398,46 @@ function renderAdmin(){
 </div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
-function setStatus(id,s){const o=byId(id);if((s==='completed'||s==='paid')&&o.photoReport&&!(o.photos&&o.photos.length)){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);return}o.status=s;save();render()}
+function setStatus(id,s){const o=byId(id);
+ if((s==='completed'||s==='paid')&&o.photoReport){
+  orderHasPhotos(id,has=>{ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {o.status=s;save();render();} });
+  return;
+ }
+ o.status=s;save();render()}
 function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
 function finishOrder(id){const o=byId(id);
- if(o.photoReport&&o.photos.length<1){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return}
+ if(o.photoReport){
+  orderHasPhotos(id,has=>{ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
+   o.status='completed';save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render(); });
+  return;
+ }
  o.status='completed';save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
 function canAddPhoto(o){if(typeof can==='function')return can('orders_edit')||o.worker===state.user;if(!['admin','operator','manager'].includes(state.role))return o.worker===state.user;return true}
-function viewPhoto(id,i){const o=byId(id);if(!o||!o.photos[i])return;const del=canDeletePhoto(o)?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${o.photos[i]}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
+function viewPhoto(id,i){
+ const all=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id]?PHOTOS_CACHE[id]:[]).concat(byId(id)?byId(id).photos||[]:[]);
+ const p=all[i]; if(!p)return;
+ const src=(p&&p.data)?p.data:p;
+ const canDel=(p&&p.id)?canDeletePhotoDoc(p):canDeletePhoto(byId(id));
+ const del=canDel?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';
+ document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${src}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
 function canDeletePhoto(o){if(typeof can==='function')return isOwner()||can('orders_delete');return ['admin'].includes(state.role)}
-function delPhoto(id,i){const o=byId(id);if(!canDeletePhoto(o))return alert('Нет прав');if(!confirm('Удалить фото?'))return;o.photos.splice(i,1);save();go('details',id)}
+function delPhoto(id,i){
+ const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
+ const old=(byId(id)?byId(id).photos||[]:[]);
+ if(i<docs.length&&docs[i].id){
+  const p=docs[i];
+  if(!canDeletePhotoDoc(p))return alert('Нет прав');
+  if(!confirm('Удалить фото?'))return;
+  fs.collection('photos').doc(p.id).delete().then(function(){
+   PHOTOS_CACHE[id]=docs.filter((x,xi)=>xi!==i); go('details',id);
+  }).catch(e=>alert('Ошибка удаления: '+e.message));
+ } else {
+  const oi=i-docs.length;
+  if(!canDeletePhoto(byId(id)))return alert('Нет прав');
+  if(!confirm('Удалить фото?'))return;
+  const o=byId(id);o.photos.splice(oi,1);save();go('details',id);
+ }
+}
 function matAct(id,i,st){const o=byId(id);o.materials[i].status=st;
  if(st==='issue'&&!['completed','paid'].includes(o.status)){o.status='waiting';alert('Материал отмечен «Не найден». Заявка → «Ожидание материала». Требуется решение админа.')}
  else if(st==='issue'){alert('Материал отмечен «Не найден». Заявка уже закрыта — статус не изменён, требуется решение админа.')}
@@ -524,7 +557,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.3.4';
+const APP_VERSION='1.3.5';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -556,6 +589,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
