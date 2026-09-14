@@ -511,24 +511,65 @@ function addProfileNavItem(){
 }
 
 function avatarPick(inp){
+ downscale(inp,160,0.8,true,function(dataUrl){ AVATAR_TMP=dataUrl; document.getElementById('app').innerHTML=renderProfile(); });
+}
+function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
+
+// === STORAGE: доступность и общие функции ===
+var STOR=null;
+try{ if(typeof firebase.storage==='function'){ STOR=firebase.storage(); STOR.ref('.noop').getDownloadURL?null:null; } }catch(e){ STOR=null; }
+function storReady(){
+ if(!STOR) return false;
+ try{ STOR.ref('probe-'+Date.now()).toString(); return true; }catch(e){ return false; }
+}
+function downscale(inp, maxSide, quality, square, cb){
  var f=inp.files&&inp.files[0]; if(!f)return;
  var rd=new FileReader();
  rd.onload=function(e){
   var img=new Image();
   img.onload=function(){
-   var S=160,c=document.createElement('canvas');c.width=S;c.height=S;
-   var ctx=c.getContext('2d');
-   var side=Math.min(img.width,img.height);
-   ctx.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,S,S);
-   AVATAR_TMP=c.toDataURL('image/jpeg',0.8);
-   document.getElementById('app').innerHTML=renderProfile();
+   var c=document.createElement('canvas');
+   if(square){ var S=maxSide; c.width=S;c.height=S;
+    var side=Math.min(img.width,img.height);
+    c.getContext('2d').drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,S,S);
+   } else {
+    var k=Math.min(1,maxSide/Math.max(img.width,img.height));
+    c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+   }
+   cb(c.toDataURL('image/jpeg',quality));
   };
   img.onerror=function(){alert('Не удалось прочитать изображение');};
   img.src=e.target.result;
  };
  rd.readAsDataURL(f);
 }
-function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
+function dataUrlToBlob(d){
+ var parts=d.split(','); var mime=parts[0].match(/:(.*?);/)[1];
+ var b=atob(parts[1]); var arr=new Uint8Array(b.length);
+ for(var i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);
+ return new Blob([arr],{type:mime});
+}
+// Загрузка фото заявки: Storage (orders/{orderId}/{ts}.jpg), фолбэк — base64 в документе (лимит 3)
+function uploadPhoto(inp, id){
+ var o=byId?byId(id):null; if(!o)return;
+ if(!canAddPhoto(o))return alert('Нет прав');
+ if(o.photos&&o.photos.length>=12)return alert('Слишком много фото');
+ downscale(inp,1280,0.7,false,function(dataUrl){
+  var finish=function(url){ o.photos.push(url); save(); go('details',id); };
+  if(storReady()){
+   var ref=STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg');
+   ref.put(dataUrlToBlob(dataUrl)).then(function(s){ return s.ref.getDownloadURL(); })
+    .then(function(url){ finish(url); })
+    .catch(function(e){ console.warn('storage err',e); fallbackPhoto(o,dataUrl,id); });
+  } else fallbackPhoto(o,dataUrl,id);
+ });
+}
+function fallbackPhoto(o,dataUrl,id){
+ if((o.photos||[]).length>=3){ alert('Storage недоступен: в заявке уже 3 фото (лимит для офлайн-режима).'); render(); return; }
+ alert('Storage недоступен — фото сохранится в базе (лимит 3 фото на заявку).');
+ o.photos.push(dataUrl); save(); go('details',id);
+}
 
 function saveProfile(){
  if(!MYDOC){alert('Профиль не загружен');return;}
@@ -538,9 +579,16 @@ function saveProfile(){
  var old=MYDOC.profile||{};
  var p={fio:g('pf-fio'),phone:g('pf-phone'),email:g('pf-email'),city:g('pf-city'),schedule:g('pf-schedule'),
   spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),pin:old.pin||''};
- MYDOC.profile=p; AVATAR_TMP=null;
- myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
-  .catch(function(e){ alert('Ошибка сохранения: '+e.message); });
+ var doSave=function(){ MYDOC.profile=p; AVATAR_TMP=null;
+  myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
+   .catch(function(e){ alert('Ошибка сохранения: '+e.message); }); };
+ // новый аватар уходит в Storage avatars/{deviceId}.jpg; base64 — фолбэк (старые продолжают читаться)
+ if(AVATAR_TMP && storReady()){
+  STOR.ref().child('avatars/'+deviceId()+'.jpg').put(dataUrlToBlob(AVATAR_TMP))
+   .then(function(s){ return s.ref.getDownloadURL(); })
+   .then(function(url){ p.avatar=url; doSave(); })
+   .catch(function(e){ console.warn('storage err',e); doSave(); });
+ } else doSave();
 }
 function savePin(){
  var v=(document.getElementById('pf-pin').value||'').trim();

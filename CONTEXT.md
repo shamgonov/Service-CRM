@@ -286,3 +286,10 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 | 4. Ядро | ИСПРАВЛЕНО: matAct «Не найти» больше не уводит completed/paid-заявку в waiting (только пометка материала + предупреждение). OK: «Приступил» только из approved+worker; фотоотчёт обязателен для completed/paid; сортировка календаря не падает без t1; matState без NaN при пустой date; escapeHtml/esc по всем пользовательским строкам |
 | 5. PWA и деплой | ИСПРАВЛЕНО: sw.js (шаблон patch.ps1) — network-first, не кэширует !resp.ok (404), игнорирует чужие origin. OK: версии version.json=APP_VERSION=шапка согласованы; маркеры CRM-UPDATER/FIREBASE-ACCESS/CRM-INSTALL есть, CRM-DBG нет; .gitignore актуален, backups в git нет; правила покрывают app/requests/employees/roles/meta + catch-all deny |
 | Требует решения владельца | Firebase SDK (tools/firebase-*-compat.js) в git — осознанно (иначе APK/PWA без CDN не работает), при переезде на CDN — удалить из репо; firestore.rules задеплоены (этап №16), с тех пор не менялись — передеплой не требовался |
+
+### 17.09.2026 — Реальные фото (Firebase Storage)
+- **Storage**: storage.rules (orders/{orderId}/* и avatars/{deviceId}.jpg: read all, write auth + <5МБ + image/*) + секция storage в firebase.json. Деплой правил НЕ УДАЛСЯ: бакет Storage не создан (нужен «Get Started» в консоли Firebase → владелец). Правила будут применены при первом деплое после создания бакета.
+- **Фото в заявке**: input capture=environment → canvas-даунскейл 1280px JPEG 0.7 → Storage orders/{orderId}/{ts}.jpg → URL в order.photos[]. Галерея миниатюр, полноэкранный просмотр, удаление (владелец/админ). Фолбэк при недоступном Storage: base64 в документ, лимит 3 фото, с предупреждением. Старые заглушки «🖼» рендерятся как раньше.
+- **Аватары**: новые — Storage avatars/{deviceId}.jpg (URL в profile.avatar), старые base64 читаются как раньше.
+- **Права**: добавление фото — can(orders_edit) или исполнитель заявки; удаление — владелец/админ.
+- SDK: tools/firebase-storage-compat.js 10.12.5 подключён после auth, до fbconfig.
