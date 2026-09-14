@@ -245,6 +245,8 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 ## ДОЛГИ
 - Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid.
 - Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
+- True-push уведомления (FCM + Cloud Functions onCreate → topic staff): нужен Blaze-тариф проекта service-crm-9f785 — деплой functions отклонён. После апгрейда: функция + firebase-messaging-compat.js + токен в employees/{deviceId}.fcmToken.
+- Создать бакет Firebase Storage (консоль → Storage → Get Started) и выполнить firebase deploy --only storage:rules (storage.rules готовы в репо).
 - Реальные фото через Firebase Storage вместо заглушек 🖼.
 - Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.
 - Серверная проверка прав в firestore.rules по роли сотрудника (сейчас can() только на клиенте; правила дают write любому анониму — нужна сверка роли/uid).
@@ -297,3 +299,7 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 ### 17.09.2026 — CSV-экспорт отчётов
 - Кнопка «⬇ CSV» на экране Отчёты (право reports): одним файлом две таблицы — свод по работникам (имя, заявок, сумма, доля, к выплате) и журнал заявок (дата, клиент, телефон, адрес, статус, сумма, исполнитель), сортировка по дате убыв.
 - Формат: BOM \uFEFF, разделитель «;», даты ДД.ММ.ГГГГ, кавычки/точки-с-запятой в тексте экранируются по RFC, файл otchet_GGGG-MM-DD.csv через Blob+URL.createObjectURL (работает в мобильном APK). Функциональный тест в node: BOM=true, кириллица и экранирование корректны.
+
+### 17.09.2026 — Уведомления о новых заявках (in-app)
+- **Вариант: in-app realtime** (true-push FCM требует Blaze-тариф — проверено попыткой деплоя functions, отказ; записано в ДОЛГИ).
+- Механика: onSnapshot app/state → при появлении заявок (по id) у сотрудников с правом orders_view (не владелец): красный бейдж-счётчик (фикс. правый верх), звук-бип WebAudio 880Гц (без файлов), navigator.vibrate(200). Бейдж гасится при открытии списка заявок (go(orders)). Первый снапшот и правки в первые 3с после старта не считаются новыми (отсечение своих правок/первичной загрузки).

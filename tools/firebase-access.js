@@ -69,11 +69,70 @@ function can(p){
 window.__canImpl = can;
 
 // === ОБЛАКО (данные приложения) ===
+// === IN-APP УВЕДОМЛЕНИЯ О НОВЫХ ЗАЯВКАХ ===
+// True-push (FCM + Cloud Functions) требует Blaze-тариф — в ДОЛГИ.
+var NEW_ORDERS=0;          // счётчик непросмотренных новых заявок
+var LAST_ORDER_TS=0;       // момент последнего снапшота (для отсечения своих правок)
+function beepNotify(){
+ try{
+  var ctx=window.AudioContext||window.webkitAudioContext; if(!ctx)return;
+  var ac=new ctx(), o=ac.createOscillator(), g=ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type='sine'; o.frequency.value=880;
+  g.gain.setValueAtTime(0.001,ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.2,ac.currentTime+0.05);
+  g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.35);
+  o.start(); o.stop(ac.currentTime+0.4);
+ }catch(e){}
+ try{ if(navigator.vibrate)navigator.vibrate(200); }catch(e){}
+}
+function notifyNewOrders(count){
+ if(!count)return;
+ NEW_ORDERS+=count;
+ beepNotify();
+ var nav=document.getElementById('nav');
+ if(nav){
+  var el=nav.querySelector('[data-orders-badge]');
+  if(!el){
+   el=document.createElement('div');
+   el.setAttribute('data-orders-badge','1');
+   el.style.cssText='position:fixed;top:10px;right:10px;background:#dc2626;color:#fff;border-radius:14px;min-width:22px;height:22px;font:700 12px/22px sans-serif;text-align:center;padding:0 6px;z-index:70;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+   document.body.appendChild(el);
+  }
+  el.style.display='block'; el.textContent=NEW_ORDERS>99?'99+':NEW_ORDERS;
+ }
+}
+function clearOrdersBadge(){
+ NEW_ORDERS=0;
+ var el=document.querySelector('[data-orders-badge]');
+ if(el)el.style.display='none';
+}
+// при просмотре списка заявок бейдж гасится
+(function(){
+ var _go=window.go;
+ window.go=function(scr){
+  if(scr==='orders')clearOrdersBadge();
+  return _go.apply(this,arguments);
+ };
+})();
+function watchNewOrders(prev, next){
+ if(!prev||!next)return;
+ try{
+  var prevIds={}, added=0;
+  (prev.orders||[]).forEach(function(o){prevIds[o.id]=1;});
+  (next.orders||[]).forEach(function(o){ if(!prevIds[o.id])added++; });
+  if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()) notifyNewOrders(added);
+ }catch(e){}
+}
 function loadCloud(cb){
  if(unsub)unsub();
+ var first=true;
  unsub = fs.collection('app').doc('state').onSnapshot(function(snap){
+   var prev=DB;
    if(snap.exists && snap.data().db){ DB=snap.data().db; }
    else { DB=defaultData(); fs.collection('app').doc('state').set({db:DB}); }
+   if(!first) watchNewOrders(prev, DB);
+   first=false;
    ensureOwnerInDb();
    if(cb)cb(); render();
  }, function(err){ console.warn(err); });
@@ -372,6 +431,7 @@ function startMain(){
    try{ localStorage.setItem('crm_last_user', JSON.stringify({name:ME.name||'', role:ME.role||'', avatar:(ME.profile&&ME.profile.avatar)||''})); }catch(e){}
   }
  }
+ LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  loadCloud(function(){});
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
