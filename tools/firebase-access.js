@@ -69,11 +69,32 @@ function can(p){
 window.__canImpl = can;
 
 // === ОБЛАКО (данные приложения) ===
-// === IN-APP УВЕДОМЛЕНИЯ О НОВЫХ ЗАЯВКАХ ===
-// True-push (FCM + Cloud Functions) требует Blaze-тариф — в ДОЛГИ.
-var NEW_ORDERS=0;          // счётчик непросмотренных новых заявок
-var LAST_ORDER_TS=0;       // момент последнего снапшота (для отсечения своих правок)
+// === УВЕДОМЛЕНИЯ ЭТАП 1: движок событий (без Blaze; FCM-пуши — в ДОЛГИ) ===
+// События {type,title,body,orderId,ts,read} в crm_events (последние 50), каналы: in-app бейдж,
+// системные Notification (свёрнутое приложение), Badging API, настройки profile.notify + DND.
+var LAST_ORDER_TS=0;       // момент последнего снапшота (отсечение своих правок/первого снапшота)
+var EVENTS=[];             // кэш событий текущего устройства
+function eventsLoad(){ EVENTS=lsGet('crm_events',[]); }
+function eventsSave(){ lsSet('crm_events',EVENTS.slice(-50)); }
+function unreadCount(){ return EVENTS.filter(function(e){return !e.read;}).length; }
+function myName(){ return (ME&&ME.name)||(state&&state.user)||''; }
+function lastByDeviceId(o){ return o&&o.lastBy?o.lastBy:null; }
+// настройки profile.notify: {sys:true, sound:true, vibra:true, dndFrom:'', dndTo:''}
+function notifyCfg(){
+ var p=(MYDOC&&MYDOC.profile)||{};
+ var n=p.notify||{};
+ return {sys:n.sys!==false, sound:n.sound!==false, vibra:n.vibra!==false, dndFrom:n.dndFrom||'', dndTo:n.dndTo||''};
+}
+function inDND(){
+ var c=notifyCfg();
+ if(!c.dndFrom||!c.dndTo)return false;
+ var h=new Date().getHours()+new Date().getMinutes()/60;
+ var from=parseFloat(c.dndFrom), to=parseFloat(c.dndTo);
+ if(from<=to)return h>=from&&h<to;
+ return h>=from||h<to; // через полночь
+}
 function beepNotify(){
+ if(!notifyCfg().sound||inDND())return;
  try{
   var ctx=window.AudioContext||window.webkitAudioContext; if(!ctx)return;
   var ac=new ctx(), o=ac.createOscillator(), g=ac.createGain();
@@ -84,46 +105,161 @@ function beepNotify(){
   g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.35);
   o.start(); o.stop(ac.currentTime+0.4);
  }catch(e){}
- try{ if(navigator.vibrate)navigator.vibrate(200); }catch(e){}
+ try{ if(notifyCfg().vibra&&navigator.vibrate)navigator.vibrate(200); }catch(e){}
 }
-function notifyNewOrders(count){
- if(!count)return;
- NEW_ORDERS+=count;
+function updateAppBadge(){
+ try{
+  var n=unreadCount();
+  if(n>0&&navigator.setAppBadge)navigator.setAppBadge(n);
+  else if(navigator.clearAppBadge)navigator.clearAppBadge();
+ }catch(e){}
+}
+function showSystemNotification(ev){
+ if(!notifyCfg().sys||inDND())return;
+ try{
+  if(typeof Notification==='undefined')return;
+  if(Notification.permission!=='granted')return;
+  var n=new Notification(ev.title,{body:ev.body,icon:'icon.png',tag:ev.orderId+'_'+ev.type});
+  n.onclick=function(){ try{ window.focus(); if(ev.orderId!=null)go('details',ev.orderId); n.close(); }catch(e){} };
+ }catch(e){}
+}
+function pushEvent(type,title,body,orderId){
+ // CAN-права: событие адресовано экрану; без права — не показываем
+ var need={order:'orders_view',assigned:'orders_view',completed:'orders_view',request:'staff_manage',material:'shopping',calendar:'calendar',overdue:'orders_view'}[type];
+ if(need&&!can(need))return;
+ // подавление автора: свои правки не уведомляют
+ var ev={type:type,title:title,body:body,orderId:orderId==null?null:orderId,ts:Date.now(),read:false};
+ EVENTS.push(ev); EVENTS=EVENTS.slice(-50); eventsSave();
+ if(Date.now()-LAST_ORDER_TS<3000)return; // первые 3с после своих правок/входа — тихо
  beepNotify();
- var nav=document.getElementById('nav');
- if(nav){
-  var el=nav.querySelector('[data-orders-badge]');
-  if(!el){
-   el=document.createElement('div');
-   el.setAttribute('data-orders-badge','1');
-   el.style.cssText='position:fixed;top:10px;right:10px;background:#dc2626;color:#fff;border-radius:14px;min-width:22px;height:22px;font:700 12px/22px sans-serif;text-align:center;padding:0 6px;z-index:70;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-   document.body.appendChild(el);
-  }
-  el.style.display='block'; el.textContent=NEW_ORDERS>99?'99+':NEW_ORDERS;
- }
+ showSystemNotification(ev);
+ updateAppBadge();
+ if(typeof render==='function')render();
 }
-function clearOrdersBadge(){
- NEW_ORDERS=0;
- var el=document.querySelector('[data-orders-badge]');
- if(el)el.style.display='none';
+function markEventsRead(screen){
+ var orderTypes=['order','assigned','completed','overdue'];
+ var t={orders:orderTypes,details:orderTypes,tasks:orderTypes,calendar:['calendar'],shopping:['material'],staff:['request']}[screen]||null;
+ var ch=false;
+ if(t)EVENTS.forEach(function(e){ if(!e.read&&t.indexOf(e.type)>=0){ e.read=true; ch=true; } });
+ if(ch){ eventsSave(); updateAppBadge(); if(typeof render==='function')render(); }
 }
-// при просмотре списка заявок бейдж гасится
-(function(){
- var _go=window.go;
- window.go=function(scr){
-  if(scr==='orders')clearOrdersBadge();
-  return _go.apply(this,arguments);
- };
-})();
+function clearOrdersBadge(){ markEventsRead('orders'); }
+// экран соответствия события → пункт меню для красного бейджа
+function screenForEvent(type){
+ return {order:'orders',assigned:'orders',completed:'orders',overdue:'orders',request:'staff',material:'shopping',calendar:'calendar'}[type]||'orders';
+}
+function eventBadgeHtml(){
+ var n=unreadCount();
+ if(!n)return '';
+ return '<div data-ev-badge="1" style="position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;border-radius:10px;min-width:16px;height:16px;font:700 10px/16px sans-serif;text-align:center;padding:0 4px">'+n+'</div>';
+}
+function applyEventBadges(){
+ var nav=document.getElementById('nav'); if(!nav)return;
+ // глобальный бейдж на пункте «Заявки» + обновление системного бейджа
+ Array.prototype.forEach.call(nav.querySelectorAll('[data-ev-badge]'),function(el){el.remove();});
+ var n=unreadCount(); if(!n)return;
+ var items=nav.querySelectorAll('.nav-item');
+ if(items[0]){ items[0].style.position='relative'; items[0].insertAdjacentHTML('beforeend',eventBadgeHtml()); }
+}
+// движок: сравнение снапшотов orders
 function watchNewOrders(prev, next){
+ if(!prev||!next)return;
+ try{
+  var dev=deviceId();
+  var prevById={};
+  (prev.orders||[]).forEach(function(o){prevById[o.id]=o;});
+  (next.orders||[]).forEach(function(o){
+   var p=prevById[o.id];
+   var byMe=lastByDeviceId(o)===dev;
+   if(!p){ // новая заявка
+    if(o.worker&&(o.worker===dev||o.worker===myName())&&o.status==='approved'&&!byMe)
+     pushEvent('assigned','📋 Назначена заявка №'+o.id,'Вас назначили исполнителем: '+esc(o.client||''),o.id);
+    return;
+   }
+   // смена исполнителя/статуса → мне-работнику
+   var wasMine=p.worker&&(p.worker===dev||p.worker===myName());
+   var nowMine=o.worker&&(o.worker===dev||o.worker===myName());
+   if(wasMine&&!nowMine&&!byMe)
+    pushEvent('order','↩️ Заявку №'+o.id+' переназначили','Заявка больше не ваша',o.id);
+   if(!wasMine&&nowMine&&o.status==='approved'&&!byMe)
+    pushEvent('assigned','📋 Назначена заявка №'+o.id,'Вас назначили исполнителем: '+esc(o.client||''),o.id);
+   if(wasMine&&nowMine&&(p.date!==o.date||p.t1!==o.t1||p.t2!==o.t2)&&!byMe)
+    pushEvent('calendar','📅 Изменён календарь — заявка №'+o.id,'Новое время: '+esc(o.date||'')+' '+esc(o.t1||'')+'–'+esc(o.t2||''),o.id);
+   // завершение → владельцу и orders_view (кроме автора правки)
+   if(p.status!=='completed'&&o.status==='completed'&&!byMe)
+    pushEvent('completed','✅ Заявка №'+o.id+' завершена','Фотоотчёт готов, ожидает оплаты',o.id);
+   // перенос/отмена
+   if(p.status!=='postponed'&&o.status==='postponed'&&(wasMine||isOwner())&&!byMe)
+    pushEvent('order','📅 Заявку №'+o.id+' перенесли','Статус: перенос',o.id);
+   // материал «не найти» → ролям с shopping
+   if(o.materials&&p.materials){
+    var wasIssue=p.materials.some(function(m){return m.status==='issue';});
+    var nowIssue=o.materials.some(function(m){return m.status==='issue';});
+    if(!wasIssue&&nowIssue&&!byMe)
+     pushEvent('material','❌ Материал не найти — заявка №'+o.id,'Требуется решение по закупке',o.id);
+   }
+  });
+ }catch(e){ console.warn('watch err',e); }
+}
+// новые заявки (как раньше) — сотрудникам с orders_view
+function watchAddedOrders(prev, next){
  if(!prev||!next)return;
  try{
   var prevIds={}, added=0;
   (prev.orders||[]).forEach(function(o){prevIds[o.id]=1;});
   (next.orders||[]).forEach(function(o){ if(!prevIds[o.id])added++; });
-  if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()) notifyNewOrders(added);
+  if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()){
+   for(var i=0;i<added;i++)pushEvent('order','🆕 Новая заявка','Появилась новая заявка в списке',null);
+  }
  }catch(e){}
 }
+// новые заявки на доступ — владельцу
+var KNOWN_REQUESTS=null;
+function watchRequests(snap){
+ try{
+  if(!isOwner())return;
+  var ids=[];
+  snap.forEach(function(d){ if(d.data().status==='pending')ids.push(d.id); });
+  if(KNOWN_REQUESTS===null){ KNOWN_REQUESTS=ids; return; }
+  var fresh=ids.filter(function(id){ return KNOWN_REQUESTS.indexOf(id)<0; });
+  KNOWN_REQUESTS=ids;
+  fresh.forEach(function(id){
+   pushEvent('request','📨 Новый запрос доступа','Кто-то просит доступ к приложению',null);
+  });
+ }catch(e){ console.warn(e); }
+}
+// просрочка: активная заявка с прошедшим t2 — раз в минуту, один раз на заявку
+setInterval(function(){
+ try{
+  if(!DB||!DB.orders)return;
+  var dev=deviceId();
+  var flags=lsGet('crm_overdue_fired',{});
+  var now=Date.now();
+  DB.orders.forEach(function(o){
+   if(!o.date||!o.t2)return;
+   if(['completed','paid','canceled','postponed'].indexOf(o.status)>=0)return;
+   var end=new Date(o.date+'T'+o.t2).getTime();
+   if(now>end&&!flags[o.id]){
+    flags[o.id]=now; lsSet('crm_overdue_fired',flags);
+    var mine=o.worker&&(o.worker===dev||o.worker===myName());
+    if(mine)pushEvent('overdue','⏰ Просрочка — заявка №'+o.id,'Время окончания прошло ('+esc(o.t2)+')',o.id);
+    else if(isOwner())pushEvent('overdue','⏰ Просрочка — заявка №'+o.id,(esc(o.worker)||'Исполнитель')+' не уложился в срок',o.id);
+   }
+  });
+ }catch(e){}
+},60000);
+function notifyNewOrders(count){
+ // совместимость: старые вызовы → события «новая заявка»
+ for(var i=0;i<(count||0);i++)pushEvent('order','🆕 Новая заявка','Появилась новая заявка в списке',null);
+}
+// при просмотре списка заявок события заявок гасятся
+(function(){
+ var _go=window.go;
+ window.go=function(scr){
+  markEventsRead(scr);
+  return _go.apply(this,arguments);
+ };
+})();
 // === ОБЛАКО: коллекция orders (по документу на заявку) + app/state (настройки) ===
 var ORDERS_SUB=false;   // получен первый снапшот коллекции orders
 var STATE_SUB=false;    // получен первый снапшот app/state
@@ -185,15 +321,6 @@ function flushQueue(){
 })();
 function ordersRef(){ return fs.collection('orders'); }
 
-function watchNewOrders(prev, next){
- if(!prev||!next)return;
- try{
-  var prevIds={}, added=0;
-  (prev.orders||[]).forEach(function(o){prevIds[o.id]=1;});
-  (next.orders||[]).forEach(function(o){ if(!prevIds[o.id])added++; });
-  if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()) notifyNewOrders(added);
- }catch(e){}
-}
 function loadCloud(cb){
  if(unsub)unsub();
  var first=true;
@@ -208,6 +335,7 @@ function loadCloud(cb){
   DB.orders=arr;
   cacheOrders(arr);
   if(!first) watchNewOrders(prev, DB);
+  if(!first) watchAddedOrders(prev, DB);
   ORDERS_SUB=true; first=false;
   maybeRender();
  }, function(err){
@@ -236,6 +364,9 @@ function loadCloud(cb){
   }
   STATE_SUB=true;
   ensureOwnerInDb();
+  if(isOwner()&&fs.collection('requests')){
+   fs.collection('requests').get().then(watchRequests).catch(function(){});
+  }
   render();
  }, function(err){
   console.warn(err); STATE_SUB=true;
@@ -258,6 +389,7 @@ function orderSave(order){
  if(!order||order.id==null)return;
  var copy={};
  for(var k in order){ if(k!=='id')copy[k]=order[k]; }
+ copy.lastBy=deviceId(); // подавление событий о собственных правках
  if(OFFLINE||ORDERS_ERR&&!ORDERS_SUB){
   queuePush({kind:'order',order:copy,id:order.id});
   // локально применяем сразу (серверный снапшот потом победит, патчи применяются поверх)
@@ -601,6 +733,7 @@ function startMain(){
   }
  }
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
+ eventsLoad();
  if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
  migrateOrdersIfNeeded();
@@ -676,6 +809,8 @@ window.render = function(){
  if(_origRender)_origRender();
  addProfileNavItem();
  applyPermsUI();
+ applyEventBadges();
+ updateAppBadge();
  // детали заявки: подтянуть фото из коллекции photos и перерисовать галерею
  if(state.screen==='details' && state.orderId!=null && typeof fs!=='undefined' && fs){
   var oid=state.orderId;
@@ -764,6 +899,7 @@ function getMyDoc(cb){
 function renderProfile(){
  var p=(MYDOC&&MYDOC.profile)||{};
  var av=AVATAR_TMP||p.avatar||'';
+ var nt=p.notify||{sys:true,sound:true,vibra:true,dndFrom:'',dndTo:''};
  var avHtml=av
   ?'<img src="'+av+'" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:2px solid var(--blue)">'
   :'<div style="width:88px;height:88px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:34px">👤</div>';
@@ -784,6 +920,13 @@ function renderProfile(){
  '<div class="card"><div class="sec-title">Специализация</div>'+
   '<div class="chips">'+QUALS_CATALOG.map(function(q){
    return '<span class="chip '+(quals.indexOf(q)>=0?'sel':'')+'" onclick="this.classList.toggle(\'sel\')">'+esc(q)+'</span>';}).join('')+'</div>'+
+ '</div>'+
+ '<div class="card"><div class="sec-title">🔔 Уведомления</div>'+
+  '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-sys" '+(nt.sys?'checked':'')+'> Системные уведомления (когда приложение свёрнуто)</label>'+
+  '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-sound" '+(nt.sound?'checked':'')+'> Звук</label>'+
+  '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-vibra" '+(nt.vibra?'checked':'')+'> Вибрация</label>'+
+  '<div class="muted" style="margin:8px 0 4px">Не беспокоить (в это время — только бейдж, без звука и системных):</div>'+
+  '<div class="row2"><input class="input" id="pf-nt-from" type="number" min="0" max="23" step="0.5" value="'+esc(nt.dndFrom)+'" placeholder="с (ч)"><input class="input" id="pf-nt-to" type="number" min="0" max="24" step="0.5" value="'+esc(nt.dndTo)+'" placeholder="по (ч)"></div>'+
  '</div>'+
  '<div class="card"><div class="sec-title">🔑 PIN-код устройства</div>'+
   (pinSet(p)?'<div class="muted" style="margin-bottom:6px">PIN установлен (4 цифры). Введите новый, чтобы изменить.</div>':'<div class="muted" style="margin-bottom:6px">PIN не установлен. 4 цифры — защита устройства при открытии.</div>')+
@@ -942,7 +1085,15 @@ function saveProfile(){
  var old=MYDOC.profile||{};
  var p={fio:g('pf-fio'),phone:g('pf-phone'),email:g('pf-email'),city:g('pf-city'),schedule:g('pf-schedule'),
   spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),
-  pin:old.pin||'',pinSalt:old.pinSalt||'',pinHash:old.pinHash||''};
+  pin:old.pin||'',pinSalt:old.pinSalt||'',pinHash:old.pinHash||'',
+  notify:{sys:document.getElementById('pf-nt-sys')?document.getElementById('pf-nt-sys').checked:(old.notify&&old.notify.sys!==false),
+   sound:document.getElementById('pf-nt-sound')?document.getElementById('pf-nt-sound').checked:(old.notify&&old.notify.sound!==false),
+   vibra:document.getElementById('pf-nt-vibra')?document.getElementById('pf-nt-vibra').checked:(old.notify&&old.notify.vibra!==false),
+   dndFrom:g('pf-nt-from'),dndTo:g('pf-nt-to')}};
+ // включение системных уведомлений — запрос разрешения сразу
+ if(p.notify.sys&&typeof Notification!=='undefined'&&Notification.permission==='default'){
+  try{ Notification.requestPermission(); }catch(e){}
+ }
  var doSave=function(){ MYDOC.profile=p; AVATAR_TMP=null;
   myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
    .catch(function(e){ alert('Ошибка сохранения: '+e.message); }); };
