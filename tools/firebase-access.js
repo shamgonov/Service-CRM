@@ -146,20 +146,42 @@ function markEventsRead(screen){
 function clearOrdersBadge(){ markEventsRead('orders'); }
 // экран соответствия события → пункт меню для красного бейджа
 function screenForEvent(type){
- return {order:'orders',assigned:'orders',completed:'orders',overdue:'orders',request:'staff',material:'shopping',calendar:'calendar'}[type]||'orders';
+ return {order:'orders',assigned:'orders',completed:'orders',overdue:'orders',route:'orders',request:'staff',material:'shopping',calendar:'calendar'}[type]||'orders';
 }
-function eventBadgeHtml(){
- var n=unreadCount();
+// события → пункты нижнего меню (с учётом роли): заявки идут в «Заявки» или «Мои задачи»,
+// найм (request) — в панель владельца («Админ»), остальное по экрану
+function navKeysForRole(role){
+ if(role==='worker')return ['tasks','shopping','calendar'];
+ if(role==='operator')return ['orders','calendar','shopping','create','reports'];
+ if(role==='manager')return ['orders','calendar','shopping'];
+ return ['orders','calendar','shopping','reports','admin'];
+}
+function badgeCountsByNav(){
+ var counts={};
+ EVENTS.forEach(function(e){
+  if(e.read)return;
+  var key=screenForEvent(e.type);
+  if(key==='staff')key='admin';
+  if(key==='orders'&&state&&state.role==='worker')key='tasks';
+  counts[key]=(counts[key]||0)+1;
+ });
+ return counts;
+}
+function eventBadgeHtml(n){
  if(!n)return '';
- return '<div data-ev-badge="1" style="position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;border-radius:10px;min-width:16px;height:16px;font:700 10px/16px sans-serif;text-align:center;padding:0 4px">'+n+'</div>';
+ return '<div data-ev-badge="1" style="position:absolute;top:-4px;right:calc(50% - 22px);width:18px;height:18px;background:#dc2626;color:#fff;border-radius:50%;font:700 11px/18px sans-serif;text-align:center;pointer-events:none">'+n+'</div>';
 }
 function applyEventBadges(){
  var nav=document.getElementById('nav'); if(!nav)return;
- // глобальный бейдж на пункте «Заявки» + обновление системного бейджа
+ // бейдж на каждом пункте со своими непрочитанными событиями (сумма по типам пункта)
  Array.prototype.forEach.call(nav.querySelectorAll('[data-ev-badge]'),function(el){el.remove();});
- var n=unreadCount(); if(!n)return;
+ var counts=badgeCountsByNav();
+ var keys=navKeysForRole(state&&state.role);
  var items=nav.querySelectorAll('.nav-item');
- if(items[0]){ items[0].style.position='relative'; items[0].insertAdjacentHTML('beforeend',eventBadgeHtml()); }
+ Array.prototype.forEach.call(items,function(el,i){
+  var n=counts[keys[i]]||0;
+  if(n){ el.style.position='relative'; el.insertAdjacentHTML('beforeend',eventBadgeHtml(n)); }
+ });
 }
 // движок: сравнение снапшотов orders
 function watchNewOrders(prev, next){
