@@ -244,15 +244,9 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 
 ## ДОЛГИ
 - Офлайн-кэш коллекции orders в localStorage (сейчас офлайн = read-only фолбэк; нужна очередь записи).
-- Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid. Также: серверная проверка автора фото в rules (delete photos) — deviceId анонима недоступен в request.auth.token, нужен custom claim или auth.uid-схема.
-- Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
 - True-push уведомления (FCM + Cloud Functions onCreate → topic staff): нужен Blaze-тариф проекта service-crm-9f785 — деплой functions отклонён. После апгрейда: функция + firebase-messaging-compat.js + токен в employees/{deviceId}.fcmToken.
 - Создать бакет Firebase Storage (консоль → Storage → Get Started) и выполнить firebase deploy --only storage:rules (storage.rules готовы в репо).
-- Реальные фото через Firebase Storage вместо заглушек 🖼.
 - Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.
-- Серверная проверка прав в firestore.rules по роли сотрудника (сейчас can() только на клиенте; правила дают write любому анониму — нужна сверка роли/uid).
-- firestore.rules: update employees разрешён только для своего deviceId и только поля profile (сейчас любой аноним может переписать любой документ сотрудников).
-- PIN в profile.pin хранится открытой строкой (MVP) — перехешировать (SHA-256) при переходе на auth.uid.
 
 ### 15.09.2026 — Личный кабинет «Мой профиль» + PIN-защита устройства
 - **Модель**: employees/{deviceId}.profile = {fio,phone,email,city,schedule,avatar,pin,spec[]}; корневые role/quals/status не трогаются. Аватар — canvas-даунскейл 160px, JPEG 0.8, base64 в profile.avatar (без Storage). Владелец без документа — создаётся при первом открытии профиля (role:'admin', owner:true, status:'approved').
@@ -356,3 +350,8 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **index.html** (первый инлайн-скрипт, до SDK): window.onerror на этапе загрузки; фатальная ошибка (источник не firebase) при отсутствии sessionStorage crm_recovered → флаг + unregister SW + удаление ВСЕХ кэшей (caches.keys→delete) + location.reload(). Вторая попытка не делается (флаг стоит) — экран «Ошибка загрузки, проверьте интернет» с кнопкой перезагрузки. Ошибки в SDK не считаются фатальными.
 - **sw.js** (шаблон patch.ps1): activate — удаление чужих кэшей + clients.claim() (было). fetch: navigate — ВСЕГДА только сеть (обновление кэша при ok), fallback — инлайн-офлайн-страница «Нет соединения» (без кэш-fallback). Прочие GET — сеть→кэш как раньше.
 - Симуляция в node (vm): 1-я фатальная ошибка → 1 перезагрузка, 2 кэша удалены, флаг=1; 2-я ошибка → без действий; ошибка SDK → без действий. 7/7 OK.
+
+### 18.09.2026 — PIN-хэш (PBKDF2) + серверные права в firestore.rules
+- **PIN**: вместо открытого profile.pin — пара {pinSalt, pinHash}: PBKDF2-SHA-256 через crypto.subtle, 100 000 итераций, соль 16 байт (randSalt). Гейт (pinSubmit→verifyPin), установка/смена (savePin→makePinRecord), сброс (resetMyPin/adminResetPin — чистят оба поля) работают через хэш. Мягкая миграция: старый открытый pin при первом успешном вводе гейта пересохраняется в {pinSalt,pinHash}, поле pin удаляется. Фолбэк: crypto.subtle недоступен (старый WebView) → открытый pin + жёлтое предупреждение в профиле (ДОЛГ остаётся). Тест PBKDF2 в node (webcrypto): детерминированность, разные соли → разные хэши, неверный PIN, длины 64/32 hex — 5/5 OK.
+- **Серверные права (uid-привязка)**: при signInAnonymously клиент пишет employees/{deviceId}.uid = auth.uid и usermap/{uid}={deviceId} (create/update только своим uid). Правила задеплоены (Deploy complete): employees update — своему устройству только profile+uid (affectedKeys().hasOnly), create/delete — владелец/админ (+bootstrap владельца при пустом meta, request.resource.data.owner==true); roles write — только владелец/админ; photos delete — автор (by через usermap) или владелец/админ; orders/app/state/requests/meta — как раньше; catch-all deny. isOwner = meta/owner.uid == auth.uid (meta/owner теперь пишет uid при записи). Проверка матрицы правил структурно — 11/11 OK.
+- Из ДОЛГОВ сняты: «хэширование PIN», «жёсткие rules по auth.uid + серверная проверка автора фото».

@@ -293,7 +293,7 @@ function restoreLastUser(){
  fs.collection('employees').doc(dev).get().then(function(d){
   if(d.exists && d.data().status==='approved'){
    ME=d.data(); ME.deviceId=ME.deviceId||dev; MYDOC=ME;
-   var pin=(ME.profile&&ME.profile.pin)||'';
+   var pin=pinSet(ME.profile);
    if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ PIN_TRIES=0; showPinGate(); }
    else startMain();
   } else {
@@ -335,8 +335,9 @@ function goAdminStaff(){ TESTROLE='admin'; state.role='admin'; state.user='Вл�
 // === СТАТУС ОДОБРЕНИЯ ===
 function checkApproved(cb){
  var dev=deviceId();
+ var uid=(auth.currentUser&&auth.currentUser.uid)||null;
  if(isOwner()){
-  fs.collection('meta').doc('owner').set({deviceId:dev,ts:Date.now()}).catch(function(){});
+  fs.collection('meta').doc('owner').set({deviceId:dev,uid:uid,ts:Date.now()}).catch(function(){});
   window.__accessMode=true;
   cb(true);
   return;
@@ -348,7 +349,7 @@ function checkApproved(cb){
   }).catch(function(e){ console.warn('FIRESTORE ERROR:',e); if(e && (e.code==='unavailable')) CONN_ERR=true; cb(false); });
  }
  fs.collection('meta').doc('owner').get().then(function(m){
-  if(!m.exists){ fs.collection('meta').doc('owner').set({deviceId:dev,ts:Date.now()}); localStorage.setItem(OWNER_KEY,'1'); window.__accessMode=true; cb(true); }
+  if(!m.exists){ fs.collection('meta').doc('owner').set({deviceId:dev,uid:(auth.currentUser&&auth.currentUser.uid)||null,ts:Date.now()}); localStorage.setItem(OWNER_KEY,'1'); window.__accessMode=true; cb(true); }
   else proceed();
  }).catch(function(){ proceed(); });
 }
@@ -527,13 +528,23 @@ function startMain(){
 // гейт показывается ДО панели владельца и ДО тест-карточек ролей.
 function gateThenStart(){
  getMyDoc(function(){
-  var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
+  var pin=pinSet(MYDOC&&MYDOC.profile);
   if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ showPinGate(); }
   else startMain();
  });
 }
 (function startApp(){
- auth.signInAnonymously().catch(function(e){ console.warn(e); });
+ auth.signInAnonymously().then(function(){
+  // привязка uid: employees/{deviceId}.uid + usermap/{uid}={deviceId} — до остальных операций
+  try{
+   var u=auth.currentUser&&auth.currentUser.uid;
+   if(u){
+    var dev=deviceId();
+    fs.collection('employees').doc(dev).set({uid:u},{merge:true}).catch(function(){});
+    fs.collection('usermap').doc(u).set({deviceId:dev},{merge:true}).catch(function(){});
+   }
+  }catch(e){ console.warn('uid bind err',e); }
+ }).catch(function(e){ console.warn(e); });
  ensureRolesSeeded(function(){
   checkApproved(function(ok){
    if(ok){
@@ -560,7 +571,7 @@ function gateThenStart(){
 
 var _origRender = window.render;
 window.render = function(){
- if(MYDOC && MYDOC.profile && MYDOC.profile.pin && sessionStorage.getItem('crm_unlocked')!=='1' && !state.role){
+ if(pinSet(MYDOC&&MYDOC.profile) && sessionStorage.getItem('crm_unlocked')!=='1' && !state.role){
   showPinGate();
   return;
  }
@@ -621,6 +632,40 @@ var MYDOC=null;               // кэш employees/{deviceId}
 var AVATAR_TMP=null;          // base64 после даунскейла (до сохранения)
 var PIN_TRIES=0;
 
+// === PIN: PBKDF2-SHA-256 (100k итераций, соль 16 байт) ===
+// profile.pinSalt + profile.pinHash; старый открытый pin мигрирует при первом успешном вводе.
+var PIN_ITER=100000;
+var subtleOK=(typeof crypto!=='undefined'&&crypto.subtle&&typeof crypto.subtle.importKey==='function');
+function randSalt(){
+ var a=new Uint8Array(16);
+ if(typeof crypto!=='undefined'&&crypto.getRandomValues)crypto.getRandomValues(a);
+ else for(var i=0;i<16;i++)a[i]=Math.floor(Math.random()*256);
+ return Array.prototype.map.call(a,function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+}
+function pbkdf2(pin,saltHex){
+ var enc=new TextEncoder();
+ var salt=new Uint8Array(saltHex.match(/.{2}/g).map(function(h){return parseInt(h,16);}));
+ return crypto.subtle.importKey('raw',enc.encode(pin),'PBKDF2',false,['deriveBits'])
+  .then(function(k){ return crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:PIN_ITER,hash:'SHA-256'},k,256); })
+  .then(function(buf){
+   return Array.prototype.map.call(new Uint8Array(buf),function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+  });
+}
+function makePinRecord(pin){
+ var salt=randSalt();
+ return pbkdf2(pin,salt).then(function(hash){ return {pinSalt:salt,pinHash:hash}; });
+}
+function verifyPin(profile,entered){
+ if(!profile)return Promise.resolve(false);
+ if(profile.pinHash&&profile.pinSalt){
+  if(!subtleOK)return Promise.resolve(false); // хэш есть, проверить нечем — не впускаем
+  return pbkdf2(entered,profile.pinSalt).then(function(h){ return h===profile.pinHash; });
+ }
+ if(profile.pin){ return Promise.resolve(entered===profile.pin); } // legacy
+ return Promise.resolve(false); // PIN не установлен
+}
+function pinSet(profile){ return !!(profile&&((profile.pinHash&&profile.pinSalt)||profile.pin)); }
+
 function myDocRef(){ return fs.collection('employees').doc(deviceId()); }
 
 function getMyDoc(cb){
@@ -660,10 +705,11 @@ function renderProfile(){
    return '<span class="chip '+(quals.indexOf(q)>=0?'sel':'')+'" onclick="this.classList.toggle(\'sel\')">'+esc(q)+'</span>';}).join('')+'</div>'+
  '</div>'+
  '<div class="card"><div class="sec-title">🔑 PIN-код устройства</div>'+
-  (p.pin?'<div class="muted" style="margin-bottom:6px">PIN установлен (4 цифры). Введите новый, чтобы изменить.</div>':'<div class="muted" style="margin-bottom:6px">PIN не установлен. 4 цифры — защита устройства при открытии.</div>')+
+  (pinSet(p)?'<div class="muted" style="margin-bottom:6px">PIN установлен (4 цифры). Введите новый, чтобы изменить.</div>':'<div class="muted" style="margin-bottom:6px">PIN не установлен. 4 цифры — защита устройства при открытии.</div>')+
+  (!subtleOK&&p.pin?'<div class="muted" style="color:#b45309;margin-bottom:6px">⚠ PIN хранится без хэширования (старый WebView не поддерживает шифрование).</div>':'')+
   '<input class="input" id="pf-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••">'+
   '<div class="row2"><button class="btn-sm btn-blue" onclick="savePin()">Установить / изменить</button>'+
-  (p.pin?'<button class="btn-sm btn-red" onclick="resetMyPin()">Сбросить PIN</button>':'')+'</div>'+
+  (pinSet(p)?'<button class="btn-sm btn-red" onclick="resetMyPin()">Сбросить PIN</button>':'')+'</div>'+
   '<div class="muted" style="margin-top:6px">При следующем открытии приложения потребуется ввод PIN.</div>'+
  '</div>'+
  '<div style="padding:0 16px 16px"><button class="btn btn-green" onclick="saveProfile()">💾 Сохранить</button></div>';
@@ -795,7 +841,8 @@ function saveProfile(){
  document.querySelectorAll('.card .chip.sel').forEach(function(c){ if(QUALS_CATALOG.indexOf(c.textContent)>=0)spec.push(c.textContent); });
  var old=MYDOC.profile||{};
  var p={fio:g('pf-fio'),phone:g('pf-phone'),email:g('pf-email'),city:g('pf-city'),schedule:g('pf-schedule'),
-  spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),pin:old.pin||''};
+  spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),
+  pin:old.pin||'',pinSalt:old.pinSalt||'',pinHash:old.pinHash||''};
  var doSave=function(){ MYDOC.profile=p; AVATAR_TMP=null;
   myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
    .catch(function(e){ alert('Ошибка сохранения: '+e.message); }); };
@@ -811,14 +858,21 @@ function savePin(){
  var v=(document.getElementById('pf-pin').value||'').trim();
  if(!/^\d{4}$/.test(v))return alert('PIN — ровно 4 цифры');
  if(!MYDOC)return alert('Профиль не загружен');
- MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin=v;
- myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен'); render(); })
-  .catch(function(e){ alert('Ошибка: '+e.message); });
+ if(!subtleOK){ MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin=v;
+  myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен (без хэширования — старый WebView)'); render(); })
+   .catch(function(e){ alert('Ошибка: '+e.message); });
+  return; }
+ makePinRecord(v).then(function(rec){
+  MYDOC.profile=MYDOC.profile||{};
+  MYDOC.profile.pinSalt=rec.pinSalt; MYDOC.profile.pinHash=rec.pinHash; delete MYDOC.profile.pin;
+  myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен'); render(); })
+   .catch(function(e){ alert('Ошибка: '+e.message); });
+ }).catch(function(){ alert('Не удалось установить PIN (нет поддержки шифрования)'); });
 }
 function resetMyPin(){
  if(!confirm('Убрать PIN с этого устройства?'))return;
  if(!MYDOC)return;
- MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin='';
+ MYDOC.profile=MYDOC.profile||{}; delete MYDOC.profile.pin; delete MYDOC.profile.pinHash; delete MYDOC.profile.pinSalt;
  myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); render(); });
 }
 
@@ -840,15 +894,27 @@ function renderPin(){
 }
 function pinSubmit(){
  var v=(document.getElementById('pinInput').value||'').trim();
- var saved=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
- if(v===saved){ sessionStorage.setItem('crm_unlocked','1'); PIN_TRIES=0; startMain(); }
- else{
-  PIN_TRIES++;
-  document.getElementById('app').innerHTML=renderPin();
-  if(PIN_TRIES>=3){ return; }
-  var err=document.getElementById('pinErr'); if(err)err.textContent='Неверный PIN';
-  var i=document.getElementById('pinInput'); if(i){i.focus();}
- }
+ if(!v)return;
+ var prof=MYDOC&&MYDOC.profile;
+ verifyPin(prof,v).then(function(ok){
+  if(!ok){
+   PIN_TRIES++;
+   document.getElementById('app').innerHTML=renderPin();
+   if(PIN_TRIES>=3){ return; }
+   var err=document.getElementById('pinErr'); if(err)err.textContent='Неверный PIN';
+   var i=document.getElementById('pinInput'); if(i){i.focus();}
+   return;
+  }
+  sessionStorage.setItem('crm_unlocked','1'); PIN_TRIES=0;
+  var finish=function(){ startMain(); };
+  // мягкая миграция: старый открытый pin → {pinSalt,pinHash} при первом успешном вводе
+  if(prof&&prof.pin&&!prof.pinHash&&subtleOK){
+   makePinRecord(prof.pin).then(function(rec){
+    MYDOC.profile.pinSalt=rec.pinSalt; MYDOC.profile.pinHash=rec.pinHash; delete MYDOC.profile.pin;
+    myDocRef().update({profile:MYDOC.profile}).then(finish).catch(finish);
+   }).catch(finish);
+  } else finish();
+ });
 }
 function showPinGate(){
  document.getElementById('app').innerHTML=renderPin();
@@ -861,7 +927,7 @@ function viewEmpProfile(dev){
  fs.collection('employees').doc(dev).get().then(function(d){
   var e=d.data()||{}; var p=e.profile||{};
   var av=p.avatar?'<img src="'+p.avatar+'" style="width:80px;height:80px;border-radius:50%;object-fit:cover">':'<div style="width:80px;height:80px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:30px">👤</div>';
-  var rows=[['ФИО',p.fio],['Телефон',p.phone],['E-mail',p.email],['Город/район',p.city],['График',p.schedule],['Специализация',(p.spec||[]).join(', ')],['PIN',p.pin?'установлен':'не установлен']];
+  var rows=[['ФИО',p.fio],['Телефон',p.phone],['E-mail',p.email],['Город/район',p.city],['График',p.schedule],['Специализация',(p.spec||[]).join(', ')],['PIN',pinSet(p)?'установлен':'не установлен']];
   var html='<div class="header dark"><button class="back" onclick="setStaffTab(\''+STAFF_TAB+'\')">←</button><h1>👤 '+esc(e.name||dev)+'</h1></div>'+
    '<div class="card" style="text-align:center">'+av+'</div>'+
    '<div class="card">'+rows.map(function(r){return '<div class="info-row"><span class="muted">'+r[0]+'</span><b style="text-align:right;max-width:60%">'+esc(r[1]||'—')+'</b></div>';}).join('')+'</div>'+
@@ -872,7 +938,8 @@ function viewEmpProfile(dev){
 function adminResetPin(dev){
  if(!confirm('Сбросить PIN сотрудника? Он сможет войти без PIN и установить новый.'))return;
  fs.collection('employees').doc(dev).get().then(function(d){
-  var e=d.data()||{}; var p=e.profile||{}; p.pin='';
+  var e=d.data()||{}; var p=e.profile||{};
+  delete p.pin; delete p.pinHash; delete p.pinSalt;
   fs.collection('employees').doc(dev).update({profile:p}).then(function(){ alert('PIN сброшен'); });
  });
 }
