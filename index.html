@@ -157,14 +157,8 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.2.8</div></div>
-<div class="card"><div class="sec-title">Войти как:</div>
- ${[['admin','👑 Дмитрий — Админ','дележка прибыли, отчеты, шаблоны, все права'],
-    ['operator','📞 Оля — Оператор','заявки, календарь, закупки, отчеты'],
-    ['manager','📐 Анна — Менеджер','осмотры, сметы, материалы'],
-    ['worker','🔨 Вася — Работник','мои задачи, взять в работу, закупки']]
-  .map(r=>`<div class="role-card" onclick="login('${r[0]}','${r[1].split('— ')[1]}')"><b>${r[1]}</b><div class="muted">${r[2]}</div></div>`).join('')}
-</div>`}
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.2.9</div></div>
+<div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
@@ -475,7 +469,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.2.8';
+const APP_VERSION='1.2.9';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -507,6 +501,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 

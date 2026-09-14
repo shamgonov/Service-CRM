@@ -44,6 +44,7 @@ function deviceId(){
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function isOwner(){ return localStorage.getItem(OWNER_KEY)==='1'; }
 var ME=null, TESTROLE=null, unsub=null;
+var CONN_ERR=false;      // сетевая ошибка Firestore — вместо демо-входа показываем заглушку
 var ROLES=[];            // кэш ролей [{id,name,perms,builtin}]
 var STAFF_TAB='requests';// активная вкладка админки
 
@@ -107,13 +108,56 @@ function loadRoles(cb){
 function roleName(id){ var r=roleById(id); return r?r.name:(ROLE_NAMES[id]||esc(id)); }
 
 // === ЭКРАН ВХОДА ===
+// Демо-вход (карточки «Дмитрий/Оля/Анна/Вася») недоступен: index.html отдаёт заглушку,
+// здесь — панель владельца, запомненный профиль устройства или форма запроса.
+function getLastUser(){
+ try{ var s=localStorage.getItem('crm_last_user'); if(!s)return null;
+  var o=JSON.parse(s); return (o&&o.name)?o:null; }catch(e){ return null; }
+}
 function renderAccess(){
  var dev=deviceId();
  var v = (typeof APP_VERSION!=='undefined')?APP_VERSION:'';
+ var body;
+ if(CONN_ERR){
+  body='<div class="muted" style="text-align:center;padding:12px 0">Нет соединения с сервером, проверьте интернет</div>'+
+   '<button class="btn btn-blue" onclick="location.reload()">🔄 Повторить</button>';
+ }
+ else if(isOwner()) body=ownerPanel();
+ else{
+  var lu=getLastUser();
+  body = lu ? lastUserCard(lu,dev) : employeeOrRequest(dev);
+ }
  return '<div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">'+
    '<h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v'+v+'</div></div>'+
-   '<div class="card"><div class="sec-title">Вход</div>'+
-   (isOwner()?ownerPanel():employeeOrRequest(dev))+'</div>';
+   '<div class="card"><div class="sec-title">Вход</div>'+body+'</div>';
+}
+function lastUserCard(lu,dev){
+ var av=lu.avatar?'<img src="'+lu.avatar+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':
+  '<div style="width:56px;height:56px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;flex:none">👤</div>';
+ return '<div id="reqBox">'+
+  '<div class="role-card" onclick="restoreLastUser()" style="display:flex;align-items:center;gap:12px">'+av+
+   '<div><b>Войти как '+esc(lu.name)+'</b><div class="muted">'+esc(roleName(lu.role))+'</div></div></div>'+
+  '<div style="border-top:1px solid #e5e5e5;margin:12px 0"></div>'+
+  '<button class="btn" onclick="forgetLastUser()" style="width:100%;background:#f3f4f6;color:#374151">Запросить новый доступ</button>'+
+  '<div class="muted" style="margin-top:10px">Устройство: '+dev+'</div></div>';
+}
+function restoreLastUser(){
+ var dev=deviceId();
+ fs.collection('employees').doc(dev).get().then(function(d){
+  if(d.exists && d.data().status==='approved'){
+   ME=d.data(); ME.deviceId=ME.deviceId||dev; MYDOC=ME;
+   var pin=(ME.profile&&ME.profile.pin)||'';
+   if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ PIN_TRIES=0; showPinGate(); }
+   else startMain();
+  } else {
+   localStorage.removeItem('crm_last_user');
+   document.getElementById('app').innerHTML=renderAccess();
+  }
+ }).catch(function(e){ console.warn(e); alert('Нет соединения с сервером, проверьте интернет'); });
+}
+function forgetLastUser(){
+ localStorage.removeItem('crm_last_user');
+ document.getElementById('app').innerHTML=renderAccess();
 }
 function ownerPanel(){
  var dev=deviceId();
@@ -154,7 +198,7 @@ function checkApproved(cb){
   fs.collection('employees').doc(dev).get().then(function(doc){
    if(doc.exists && doc.data().status==='approved'){ ME=doc.data(); cb(true); }
    else cb(false);
-  }).catch(function(e){ console.warn('FIRESTORE ERROR:',e); cb(false); });
+  }).catch(function(e){ console.warn('FIRESTORE ERROR:',e); if(e && (e.code==='unavailable')) CONN_ERR=true; cb(false); });
  }
  fs.collection('meta').doc('owner').get().then(function(m){
   if(!m.exists){ fs.collection('meta').doc('owner').set({deviceId:dev,ts:Date.now()}); localStorage.setItem(OWNER_KEY,'1'); window.__accessMode=true; cb(true); }
@@ -321,7 +365,13 @@ function deleteRole(id){
 
 // === СТАРТ ===
 function startMain(){
- if(ME){ state.role=ME.role; state.user=ME.name; }
+ if(ME){
+  state.role=ME.role; state.user=ME.name;
+  // запоминаем профиль устройства (кроме владельца — он видит панель 👑)
+  if(!isOwner()){
+   try{ localStorage.setItem('crm_last_user', JSON.stringify({name:ME.name||'', role:ME.role||'', avatar:(ME.profile&&ME.profile.avatar)||''})); }catch(e){}
+  }
+ }
  loadCloud(function(){});
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
@@ -341,6 +391,9 @@ function gateThenStart(){
     gateThenStart();
    } else {
     window.__accessMode=true;
+    // сотрудник не прошёл проверку (уволен/нет документа) — запомненный профиль не нужен;
+    // при сетевой ошибке — не трогаем (покажем сообщение о соединении)
+    if(!isOwner() && !CONN_ERR) localStorage.removeItem('crm_last_user');
     document.getElementById('app').innerHTML=renderAccess();
     document.getElementById('nav').style.display='none';
     if(!isOwner()) setTimeout(function(){
@@ -384,11 +437,11 @@ window.render = function(){
  applyPermsUI();
 };
 window.save = function(){ saveCloud(); };
-window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
+// logout: разблокировка сбрасывается; владелец видит панель 👑,
+// сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
+window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
  sessionStorage.removeItem('crm_unlocked');
- var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
- if(pin){ PIN_TRIES=0; showPinGate(); }
- else document.getElementById('app').innerHTML=renderAccess(); };
+ document.getElementById('app').innerHTML=renderAccess(); };
 
 // ============================================================
 // ЛИЧНЫЙ КАБИНЕТ «МОЙ ПРОФИЛЬ» + PIN-ЗАЩИТА УСТРОЙСТВА
