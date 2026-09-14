@@ -138,7 +138,7 @@ function defaultData(){return{
  orders:[
   {id:248,client:'Иванов Иван',phone:'+7(900)123-45-67',address:'ул. Ленина, 15, кв. 42',desc:'Установка кондиционера, 2 комнаты',
    status:'in_progress',date:d0,t1:'14:00',t2:'16:00',price:15000,extras:[{name:'Штробление 2 м.п.',price:3000}],
-   photoReport:true,worker:'Вася',photos:['🖼','🖼'],
+   photoReport:true,worker:'Вася',photos:[],
    materials:[
     {name:'Кабель ВВГ 3×2.5',qty:'30 м',price:4500,buyer:'worker',where:'Электромир, ул. Мира 22',deadline:3,unit:'h',status:'todo'},
     {name:'Кронштейны усиленные',qty:'2 шт',price:1200,buyer:'worker',where:'Строймаркет',deadline:3,unit:'h',status:'todo'}]},
@@ -198,7 +198,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.4</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.6</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -349,9 +349,14 @@ function renderDetails(id){
  <button class="btn btn-outline" style="margin-top:8px" onclick="routeScreen(${o.id})">🗺 Открыть схему</button>
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
- <div class="photos" id="photoGrid">${(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[o.id]?PHOTOS_CACHE[o.id]:[]).concat(o.photos||[]).map(function(p,i){
+ <div class="photos" id="photoGrid">${(function(){
+   var docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[o.id]?PHOTOS_CACHE[o.id]:[]).concat(o.photos||[]);
+   if(!docs.length)return '<div class="photo" style="display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:22px;background:#f3f4f6">📷 нет фото</div>';
+   return docs.map(function(p,i){
    var src=(p&&p.data)?p.data:p;
-   return typeof src==='string'&&src.indexOf('data:')===0?'<div class="photo">'+src+'</div>':'<div class="photo" style="padding:0;overflow:hidden"><img src="'+src+'" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto('+o.id+','+i+')"></div>';}).join('')}
+   var real=typeof src==='string'&&(src.indexOf('data:image/')===0||src.indexOf('http')===0);
+   return real?'<div class="photo" style="padding:0;overflow:hidden"><img src="'+src+'" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto('+o.id+','+i+')"></div>':'';
+   }).join('');})()}
  ${canAddPhoto(o)?`<div class="photo photo-add" onclick="document.getElementById('photoFile').click()">＋</div>`:''}</div>
  <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none" onchange="uploadPhoto(this,${o.id})">
  <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчет обязателен — без фото заказ не закроется':'Фотоотчет не требуется'}</div>
@@ -575,9 +580,11 @@ function viewPhoto(id,i){
  const all=docs.concat(byId(id)?byId(id).photos||[]:[]);
  const p=all[i]; if(!p)return;
  const src=(p&&p.data)?p.data:p;
+ const real=typeof src==='string'&&(src.indexOf('data:image/')===0||src.indexOf('http')===0);
+ const img=real?'<img src="'+src+'" style="max-width:100%;border-radius:12px">':'<div style="width:220px;height:220px;margin:0 auto;background:#f3f4f6;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:40px">📷</div>';
  const canDel=(p&&p.id)?canDeletePhotoDoc(p):canDeletePhoto(byId(id));
  const del=canDel?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';
- document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${src}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
+ document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px">${img}${del?'<div>'+del+'</div>':''}</div>`}
 function canDeletePhoto(o){if(typeof can==='function')return isOwner()||can('orders_delete');return ['admin'].includes(state.role)}
 function delPhoto(id,i){
  const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
@@ -719,7 +726,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.4.4';
+const APP_VERSION='1.4.6';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -751,6 +758,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
