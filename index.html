@@ -178,11 +178,16 @@ function balance(o){return total(o)-totalPaid(o)}
 function canFinance(){if(typeof can==='function')return isOwner()||can('finance_edit');return ['admin'].includes(state.role)}
 function stageDefault(type){
  if(type==='manufacture')return [
-  {id:'st1',type:'measure',title:'Замер',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
-  {id:'st2',type:'make',title:'Изготовление',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
-  {id:'st3',type:'install',title:'Монтаж',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
- if(type==='service')return [{id:'st1',type:'service',title:'Выезд',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
+  {id:'st1',type:'measure',title:'Замер',dueMode:'date',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
+  {id:'st2',type:'make',title:'Изготовление',dueMode:'date',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
+  {id:'st3',type:'install',title:'Монтаж',dueMode:'date',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
+ if(type==='service')return [{id:'st1',type:'service',title:'Выезд',dueMode:'ready',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null}];
  return [];
+}
+function stageDueLabel(s){
+ if(s.dueMode==='ready')return 'по готовности';
+ if(s.dueMode==='agree')return 'по договорённости';
+ return (s.plan_start?'с '+s.plan_start:'—')+(s.plan_ready?' до '+s.plan_ready:'');
 }
 function currentStage(o){return orderStages(o).find(s=>!s.done)}
 function stageTimeline(o,editable){
@@ -192,11 +197,11 @@ function stageTimeline(o,editable){
  st.forEach(function(s,i){
   var icon=s.done?'✅':(i===0||st[i-1].done)?'🟡':'⚪';
   html+='<div style="border-left:3px solid '+(s.done?'var(--green)':(i===0||st[i-1].done)?'var(--blue)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px">'+
-   '<div class="mat-head"><b>'+icon+' '+escapeHtml(s.title||STAGE_T[s.type]||s.type)+'</b>'+
+   '<div class="mat-head"><b>'+icon+' '+(editable?'<span style="cursor:pointer;border-bottom:1px dashed #94a3b8" onclick="stageRename('+o.id+','+i+')">'+escapeHtml(s.title||STAGE_T[s.type]||s.type)+' ✏️</span>':escapeHtml(s.title||STAGE_T[s.type]||s.type))+'</b>'+
    (editable?'<span style="display:flex;gap:4px">'+(i>0?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',-1)">↑</span>':'')+
     (i<st.length-1?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',1)">↓</span>':'')+
     '<span style="cursor:pointer;color:var(--red)" onclick="stageDel('+o.id+','+i+')">✕</span></span>':'')+'</div>'+
-   '<div class="muted">План: '+(s.plan_start?'с '+s.plan_start:'—')+(s.plan_ready?' до '+s.plan_ready:'')+(s.by?' • исполнитель: '+escapeHtml(s.by):'')+'</div>'+
+   '<div class="muted">Срок: '+escapeHtml(stageDueLabel(s))+(s.by?' • исполнитель: '+escapeHtml(s.by):'')+'</div>'+
    (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
    (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
     ${!s.plan_start&&s.by?`<button class="btn-sm btn-blue" onclick="stageStart(${o.id},${i})">▶ Приступить</button>`:''}
@@ -205,6 +210,22 @@ function stageTimeline(o,editable){
  });
  if(editable)html+='<button class="btn-sm btn-outline" style="margin-top:8px" onclick="stageAdd('+o.id+')">＋ Этап</button>';
  return html+'</div>';
+}
+function stageRename(id,i){
+ const o=byId(id);if(!canEditRoute(o))return;
+ const s=orderStages(o)[i];if(!s)return;
+ const t=prompt('Название этапа:',s.title||'');if(t===null)return;
+ s.title=t.trim()||s.title;markOrder(o);save();render();
+}
+function stageDue(id,i){
+ const o=byId(id);if(!canEditRoute(o))return;
+ const s=orderStages(o)[i];if(!s)return;
+ const v=prompt('Срок этапа:\n1 — дата\n2 — по готовности\n3 — по договорённости','1');
+ if(v==='2'){s.dueMode='ready';}
+ else if(v==='3'){s.dueMode='agree';}
+ else if(v==='1'){s.dueMode='date';const d=prompt('Плановая готовность (ГГГГ-ММ-ДД):',s.plan_ready||'');if(d)s.plan_ready=d;}
+ else return;
+ markOrder(o);save();render();
 }
 function stageStart(id,i){const o=byId(id);const s=orderStages(o)[i];if(!s)return;s.plan_start=s.plan_start||new Date().toISOString().slice(0,10);s.by=s.by||deviceId();markOrder(o);save();render()}
 function stageDone(id,i){
@@ -226,10 +247,9 @@ function paymentsBlock(o){
  var pays=orderPayments(o);
  var canW=canFinance();
  var html='<div class="card"><div class="sec-title">💰 Платежи</div>'+
-  '<div class="info-row"><span class="muted">Сумма заказа</span><b>'+money(total(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">'+money(totalPaid(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Баланс</span><b style="color:'+(balance(o)>0?'var(--red)':'var(--green)')+'">'+money(balance(o))+'</b></div>';
+  '<div class="info-row"><span class="muted">Сумма заказа (с доп. работами)</span><b>'+money(total(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Аванс: '+money(totalPaid(o))+'</span><b style="color:var(--green)">Остаток: '+money(balance(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>';
  if(pays.length){
   html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">';
   pays.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(function(p){
@@ -310,7 +330,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.7</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.4.8</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -735,12 +755,57 @@ function finishOrder(id){const o=byId(id);
   const und=orderStages(o).filter(s=>!s.done);
   if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
  }
+ // кассовое закрытие: при остатке > 0 — модалка
+ if(balance(o)>0){closeOrderModal(id);return}
+ doCompleteOrder(id);
+}
+function closeOrderModal(id){
+ const o=byId(id);
+ const rows=[{n:'Основная работа',s:+o.price||0}].concat((o.extras||[]).map(e=>({n:e.name,s:+e.price||0})));
+ const pays=orderPayments(o).filter(p=>p.type!=='materials');
+ const hadPays=pays.length>0;
+ const bal=balance(o);
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
+   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">🧾 Закрытие заказа №${o.id}</b>
+    ${rows.map(r=>`<div class="info-row"><span>${escapeHtml(r.n)}</span><b>${money(r.s)}</b></div>`).join('')}
+    <div class="info-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:6px"><span><b>Итого</b></span><b>${money(total(o))}</b></div>
+    <div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">${money(totalPaid(o))}</b></div>
+    <div class="info-row"><span class="muted">Остаток</span><b style="color:var(--red)">${money(bal)}</b></div>
+    <button class="btn btn-green" style="width:100%;margin-top:12px" onclick="closeOrderPay(${o.id})">✅ Заказчик внёс остаток (${money(bal)})</button>
+    ${!hadPays?`<button class="btn btn-blue" style="width:100%;margin-top:8px" onclick="closeOrderFull(${o.id})">💵 Оплачено полностью (${money(total(o))})</button>`:''}
+    <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
+   </div></div>`);
+}
+function closeOrderPay(id){
+ const o=byId(id);if(!canFinance())return alert('Нет прав');
+ const bal=balance(o);
+ if(bal<=0)return closeOrderModalRemove(id);
+ o.payments=o.payments||[];
+ o.payments.push({id:'p'+Date.now(),sum:bal,type:'full',method:'cash',date:new Date().toISOString().slice(0,10),note:'при закрытии'});
+ markOrder(o);save();
+ closeOrderModalRemove(id);
+ if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(bal)+' (остаток при закрытии), баланс '+money(balance(o)),o.id);
+ doCompleteOrder(id);
+}
+function closeOrderFull(id){
+ const o=byId(id);if(!canFinance())return alert('Нет прав');
+ o.payments=o.payments||[];
+ o.payments.push({id:'p'+Date.now(),sum:total(o),type:'full',method:'cash',date:new Date().toISOString().slice(0,10),note:'оплата полностью при закрытии'});
+ markOrder(o);save();
+ closeOrderModalRemove(id);
+ if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(total(o))+' (полная оплата при закрытии)',o.id);
+ doCompleteOrder(id);
+}
+function closeOrderModalRemove(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
+function doCompleteOrder(id){const o=byId(id);
  if(o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
    o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render(); });
   return;
  }
- o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
+ o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен!');render()}
 function canAddPhoto(o){if(typeof can==='function')return can('orders_edit')||o.worker===state.user;if(!['admin','operator','manager'].includes(state.role))return o.worker===state.user;return true}
 function viewPhoto(id,i){
  const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
@@ -843,12 +908,17 @@ function cStageDel(i){state.cStages.splice(i,1);cStageRender()}
 function cStageRender(){
  document.getElementById('c-stages').innerHTML=state.cStages.map(function(s,i){
   return '<div class="mat"><div class="mat-head"><b>'+escapeHtml(s.title)+'</b>'+(state.cStages.length>1?'<span style="cursor:pointer;color:var(--red)" onclick="cStageDel('+i+')">✕</span>':'')+'</div>'+
-   '<div class="row2" style="margin-top:6px"><input class="input" type="date" value="'+s.plan_start+'" onchange="state.cStages['+i+'].plan_start=this.value" placeholder="начало">'+
-   '<input class="input" type="date" value="'+s.plan_ready+'" onchange="state.cStages['+i+'].plan_ready=this.value" placeholder="готовность"></div>'+
+   '<select class="input" style="margin-top:6px" onchange="cStageDue('+i+',this.value)">'+
+   '<option value="date"'+(s.dueMode!=='ready'&&s.dueMode!=='agree'?' selected':'')+'>Дата</option>'+
+   '<option value="ready"'+(s.dueMode==='ready'?' selected':'')+'>По готовности</option>'+
+   '<option value="agree"'+(s.dueMode==='agree'?' selected':'')+'>По договорённости</option></select>'+
+   (s.dueMode!=='ready'&&s.dueMode!=='agree'?'<div class="row2" style="margin-top:6px"><input class="input" type="date" value="'+s.plan_start+'" onchange="state.cStages['+i+'].plan_start=this.value" placeholder="начало">'+
+   '<input class="input" type="date" value="'+s.plan_ready+'" onchange="state.cStages['+i+'].plan_ready=this.value" placeholder="готовность"></div>':'')+
    '<select class="input" style="margin-top:6px" onchange="state.cStages['+i+'].by=this.value"><option value="">— исполнитель этапа —</option>'+
    DB.users.filter(u=>u.role==='worker'||u.role==='manager').map(u=>'<option '+(s.by===u.name?'selected':'')+'>'+u.name+'</option>').join('')+'</select></div>';
  }).join('');
 }
+function cStageDue(i,v){state.cStages[i].dueMode=v;cStageRender()}
 function otypeChange(v){
  state.cStages=stageDefault(v);
  document.getElementById('c-stages-box').style.display=v==='standard'?'none':'block';
@@ -860,13 +930,27 @@ function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.spli
 function render(){
  const app=document.getElementById('app'),nav=document.getElementById('nav');
  if(!state.role){app.innerHTML=renderLogin();nav.style.display='none';return}
+ // сохраняем прокрутку и фокус до перезаписи DOM
+ var _y=window.scrollY;
+ var _ae=document.activeElement;
+ var _fid=(_ae&&_ae.id)?_ae.id:null;
+ var _fpos=(_ae&&typeof _ae.selectionStart==='number')?_ae.selectionStart:null;
  nav.style.display='flex';
  nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
  const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin};
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
  app.innerHTML=banner+(S[state.screen]||renderOrders)();
- window.scrollTo(0,0);
+ // восстановление прокрутки и фокуса (без сброса на верх при снапшотах/таймерах)
+ requestAnimationFrame(function(){
+  window.scrollTo(0,_y||0);
+  if(_fid){
+   var el=document.getElementById(_fid);
+   if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA')){
+    try{ el.focus(); if(_fpos!=null&&typeof el.setSelectionRange==='function')el.setSelectionRange(_fpos,_fpos); }catch(e){}
+   }
+  }
+ });
 }
 render();
 </script>
@@ -912,7 +996,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.4.7';
+const APP_VERSION='1.4.8';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -944,6 +1028,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 

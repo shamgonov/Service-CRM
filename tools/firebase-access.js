@@ -321,6 +321,9 @@ function flushQueue(){
 })();
 function ordersRef(){ return fs.collection('orders'); }
 
+// deep-equal для пропуска холостых рендеров (снапшот без изменений не дёргает DOM)
+function jsonEq(a,b){ try{ return JSON.stringify(a)===JSON.stringify(b); }catch(e){ return false; } }
+var LAST_ORDERS_JSON=null, LAST_STATE_JSON=null;
 function loadCloud(cb){
  if(unsub)unsub();
  var first=true;
@@ -332,12 +335,14 @@ function loadCloud(cb){
   snap.forEach(function(d){ var o=d.data(); o.id=parseInt(d.id,10)||o.id; arr.push(o); });
   arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
   var prev=DB;
+  var changed=!jsonEq(arr,LAST_ORDERS_JSON);
+  LAST_ORDERS_JSON=JSON.stringify(arr);
   DB.orders=arr;
-  cacheOrders(arr);
-  if(!first) watchNewOrders(prev, DB);
-  if(!first) watchAddedOrders(prev, DB);
+  if(changed)cacheOrders(arr);
+  if(!first&&changed)watchNewOrders(prev, DB);
+  if(!first&&changed)watchAddedOrders(prev, DB);
   ORDERS_SUB=true; first=false;
-  maybeRender();
+  if(changed)maybeRender();
  }, function(err){
   console.warn('orders snapshot err',err);
   ORDERS_ERR=true; first=false;
@@ -353,11 +358,13 @@ function loadCloud(cb){
  // 2) настройки/пользователи/шаблоны — app/state (без orders)
  unsub = fs.collection('app').doc('state').onSnapshot(function(snap){
   var st=(snap.exists&&snap.data())||null;
+  var changed=false;
   if(st && st.db){
-   DB.users=st.db.users||DB.users||[];
-   DB.templates=st.db.templates||DB.templates||[];
-   DB.seq=st.db.seq||DB.seq||270;
-   cacheState();
+   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270};
+   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270});
+   LAST_STATE_JSON=JSON.stringify(ns);
+   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq;
+   if(changed)cacheState();
   } else if(isOwner()){
    var init=defaultData(); init.orders=[];
    fs.collection('app').doc('state').set({db:init,ordersMigrated:true});
@@ -367,7 +374,8 @@ function loadCloud(cb){
   if(isOwner()&&fs.collection('requests')){
    fs.collection('requests').get().then(watchRequests).catch(function(){});
   }
-  render();
+  if(changed||first)render();
+  first=false;
  }, function(err){
   console.warn(err); STATE_SUB=true;
   loadCachedData();
