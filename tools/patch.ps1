@@ -10,10 +10,12 @@ self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);
 if(u.pathname.endsWith('version.json')){e.respondWith(fetch(e.request,{cache:'no-store'}));return;}
 if(e.request.method!=='GET'){return;}
+if(e.request.mode==='navigate'||u.pathname.endsWith('/')||u.pathname.endsWith('index.html')){e.respondWith(fetch(e.request).then(resp=>{const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));return resp}).catch(()=>caches.match(e.request)||caches.match('./')));return;}
 e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));return resp}).catch(()=>caches.match('./'))))});
 "@
 [System.IO.File]::WriteAllText("$root\sw.js", $sw, $noBom)
 $h = Get-Content "$root\index.html" -Raw -Encoding UTF8
+$h = $h -replace 'Версия v[0-9]+\.[0-9]+\.[0-9]+', ('Версия v'+$Version)
 $block = @"
 <!-- CRM-UPDATER -->
 <div id="updStrip" onclick="updOpenModal()" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:9px 16px;font:600 13px sans-serif;z-index:98;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)">🔄 Доступно обновление — нажмите для подробностей</div>

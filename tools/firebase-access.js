@@ -12,6 +12,7 @@ function deviceId(){
  if(!d){d='dev-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);localStorage.setItem('crm_device',d);}
  return d;
 }
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function isOwner(){ return localStorage.getItem(OWNER_KEY)==='1'; }
 var ME=null, TESTROLE=null, unsub=null;
 
@@ -98,7 +99,7 @@ function loadStaff(){
   if(snap.empty)html+='<div class="muted">Нет заявок</div>';
   snap.forEach(function(d){var r=d.data();
    var safeName=r.name.replace(/'/g,"\\'");
-   html+='<div class="mat"><b>'+r.name+'</b> <span class="muted">'+r.deviceId+'</span>'+
+   html+='<div class="mat"><b>'+esc(r.name)+'</b> <span class="muted">'+esc(r.deviceId)+'</span>'+
     '<div style="display:flex;gap:6px;margin-top:8px">'+
      '<select class="input" id="role_'+r.deviceId+'" style="flex:1">'+
       '<option value="worker">Работник</option><option value="operator">Оператор</option>'+
@@ -111,9 +112,9 @@ function loadStaff(){
   fs.collection('employees').get().then(function(es){
    if(es.empty)html+='<div class="muted">Пока никого</div>';
    es.forEach(function(d){var e=d.data();
-    html+='<div class="mat"><b>'+e.name+'</b> — '+(ROLE_NAMES[e.role]||e.role)+
-     ' <span class="badge" style="background:#d1fae5;color:#065f46">'+((e.quals||[]).join(', ')||'—')+'</span>'+
-     '<div class="muted">'+e.deviceId+'</div>'+
+    html+='<div class="mat"><b>'+esc(e.name)+'</b> — '+(ROLE_NAMES[e.role]||esc(e.role))+
+     ' <span class="badge" style="background:#d1fae5;color:#065f46">'+((e.quals||[]).map(esc).join(', ')||'—')+'</span>'+
+     '<div class="muted">'+esc(e.deviceId)+'</div>'+
      '<div style="display:flex;gap:6px;margin-top:6px">'+
       '<select class="input" id="q_'+e.deviceId+'" style="flex:1"><option value="">+ квалификация</option>'+
        '<option>монтажник</option><option>диагност</option><option>электрик</option><option>старший</option></select>'+

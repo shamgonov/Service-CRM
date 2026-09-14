@@ -4,3 +4,7 @@
 *.orig
 *.rej
 _deploy*_tmp.ps1
+backups/
+tools/release_notes.txt
+*.log
+.vscode/

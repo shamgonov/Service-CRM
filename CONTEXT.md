@@ -224,3 +224,21 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **Проблема**: панель владельца падала с Uncaught ReferenceError: dev is not defined, приложение откатывалось на демо-вход
 - **Причина**: переменная dev не объявлена внутри ownerPanel()
 - **Фикс**: var dev=deviceId() первой строкой ownerPanel; ревизия областей видимости во всём firebase-access.js; CRM-DBG удалён из прода
+
+### 14.09.2026 — Закрытие этапа: безопасность + функциональность
+**Закрыто:**
+- P0 Firebase-слой: подключение FIREBASE-ACCESS (app/firestore/auth-compat + fbconfig + initializeApp), ReferenceError dev в ownerPanel устранён.
+- P0 Деплой-затирание: patch.ps1 вырезает только CRM-UPDATER, слой переживает деплой; sw.js network-first для index.html.
+- P0 Firestore Security Rules: firestore.rules + firebase.json + .firebaserc, задеплоены (firebase deploy --only firestore:rules), test-mode закрыт.
+- Функция: takeOrder → status='approved' (кнопка «Приступил» достижима), setStatus требует фотоотчёт для completed/paid.
+- setDur: сохраняет минуты t1, t2 не меньше t1 (кап 23:59).
+- XSS: escapeHtml() во всех точках рендера (клиенты, адреса, описания, сотрудники, шаблоны, доп. работы, материалы); esc() в firebase-access.js.
+- matState: без даты → «без срока» вместо NaN. renderCalendar: безопасная сортировка без t1.
+- Гигиена: backups/, *.bak, deploy.bat/backup.bat (git pull без --force-with-lease, chcp 866) удалены из git; .gitignore расширен.
+- Автоматизация: fbpatch.ps1 вставляет блок перед CRM-UPDATER; patch.ps1 обновляет «Версия vX.Y.Z» в шапке и пишет sw.js с network-first; server.ps1 порт 8000.
+
+## ДОЛГИ
+- Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid.
+- Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
+- Реальные фото через Firebase Storage вместо заглушек 🖼.
+- Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.

@@ -122,10 +122,12 @@ load();
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
 const total=o=>(+o.price||0)+o.extras.reduce((s,e)=>s+(+e.price||0),0);
 function dur(ms){const h=Math.floor(ms/36e5),m=Math.floor(ms%36e5/6e4);return h>=24?Math.floor(h/24)+' д '+(h%24)+' ч':h+' ч '+m+' мин';}
+function escapeHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function matState(o,m){
  if(m.status==='bought')return{k:'bought',t:'✅ Закуплен',c:'#d1fae5',tc:'#065f46',cd:''};
  if(m.status==='delivery')return{k:'delivery',t:'🚚 В доставке',c:'#dbeafe',tc:'#1e40af',cd:''};
- if(m.status==='issue')return{k:'issue',t:'❌ Не найден',c:'#fee2e2',tc:'#991b1b',cd:'нужно решение'};
+ if(m.status==='issue')return{k:'issue',t:'❌ Не найден',c:'#fee2e5',tc:'#991b1b',cd:'нужно решение'};
+ if(!o.date)return{k:'todo',t:'📋 К закупке',c:'#f0fdf4',tc:'#065f46',cd:'без срока'};
  const work=new Date(o.date+'T'+(o.t1||'09:00')).getTime();
  const dl=work-(m.unit==='h'?m.deadline:m.deadline*24)*36e5;
  const diff=dl-Date.now();
@@ -153,7 +155,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.0.7</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.2.2</div></div>
 <div class="card"><div class="sec-title">Войти как:</div>
  ${[['admin','👑 Дмитрий — Админ','дележка прибыли, отчеты, шаблоны, все права'],
     ['operator','📞 Оля — Оператор','заявки, календарь, закупки, отчеты'],
@@ -167,15 +169,15 @@ function renderOrders(){
  if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
  return `
-<div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${state.user} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
+<div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="filters">
  ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
   `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
 </div>
 ${list.map(o=>`<div class="ord" onclick="go('details',${o.id})">
- <div style="display:flex;justify-content:space-between"><b>${o.client}</b><span class="muted">№${o.id}</span></div>
- <div class="muted">📍 ${o.address}</div>
- <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+o.worker:''}</div>
+ <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
+ <div class="muted">📍 ${escapeHtml(o.address)}</div>
+ <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}</div>
  <div style="margin-top:6px">${badges(o)}</div>
  <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
 </div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
@@ -187,12 +189,12 @@ function renderDetails(id){
 <div class="header"><button class="back" onclick="go('${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1></div>
 <div class="card">
  <div>${badges(o)}</div>
- <div class="info-row"><span class="muted">Клиент</span><b>${o.client}</b></div>
- <div class="info-row"><span class="muted">Телефон</span><a href="tel:${o.phone}" style="color:var(--blue);font-weight:600">${o.phone}</a></div>
- <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${o.address}</b></div>
+ <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
+ <div class="info-row"><span class="muted">Телефон</span><a href="tel:${encodeURIComponent(o.phone)}" style="color:var(--blue);font-weight:600">${escapeHtml(o.phone)}</a></div>
+ <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${escapeHtml(o.address)}</b></div>
  <div class="info-row"><span class="muted">Время</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
- <div class="info-row"><span class="muted">Исполнитель</span><b>${o.worker||'— не назначен —'}</b></div>
- <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${o.desc}</span></div>
+ <div class="info-row"><span class="muted">Исполнитель</span><b>${o.worker?escapeHtml(o.worker):'— не назначен —'}</b></div>
+ <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${escapeHtml(o.desc)}</span></div>
  ${canManage?`<div style="margin-top:10px"><label class="label">Сменить статус</label>
  <select class="input" onchange="setStatus(${o.id},this.value)">
   ${Object.keys(ST).map(k=>`<option value="${k}" ${o.status===k?'selected':''}>${ST[k].t}</option>`).join('')}
@@ -206,9 +208,9 @@ function renderDetails(id){
 <div class="card"><div class="sec-title">🛒 Материалы <button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button></div>
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
-  <div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span>
+  <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span>
    <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
-  <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${m.where||'—'}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b>'+s.cd+'</b>':''}</div>
+  <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b>'+s.cd+'</b>':''}</div>
   ${['todo'].includes(m.status)||['urgent','critical'].includes(s.k)?`
   <div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green" onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
@@ -230,7 +232,7 @@ function renderDetails(id){
 </div>
 <div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  <div class="info-row"><span>Основная работа</span><b>${money(o.price)}</b></div>
- ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${e.name} <span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span></span><b>${money(e.price)}</b></div>`).join('')}
+ ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)} <span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span></span><b>${money(e.price)}</b></div>`).join('')}
  <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
  <div class="row2" style="margin-top:8px">
   <button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>
@@ -258,7 +260,7 @@ function renderCreate(){
  <div class="field"><label class="label">Тип заявки</label>
   <select class="input" id="c-type"><option value="new">Согласованная работа</option><option value="inspection">Осмотр / диагностика / замеры</option></select></div>
  <div class="field"><label class="label">Быстрые шаблоны работ</label>
-  <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${t.name}</span>`).join('')}</div>
+  <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${escapeHtml(t.name)}</span>`).join('')}</div>
   <textarea class="input" id="c-desc" placeholder="Описание работ..."></textarea></div>
  <div class="field"><label class="label">Предварительная цена ₽</label><input class="input" id="c-price" type="number" placeholder="0"></div>
  <div class="field"><label class="label">Назначить исполнителя</label>
@@ -278,7 +280,7 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate).sort((a,b)=>a.t1.localeCompare(b.t1));
+ const list=DB.orders.filter(o=>o.date===state.calDate).sort((a,b)=>(a.t1||'').localeCompare(b.t1||''));
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
 <div class="card">
@@ -288,7 +290,7 @@ function renderCalendar(){
    return `<div class="slot" style="${inSlot.length?'border-left-color:var(--blue);background:#f8faff':''}">
     <b style="font-size:13px">${slot}</b>
     ${inSlot.length?inSlot.map(o=>`<div style="font-size:13px;margin-top:4px;cursor:pointer" onclick="go('details',${o.id})">
-     🟦 ${o.t1}–${o.t2} • ${o.client} • ${o.address} ${o.worker?'• <b>'+o.worker+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
+     🟦 ${o.t1}–${o.t2} • ${escapeHtml(o.client)} • ${escapeHtml(o.address)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
     :'<div class="muted" style="margin-top:2px">🟩 свободно</div>'}
    </div>`}).join('')}
 </div>`}
@@ -296,18 +298,18 @@ function renderTasks(){
  const mine=DB.orders.filter(o=>o.worker===state.user);
  const free=DB.orders.filter(o=>!o.worker&&o.status==='approved');
  return `
-<div class="header green"><h1>✅ Мои задачи</h1><span style="margin-left:auto;font-size:13px">${state.user} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
+<div class="header green"><h1>✅ Мои задачи</h1><span style="margin-left:auto;font-size:13px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 ${free.length?`<div class="card"><div class="sec-title">🆓 Свободные заявки (можно взять)</div>
- ${free.map(o=>`<div class="mat"><b>${o.client}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${o.address}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${o.desc}</div>
+ ${free.map(o=>`<div class="mat"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
+  <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${escapeHtml(o.desc)}</div>
   <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
   <button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button></div>`).join('')}
 </div>`:''}
 <div class="card"><div class="sec-title">📋 Мои активные</div>
  ${mine.filter(o=>['approved','in_progress','waiting'].includes(o.status)).map(o=>`
  <div class="mat" style="border-left:4px solid ${o.status==='in_progress'?'#f59e0b':'#8b5cf6'}">
-  <div style="cursor:pointer" onclick="go('details',${o.id})"><b>${o.client}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${o.address}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
+  <div style="cursor:pointer" onclick="go('details',${o.id})"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
+  <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
   <div style="margin:4px 0">${badges(o)}</div>
   <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
   ${o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (я на адресе)</button>`:''}
@@ -316,7 +318,7 @@ ${free.length?`<div class="card"><div class="sec-title">🆓 Свободные 
 </div>
 <div class="card"><div class="sec-title">✔️ Завершенные (мои)</div>
  ${mine.filter(o=>['completed','paid'].includes(o.status)).map(o=>`
- <div class="mat"><b>${o.client}</b> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
+ <div class="mat"><b>${escapeHtml(o.client)}</b> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
  <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
 </div>`}
 function renderShopping(){
@@ -328,10 +330,10 @@ function renderShopping(){
 <div class="header dark"><h1>🛒 Закупки</h1></div>
 <div class="card">
  ${rows.map(r=>`<div class="mat" style="border-left:4px solid ${r.s.tc}">
-  <div class="mat-head"><span class="mat-name">${r.m.name} (${r.m.qty})</span>
+  <div class="mat-head"><span class="mat-name">${escapeHtml(r.m.name)} (${escapeHtml(r.m.qty)})</span>
   <span class="badge" style="background:${r.s.c};color:${r.s.tc}">${r.s.t}</span></div>
-  <div class="muted">Заявка №${r.o.id} • ${r.o.client} • работы ${r.o.date.slice(8)}.${r.o.date.slice(5,7)} ${r.o.t1}<br>
-  ${BUYER[r.m.buyer]} • 📍 ${r.m.where||'—'} • ${money(r.m.price)}<br>
+  <div class="muted">Заявка №${r.o.id} • ${escapeHtml(r.o.client)} • работы ${r.o.date.slice(8)}.${r.o.date.slice(5,7)} ${r.o.t1}<br>
+  ${BUYER[r.m.buyer]} • 📍 ${escapeHtml(r.m.where||'—')} • ${money(r.m.price)}<br>
   ⏳ Дедлайн: за ${r.m.deadline} ${r.m.unit==='h'?'ч':'дн'} ${r.s.cd?'• <b style="color:'+r.s.tc+'">'+r.s.cd+'</b>':''}</div>
   ${['todo','urgent','critical'].includes(r.s.k)?`<div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green" onclick="matAct(${r.o.id},${r.i},'bought')">✅ Куплено</button>
@@ -365,11 +367,11 @@ function renderAdmin(){
 <div class="header dark"><h1>⚙️ Админ-панель</h1></div>
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
  ${DB.users.filter(u=>u.role==='worker').map(u=>`
- <div class="info-row"><span><b>${u.name}</b> <span class="muted">исполнитель</span></span>
+ <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
  <span style="display:flex;align-items:center;gap:4px"><input type="number" value="${u.share}" min="0" max="100" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px" onchange="setShare('${u.id}',this.value)"><b>%</b></span></div>`).join('')}
 </div>
 <div class="card"><div class="sec-title">📝 Шаблоны работ</div>
- ${DB.templates.map((t,i)=>`<div class="info-row"><span>${t.name}</span>
+ ${DB.templates.map((t,i)=>`<div class="info-row"><span>${escapeHtml(t.name)}</span>
  <span style="display:flex;gap:8px;align-items:center"><b>${money(t.price)}</b>
  <span style="cursor:pointer;color:var(--red)" onclick="delTpl(${i})">🗑</span></span></div>`).join('')}
  <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽"></div>
@@ -377,8 +379,8 @@ function renderAdmin(){
 </div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
-function setStatus(id,s){byId(id).status=s;save();render()}
-function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='in_progress';save();alert('Заявка №'+id+' взята в работу');render()}
+function setStatus(id,s){const o=byId(id);if((s==='completed'||s==='paid')&&o.photoReport&&!(o.photos&&o.photos.length)){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);return}o.status=s;save();render()}
+function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
 function finishOrder(id){const o=byId(id);
  if(o.photoReport&&o.photos.length<1){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return}
  o.status='completed';save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
@@ -397,15 +399,16 @@ function addNewMat(){const g=x=>document.getElementById(x).value;
  if(!g('nm-name'))return alert('Введите наименование');
  state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
  ['nm-name','nm-qty','nm-price','nm-where'].forEach(x=>document.getElementById(x).value='');
- document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
+ document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
  document.getElementById('matcount').textContent=state.newMats.length?'('+state.newMats.length+')':'';}
-function renderCreate2(){document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${m.name} (${m.qty})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]}</div></div>`).join('')}
+function renderCreate2(){document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]}</div></div>`).join('')}
 function tplClick(i){const el=document.getElementById('tpl'+i),ta=document.getElementById('c-desc');
  el.classList.toggle('sel');const t=DB.templates[i];
  ta.value=el.classList.contains('sel')?(ta.value?ta.value+'; '+t.name:t.name):ta.value.split('; ').filter(x=>x!==t.name).join('; ');}
 function setDur(h,el){el.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');
- const t1=document.getElementById('c-t1').value;const hh=+t1.split(':')[0]+h;
- document.getElementById('c-t2').value=String(Math.min(hh,23)).padStart(2,'0')+':00';}
+ const t1=document.getElementById('c-t1').value||'14:00';const p=t1.split(':');const start=(+p[0])*60+(+p[1]||0);
+ const end=Math.min(start+h*60,23*60+59);
+ document.getElementById('c-t2').value=String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0');}
 function saveOrder(){const g=x=>document.getElementById(x).value;
  if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
  DB.orders.unshift({id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
@@ -470,7 +473,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.2.1';
+const APP_VERSION='1.2.2';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -502,6 +505,8 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
+
 
 
 
