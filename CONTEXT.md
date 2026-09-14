@@ -243,6 +243,15 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - Реальные фото через Firebase Storage вместо заглушек 🖼.
 - Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.
 - Серверная проверка прав в firestore.rules по роли сотрудника (сейчас can() только на клиенте; правила дают write любому анониму — нужна сверка роли/uid).
+- firestore.rules: update employees разрешён только для своего deviceId и только поля profile (сейчас любой аноним может переписать любой документ сотрудников).
+- PIN в profile.pin хранится открытой строкой (MVP) — перехешировать (SHA-256) при переходе на auth.uid.
+
+### 15.09.2026 — Личный кабинет «Мой профиль» + PIN-защита устройства
+- **Модель**: employees/{deviceId}.profile = {fio,phone,email,city,schedule,avatar,pin,spec[]}; корневые role/quals/status не трогаются. Аватар — canvas-даунскейл 160px, JPEG 0.8, base64 в profile.avatar (без Storage). Владелец без документа — создаётся при первом открытии профиля (role:'admin', owner:true, status:'approved').
+- **Экран «Мой профиль»**: пункт «👤 Профиль» добавляется в нижнее меню всем ролям (addProfileNavItem в слое доступа, не трогая NAVS index.html). Поля: ФИО/телефон/e-mail/город/график, специализация чипами (QUALS_CATALOG), аватар с превью, PIN (установка/изменение/сброс). «Сохранить» — update только поля profile своего документа. Все строки через esc().
+- **PIN-вход**: после checkApproved читается profile.pin; если PIN есть и в sessionStorage нет crm_unlocked — экран ввода PIN (4 цифры). 3 неверные попытки → «Устройство заблокировано. Обратитесь к владельцу». sessionStorage очищается при закрытии вкладки. PIN-экран перехватывает старт до loadCloud.
+- **Админка (Сотрудники)**: «👤 Профиль» — просмотр профиля сотрудника (read-only), «🔑 Сбросить PIN» — очищает profile.pin.
+- **Совместимость**: поток владелец/запрос/приём, вкладки админки и can() не затронуты; node --check OK.
 
 ### 15.09.2026 — Админка ролей и прав (модель roles)
 - **Модель**: коллекция Firestore `roles` — документ на роль {id, name, perms:[...], builtin:bool}. При первом открытии админки, если коллекция пуста, сидируются 4 встроенные роли (admin/operator/manager/worker) из BUILTIN_ROLES; у встроенных builtin:true. employees.role хранит id роли (старые admin/operator/manager/worker совпадают — миграция не нужна).

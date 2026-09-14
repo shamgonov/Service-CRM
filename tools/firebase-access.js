@@ -228,6 +228,10 @@ function tabStaff(wrap){
       '<option>монтажник</option><option>диагност</option><option>электрик</option><option>старший</option></select>'+
      '<button class="btn-sm btn-outline" onclick="addQual(\''+e.deviceId+'\')">+</button>'+
      '<button class="btn-sm btn-red" onclick="fireEmp(\''+e.deviceId+'\')">Уволить</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-top:6px">'+
+     '<button class="btn-sm btn-blue" onclick="viewEmpProfile(\''+e.deviceId+'\')">👤 Профиль</button>'+
+     '<button class="btn-sm btn-outline" onclick="adminResetPin(\''+e.deviceId+'\')">🔑 Сбросить PIN</button>'+
     '</div></div>';
   });
   wrap.innerHTML=html;
@@ -315,13 +319,20 @@ function deleteRole(id){
 }
 
 // === СТАРТ ===
+function startMain(){
+ if(ME){ state.role=ME.role; state.user=ME.name; }
+ loadCloud(function(){});
+}
 (function startApp(){
  auth.signInAnonymously().catch(function(e){ console.warn(e); });
  ensureRolesSeeded(function(){
   checkApproved(function(ok){
    if(ok){
-    if(ME){ state.role=ME.role; state.user=ME.name; }
-    loadCloud(function(){});
+    getMyDoc(function(){
+     var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
+     if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ showPinGate(); }
+     else startMain();
+    });
    } else {
     window.__accessMode=true;
     document.getElementById('app').innerHTML=renderAccess();
@@ -352,11 +363,185 @@ window.render = function(){
   setTimeout(loadStaff,100);
   return;
  }
+ if(state.screen==='profile'){
+  document.getElementById('nav').style.display='flex';
+  document.getElementById('app').innerHTML=renderProfile();
+  addProfileNavItem();
+  return;
+ }
  if(_origRender)_origRender();
+ addProfileNavItem();
  applyPermsUI();
 };
 window.save = function(){ saveCloud(); };
 window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;window.__accessMode=true;document.getElementById('nav').style.display='none';document.getElementById('app').innerHTML=renderAccess(); };
+
+// ============================================================
+// ЛИЧНЫЙ КАБИНЕТ «МОЙ ПРОФИЛЬ» + PIN-ЗАЩИТА УСТРОЙСТВА
+// ============================================================
+var QUALS_CATALOG=['монтажник','диагност','электрик','старший'];
+var MYDOC=null;               // кэш employees/{deviceId}
+var AVATAR_TMP=null;          // base64 после даунскейла (до сохранения)
+var PIN_TRIES=0;
+
+function myDocRef(){ return fs.collection('employees').doc(deviceId()); }
+
+function getMyDoc(cb){
+ var dev=deviceId();
+ myDocRef().get().then(function(d){
+   if(d.exists){ MYDOC=d.data(); MYDOC.deviceId=MYDOC.deviceId||dev; }
+   else if(isOwner()){
+     MYDOC={deviceId:dev,name:state.user||'Владелец',role:'admin',owner:true,status:'approved',quals:[],profile:{}};
+     myDocRef().set(MYDOC).catch(function(e){console.warn(e);});
+   } else MYDOC={deviceId:dev,profile:{}};
+   if(cb)cb(MYDOC);
+ }).catch(function(e){ console.warn(e); MYDOC=MYDOC||{deviceId:dev,profile:{}}; if(cb)cb(MYDOC); });
+}
+
+function renderProfile(){
+ var p=(MYDOC&&MYDOC.profile)||{};
+ var av=AVATAR_TMP||p.avatar||'';
+ var avHtml=av
+  ?'<img src="'+av+'" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:2px solid var(--blue)">'
+  :'<div style="width:88px;height:88px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:34px">👤</div>';
+ var quals=(p.spec)||[];
+ return '<div class="header dark"><button class="back" onclick="go(\'orders\')">←</button><h1>👤 Мой профиль</h1></div>'+
+ '<div class="card" style="text-align:center">'+avHtml+
+  '<div><button class="btn-sm btn-outline" style="margin-top:8px" onclick="document.getElementById(\'avFile\').click()">📷 Загрузить фото</button>'+
+  (av?'<button class="btn-sm btn-red" style="margin-top:8px" onclick="clearAvatar()">✕ Убрать</button>':'')+'</div>'+
+  '<input type="file" id="avFile" accept="image/*" style="display:none" onchange="avatarPick(this)">'+
+  '<div class="muted" style="margin-top:6px">'+esc((MYDOC&&MYDOC.name)||'')+' • '+esc(roleName(MYDOC&&MYDOC.role))+'</div></div>'+
+ '<div class="card"><div class="sec-title">Контакты</div>'+
+  '<div class="field"><label class="label">ФИО</label><input class="input" id="pf-fio" value="'+esc(p.fio||'')+'" placeholder="Фамилия Имя Отчество"></div>'+
+  '<div class="field"><label class="label">Телефон</label><input class="input" id="pf-phone" type="tel" value="'+esc(p.phone||'')+'" placeholder="+7..."></div>'+
+  '<div class="field"><label class="label">E-mail</label><input class="input" id="pf-email" type="email" value="'+esc(p.email||'')+'" placeholder="mail@example.com"></div>'+
+  '<div class="field"><label class="label">Город / район выезда</label><input class="input" id="pf-city" value="'+esc(p.city||'')+'" placeholder="город, район"></div>'+
+  '<div class="field"><label class="label">График работы</label><input class="input" id="pf-schedule" value="'+esc(p.schedule||'')+'" placeholder="напр.: пн-пт 9:00–18:00"></div>'+
+ '</div>'+
+ '<div class="card"><div class="sec-title">Специализация</div>'+
+  '<div class="chips">'+QUALS_CATALOG.map(function(q){
+   return '<span class="chip '+(quals.indexOf(q)>=0?'sel':'')+'" onclick="this.classList.toggle(\'sel\')">'+esc(q)+'</span>';}).join('')+'</div>'+
+ '</div>'+
+ '<div class="card"><div class="sec-title">🔑 PIN-код устройства</div>'+
+  (p.pin?'<div class="muted" style="margin-bottom:6px">PIN установлен (4 цифры). Введите новый, чтобы изменить.</div>':'<div class="muted" style="margin-bottom:6px">PIN не установлен. 4 цифры — защита устройства при открытии.</div>')+
+  '<input class="input" id="pf-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••">'+
+  '<div class="row2"><button class="btn-sm btn-blue" onclick="savePin()">Установить / изменить</button>'+
+  (p.pin?'<button class="btn-sm btn-red" onclick="resetMyPin()">Сбросить PIN</button>':'')+'</div>'+
+  '<div class="muted" style="margin-top:6px">При следующем открытии приложения потребуется ввод PIN.</div>'+
+ '</div>'+
+ '<div style="padding:0 16px 16px"><button class="btn btn-green" onclick="saveProfile()">💾 Сохранить</button></div>';
+}
+
+function addProfileNavItem(){
+ var nav=document.getElementById('nav'); if(!nav)return;
+ if(nav.querySelector('[data-profile-nav]'))return;
+ var d=document.createElement('div');
+ d.className='nav-item'+(state.screen==='profile'?' active':'');
+ d.setAttribute('data-profile-nav','1');
+ d.innerHTML='<span>👤</span>Профиль';
+ d.onclick=function(){ go('profile'); };
+ nav.appendChild(d);
+}
+
+function avatarPick(inp){
+ var f=inp.files&&inp.files[0]; if(!f)return;
+ var rd=new FileReader();
+ rd.onload=function(e){
+  var img=new Image();
+  img.onload=function(){
+   var S=160,c=document.createElement('canvas');c.width=S;c.height=S;
+   var ctx=c.getContext('2d');
+   var side=Math.min(img.width,img.height);
+   ctx.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,S,S);
+   AVATAR_TMP=c.toDataURL('image/jpeg',0.8);
+   document.getElementById('app').innerHTML=renderProfile();
+  };
+  img.onerror=function(){alert('Не удалось прочитать изображение');};
+  img.src=e.target.result;
+ };
+ rd.readAsDataURL(f);
+}
+function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
+
+function saveProfile(){
+ if(!MYDOC){alert('Профиль не загружен');return;}
+ var g=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
+ var spec=[];
+ document.querySelectorAll('.card .chip.sel').forEach(function(c){ if(QUALS_CATALOG.indexOf(c.textContent)>=0)spec.push(c.textContent); });
+ var old=MYDOC.profile||{};
+ var p={fio:g('pf-fio'),phone:g('pf-phone'),email:g('pf-email'),city:g('pf-city'),schedule:g('pf-schedule'),
+  spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),pin:old.pin||''};
+ MYDOC.profile=p; AVATAR_TMP=null;
+ myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
+  .catch(function(e){ alert('Ошибка сохранения: '+e.message); });
+}
+function savePin(){
+ var v=(document.getElementById('pf-pin').value||'').trim();
+ if(!/^\d{4}$/.test(v))return alert('PIN — ровно 4 цифры');
+ if(!MYDOC)return alert('Профиль не загружен');
+ MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin=v;
+ myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен'); render(); })
+  .catch(function(e){ alert('Ошибка: '+e.message); });
+}
+function resetMyPin(){
+ if(!confirm('Убрать PIN с этого устройства?'))return;
+ if(!MYDOC)return;
+ MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin='';
+ myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); render(); });
+}
+
+// --- PIN-экран при старте ---
+function renderPin(){
+ var locked=PIN_TRIES>=3;
+ if(locked)return '<div class="header dark"><h1>🔒 ServiceCRM</h1></div>'+
+  '<div class="card" style="text-align:center;padding:28px 16px"><div style="font-size:40px">🔒</div>'+
+  '<div style="font-weight:700;margin:10px 0">Устройство заблокировано</div>'+
+  '<div class="muted">Слишком много неверных попыток.<br>Обратитесь к владельцу — он может сбросить PIN в админке.</div></div>';
+ return '<div class="header dark"><h1>🔒 ServiceCRM</h1></div>'+
+  '<div class="card" style="text-align:center;padding:24px 16px">'+
+  '<div style="font-size:38px">🔑</div>'+
+  '<div style="font-weight:700;margin:10px 0">Введите PIN</div>'+
+  '<div class="muted" style="margin-bottom:12px">Устройство защищено. Осталось попыток: '+(3-PIN_TRIES)+'</div>'+
+  '<input class="input" id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="text-align:center;font-size:24px;letter-spacing:12px;max-width:200px;margin:0 auto">'+
+  '<button class="btn btn-blue" style="max-width:200px;margin:12px auto 0" onclick="pinSubmit()">Войти</button>'+
+  '<div id="pinErr" class="muted" style="color:var(--red);margin-top:10px"></div></div>';
+}
+function pinSubmit(){
+ var v=(document.getElementById('pinInput').value||'').trim();
+ var saved=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
+ if(v===saved){ sessionStorage.setItem('crm_unlocked','1'); PIN_TRIES=0; startMain(); }
+ else{
+  PIN_TRIES++;
+  document.getElementById('app').innerHTML=renderPin();
+  if(PIN_TRIES<3){ var i=document.getElementById('pinInput'); if(i){i.focus();} }
+ }
+}
+function showPinGate(){
+ document.getElementById('app').innerHTML=renderPin();
+ document.getElementById('nav').style.display='none';
+ var i=document.getElementById('pinInput'); if(i){ i.focus(); i.addEventListener('keydown',function(e){if(e.key==='Enter')pinSubmit();}); }
+}
+
+// --- просмотр профилей в админке ---
+function viewEmpProfile(dev){
+ fs.collection('employees').doc(dev).get().then(function(d){
+  var e=d.data()||{}; var p=e.profile||{};
+  var av=p.avatar?'<img src="'+p.avatar+'" style="width:80px;height:80px;border-radius:50%;object-fit:cover">':'<div style="width:80px;height:80px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:30px">👤</div>';
+  var rows=[['ФИО',p.fio],['Телефон',p.phone],['E-mail',p.email],['Город/район',p.city],['График',p.schedule],['Специализация',(p.spec||[]).join(', ')],['PIN',p.pin?'установлен':'не установлен']];
+  var html='<div class="header dark"><button class="back" onclick="setStaffTab(\''+STAFF_TAB+'\')">←</button><h1>👤 '+esc(e.name||dev)+'</h1></div>'+
+   '<div class="card" style="text-align:center">'+av+'</div>'+
+   '<div class="card">'+rows.map(function(r){return '<div class="info-row"><span class="muted">'+r[0]+'</span><b style="text-align:right;max-width:60%">'+esc(r[1]||'—')+'</b></div>';}).join('')+'</div>'+
+   '<div style="padding:0 16px"><button class="btn btn-red" onclick="adminResetPin(\''+dev+'\')">🔑 Сбросить PIN</button></div>';
+  document.getElementById('app').innerHTML=html;
+ });
+}
+function adminResetPin(dev){
+ if(!confirm('Сбросить PIN сотрудника? Он сможет войти без PIN и установить новый.'))return;
+ fs.collection('employees').doc(dev).get().then(function(d){
+  var e=d.data()||{}; var p=e.profile||{}; p.pin='';
+  fs.collection('employees').doc(dev).update({profile:p}).then(function(){ alert('PIN сброшен'); });
+ });
+}
 
 // ============================================================
 // ИНТЕГРАЦИЯ ПРАВ С index.html (обёртки функций приложения)
