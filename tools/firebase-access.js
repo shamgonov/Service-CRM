@@ -115,13 +115,6 @@ function clearOrdersBadge(){
   return _go.apply(this,arguments);
  };
 })();
-// === ОБЛАКО: коллекция orders (по документу на заявку) + app/state (настройки) ===
-var ORDERS_SUB=false;   // получен первый снапшот коллекции orders
-var STATE_SUB=false;    // получен первый снапшот app/state
-var ORDERS_ERR=false;   // коллекция orders не читается — фолбэк read-only на legacy
-var MIGRATION_DONE=false;
-function ordersRef(){ return fs.collection('orders'); }
-
 function watchNewOrders(prev, next){
  if(!prev||!next)return;
  try{
@@ -134,95 +127,23 @@ function watchNewOrders(prev, next){
 function loadCloud(cb){
  if(unsub)unsub();
  var first=true;
- ORDERS_SUB=false; STATE_SUB=false; ORDERS_ERR=false;
- var maybeRender=function(){ if(ORDERS_SUB||ORDERS_ERR){ if(cb)cb(); render(); } };
- // 1) заявки — коллекция orders
- ordersRef().onSnapshot(function(snap){
-  var arr=[];
-  snap.forEach(function(d){ var o=d.data(); o.id=parseInt(d.id,10)||o.id; arr.push(o); });
-  arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
-  var prev=DB;
-  DB.orders=arr;
-  if(!first) watchNewOrders(prev, DB);
-  ORDERS_SUB=true; first=false;
-  maybeRender();
- }, function(err){
-  console.warn('orders snapshot err',err);
-  ORDERS_ERR=true; first=false;
-  // фолбэк: legacy-заявки из app/state (read-only)
-  fs.collection('app').doc('state').get().then(function(sdoc){
-   if(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders){ DB.orders=sdoc.data().db.orders; }
-   setTimeout(function(){ if(typeof render==='function')render(); },0);
-  }).catch(function(){ setTimeout(function(){ if(typeof render==='function')render(); },0); });
- });
- // 2) настройки/пользователи/шаблоны — app/state (без orders)
  unsub = fs.collection('app').doc('state').onSnapshot(function(snap){
-  var st=(snap.exists&&snap.data())||null;
-  if(st && st.db){
-   DB.users=st.db.users||DB.users||[];
-   DB.templates=st.db.templates||DB.templates||[];
-   DB.seq=st.db.seq||DB.seq||270;
-  } else if(isOwner()){
-   var init=defaultData(); init.orders=[];
-   fs.collection('app').doc('state').set({db:init,ordersMigrated:true});
-  }
-  STATE_SUB=true;
-  ensureOwnerInDb();
-  render();
- }, function(err){ console.warn(err); STATE_SUB=true; });
+   var prev=DB;
+   if(snap.exists && snap.data().db){ DB=snap.data().db; }
+   else { DB=defaultData(); fs.collection('app').doc('state').set({db:DB}); }
+   if(!first) watchNewOrders(prev, DB);
+   first=false;
+   ensureOwnerInDb();
+   if(cb)cb(); render();
+ }, function(err){ console.warn(err); });
 }
-// запись настроек (users/templates/seq) — app/state БЕЗ orders
-function saveSettings(){
- if(!DB)return;
- var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]};
- fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){ console.warn(e); });
-}
-// запись одной заявки — только её документ
-function orderSave(order){
- if(!order||order.id==null)return;
- var copy={};
- for(var k in order){ if(k!=='id')copy[k]=order[k]; }
- ordersRef().doc(String(order.id)).set(copy).catch(function(e){
-  console.warn('orderSave err',e);
-  if(ORDERS_ERR)alert('Нет соединения с сервером — изменения не сохранены');
- });
-}
-function orderDelete(id){ ordersRef().doc(String(id)).delete().catch(function(e){ console.warn(e); }); }
-// одноразовая миграция: app/state.db.orders → коллекция orders (только владелец, чанки по 400)
-function migrateOrdersIfNeeded(){
- if(!isOwner()||MIGRATION_DONE)return;
- fs.collection('app').doc('state').get().then(function(sdoc){
-  var legacy=(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders)||[];
-  var migrated=sdoc.exists&&sdoc.data().ordersMigrated;
-  if(!legacy.length||migrated){ MIGRATION_DONE=true; return; }
-  ordersRef().limit(1).get().then(function(snap){
-   if(!snap.empty){ // уже есть заявки — просто пометить
-    MIGRATION_DONE=true;
-    fs.collection('app').doc('state').set({db:{seq:sdoc.data().db.seq||270,users:sdoc.data().db.users||[],templates:sdoc.data().db.templates||[]},ordersMigrated:true},{merge:true});
-    return;
-   }
-   var batch=fs.batch(), n=0, total=0;
-   legacy.forEach(function(o){
-    var ref=ordersRef().doc(String(o.id));
-    var copy={}; for(var k in o){ if(k!=='id')copy[k]=o[k]; }
-    batch.set(ref,copy); n++; total++;
-    if(n>=400){ batch.commit(); batch=fs.batch(); n=0; }
-   });
-   if(n>0)batch.commit();
-   MIGRATION_DONE=true;
-   var st=sdoc.data().db||{};
-   fs.collection('app').doc('state').set({db:{seq:st.seq||270,users:st.users||[],templates:st.templates||[]},ordersMigrated:true})
-    .then(function(){ console.log('migrated orders:',total); })
-    .catch(function(e){ console.warn(e); });
-  }).catch(function(e){ console.warn('migrate check err',e); });
- }).catch(function(e){ console.warn(e); });
-}
+function saveCloud(){ if(DB) fs.collection('app').doc('state').set({db:DB}).catch(function(e){ console.warn(e); }); }
 function ensureOwnerInDb(){
  if(!DB.users)DB.users=[];
  var dev=deviceId();
  if(isOwner() && !DB.users.find(function(u){return u.deviceId===dev;})){
    DB.users.push({id:'u_owner',name:'Дмитрий (владелец)',role:'admin',share:0,deviceId:dev,status:'approved',quals:[],perms:['all'],owner:true});
-   saveSettings();
+   saveCloud();
  }
 }
 
@@ -512,7 +433,6 @@ function startMain(){
  }
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  loadCloud(function(){});
- migrateOrdersIfNeeded();
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
 // гейт показывается ДО панели владельца и ДО тест-карточек ролей.
@@ -575,28 +495,8 @@ window.render = function(){
  if(_origRender)_origRender();
  addProfileNavItem();
  applyPermsUI();
- // детали заявки: подтянуть фото из коллекции photos и перерисовать галерею
- if(state.screen==='details' && state.orderId!=null && typeof fs!=='undefined' && fs){
-  var oid=state.orderId;
-  loadOrderPhotos(oid, function(){
-   if(state.screen==='details' && state.orderId===oid && typeof render==='function'){
-    setTimeout(function(){ if(state.screen==='details'&&state.orderId===oid)render(); },0);
-   }
-  });
- }
 };
-window.orderSave = orderSave;
-window.saveSettings = saveSettings;
-window.orderDelete = orderDelete;
-// save() из index.html: мутации заявок помечены markOrder (state.__mutOrder) → пишем документ заявки;
-// остальное — настройки (app/state без orders).
-window.save = function(order){
- if(order && order.id!=null){ orderSave(order); return; }
- try{
-  if(state && state.__mutOrder){ var o=state.__mutOrder; state.__mutOrder=null; orderSave(o); }
- }catch(e){}
- saveSettings();
-};
+window.save = function(){ saveCloud(); };
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
 // сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
 window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
@@ -676,22 +576,11 @@ function avatarPick(inp){
 function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
 
 // === STORAGE: доступность и общие функции ===
-// === ФОТО ЗАЯВОК: коллекция photos (без Blaze) + миграционный путь в Storage ===
-// Документ: {orderId, data (base64 JPEG), ts, by}, id = {orderId}_{ts}.
-// Если появится бакет Storage — новые фото уходят туда (url в data), старые читаются из photos.
-var PHOTOS_CACHE={};   // orderId -> [{id,data,ts,by}]
-var STOR_CHECKED=false, STOR_OK=false;
+var STOR=null;
+try{ if(typeof firebase.storage==='function'){ STOR=firebase.storage(); STOR.ref('.noop').getDownloadURL?null:null; } }catch(e){ STOR=null; }
 function storReady(){
  if(!STOR) return false;
  try{ STOR.ref('probe-'+Date.now()).toString(); return true; }catch(e){ return false; }
-}
-// одноразовая проверка бакета реальной записью при старте
-function checkStorage(cb){
- if(STOR_CHECKED){ cb(STOR_OK); return; }
- if(!STOR){ STOR_CHECKED=true; cb(false); return; }
- STOR.ref('.probe/check.txt').put(new Blob(['ok'],{type:'text/plain'}))
-  .then(function(){ STOR_OK=true; STOR_CHECKED=true; cb(true); })
-  .catch(function(){ STOR_OK=false; STOR_CHECKED=true; cb(false); });
 }
 function downscale(inp, maxSide, quality, square, cb){
  var f=inp.files&&inp.files[0]; if(!f)return;
@@ -721,62 +610,25 @@ function dataUrlToBlob(d){
  for(var i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);
  return new Blob([arr],{type:mime});
 }
-function photoCount(id){
- var n=(PHOTOS_CACHE[id]||[]).length;
- var o=byId?byId(id):null;
- if(o)n+=(o.photos||[]).length; // старые base64/заглушки в документе
- return n;
-}
+// Загрузка фото заявки: Storage (orders/{orderId}/{ts}.jpg), фолбэк — base64 в документе (лимит 3)
 function uploadPhoto(inp, id){
  var o=byId?byId(id):null; if(!o)return;
  if(!canAddPhoto(o))return alert('Нет прав');
- if(photoCount(id)>=8)return alert('Лимит — 8 фото на заявку');
- downscale(inp,1000,0.65,false,function(dataUrl){
-  var afterSize=function(url){
-   var ts=Date.now();
-   var doc={orderId:id, data:url, ts:ts, by:deviceId()};
-   fs.collection('photos').doc(id+'_'+ts).set(doc).then(function(){
-    PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
-    go('details',id);
-   }).catch(function(e){ alert('Ошибка сохранения фото: '+e.message); });
-  };
-  // base64 > 900 КБ — повторный даунскейл 800px/0.6
-  var finishSize=function(url){
-   if(url.indexOf('data:')===0 && url.length>900*1024/3*4){
-    downscale(inp,800,0.6,false,afterSize);
-   } else afterSize(url);
-  };
-  checkStorage(function(ok){
-   if(ok){
-    STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
-     .then(function(s){ return s.ref.getDownloadURL(); })
-     .then(function(url){ finishSize(url); })
-     .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
-   } else finishSize(dataUrl);
-  });
+ if(o.photos&&o.photos.length>=12)return alert('Слишком много фото');
+ downscale(inp,1280,0.7,false,function(dataUrl){
+  var finish=function(url){ o.photos.push(url); save(); go('details',id); };
+  if(storReady()){
+   var ref=STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg');
+   ref.put(dataUrlToBlob(dataUrl)).then(function(s){ return s.ref.getDownloadURL(); })
+    .then(function(url){ finish(url); })
+    .catch(function(e){ console.warn('storage err',e); fallbackPhoto(o,dataUrl,id); });
+  } else fallbackPhoto(o,dataUrl,id);
  });
 }
-// галерея: документы photos по orderId + старые фото из документа заявки
-function loadOrderPhotos(id, cb){
- fs.collection('photos').where('orderId','==',id).get().then(function(snap){
-  var arr=[];
-  snap.forEach(function(d){ var p=d.data(); p.id=d.id; arr.push(p); });
-  arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
-  PHOTOS_CACHE[id]=arr;
-  cb(arr);
- }).catch(function(e){ console.warn(e); PHOTOS_CACHE[id]=PHOTOS_CACHE[id]||[]; cb(PHOTOS_CACHE[id]); });
-}
-function orderHasPhotos(id, cb){
- var o=byId?byId(id):null;
- if(o&&o.photos&&o.photos.length){ cb(true); return; }
- fs.collection('photos').where('orderId','==',id).limit(1).get().then(function(snap){
-  cb(!snap.empty);
- }).catch(function(){ cb(false); });
-}
-function canDeletePhotoDoc(p){
- if(isOwner())return true;
- if(typeof can==='function'&&can('orders_delete'))return true;
- return p && p.by===deviceId();
+function fallbackPhoto(o,dataUrl,id){
+ if((o.photos||[]).length>=3){ alert('Storage недоступен: в заявке уже 3 фото (лимит для офлайн-режима).'); render(); return; }
+ alert('Storage недоступен — фото сохранится в базе (лимит 3 фото на заявку).');
+ o.photos.push(dataUrl); save(); go('details',id);
 }
 
 function saveProfile(){
@@ -873,8 +725,6 @@ function adminResetPin(dev){
 // ============================================================
 // Глобальный can() для index.html (если сам index его не задал)
 if(typeof window.can!=='function'){ window.can = can; }
-if(typeof window.isOwner!=='function'){ window.isOwner = isOwner; }
-if(typeof window.deviceId!=='function'){ window.deviceId = deviceId; }
 
 // Маппинг экран -> требуемое право (для навигации и go)
 var SCREEN_PERM = {

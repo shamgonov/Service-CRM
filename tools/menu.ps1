@@ -26,6 +26,8 @@ while($true){
   '5'{ & "$root\tools\bump.ps1"; & "$root\tools\patch.ps1"
        $html = [System.IO.File]::ReadAllText("$root\index.html", $UTF8)
        if($html -match '<<<<<<<'){ Write-Host "ОШИБКА: маркеры конфликта в index.html — деплой остановлен"; Read-Host "Enter"; break }
+       & node "$root\tools\check-inline.js"
+       if($LASTEXITCODE -ne 0){ Write-Host "ОШИБКА: битый инлайн-скрипт в index.html — деплой ЗАПРЕЩЁН"; Read-Host "Enter"; break }
        if(!(Get-Command git -ErrorAction SilentlyContinue)){ Write-Host "Установи Git: git-scm.com"; Read-Host "Enter"; break }
        $vj = [System.IO.File]::ReadAllText("$root\version.json", $UTF8) | ConvertFrom-Json
        $dep = 1; if($vj.deploy){ $dep = [int]$vj.deploy + 1 }

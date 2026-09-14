@@ -118,10 +118,7 @@ function defaultData(){return{
  ]};}
 let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:d0,newMats:[]};
 function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}}
-function save(){localStorage.setItem('crm_db',JSON.stringify(DB));
- // облачная запись: window.save сам смотрит state.__mutOrder (заявка → её документ, иначе настройки)
- if(typeof window.save==='function')window.save();
-}
+function save(){localStorage.setItem('crm_db',JSON.stringify(DB))}
 function reset(){localStorage.removeItem('crm_db');load();render();alert('Демо-данные сброшены')}
 load();
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
@@ -160,7 +157,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.6</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.7</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -200,9 +197,7 @@ function renderDetails(id){
  </select></div>`:''}
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
- <div class="photos" id="photoGrid">${(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[${o.id}]?PHOTOS_CACHE[${o.id}]:[]).concat(o.photos||[]).map((p,i)=>{
-   const src=(p&&p.data)?p.data:p;
-   return typeof src==='string'&&src.startsWith('data:')?`<div class="photo">${src}</div>`:`<div class="photo" style="padding:0;overflow:hidden"><img src="${src}" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto(${o.id},${i})"></div>`;}).join('')}
+ <div class="photos">${o.photos.map((p,i)=>typeof p==='string'&&p.startsWith('data:')?`<div class="photo">${p}</div>`:`<div class="photo" style="padding:0;overflow:hidden"><img src="${p}" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto(${o.id},${i})"></div>`).join('')}
  ${canAddPhoto(o)?`<div class="photo photo-add" onclick="document.getElementById('photoFile').click()">＋</div>`:''}</div>
  <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none" onchange="uploadPhoto(this,${o.id})">
  <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчет обязателен — без фото заказ не закроется':'Фотоотчет не требуется'}</div>
@@ -401,58 +396,26 @@ function renderAdmin(){
 </div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
-function setStatus(id,s){const o=byId(id);
- if((s==='completed'||s==='paid')&&o.photoReport){
-  orderHasPhotos(id,has=>{ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {o.status=s;markOrder(o);save();render();} });
-  return;
- }
- o.status=s;markOrder(o);save();render()}
-function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';markOrder(o);save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
+function setStatus(id,s){const o=byId(id);if((s==='completed'||s==='paid')&&o.photoReport&&!(o.photos&&o.photos.length)){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);return}o.status=s;save();render()}
+function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
 function finishOrder(id){const o=byId(id);
- if(o.photoReport){
-  orderHasPhotos(id,has=>{ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
-   o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render(); });
-  return;
- }
- o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
+ if(o.photoReport&&o.photos.length<1){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return}
+ o.status='completed';save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render()}
 function canAddPhoto(o){if(typeof can==='function')return can('orders_edit')||o.worker===state.user;if(!['admin','operator','manager'].includes(state.role))return o.worker===state.user;return true}
-function viewPhoto(id,i){
- const all=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id]?PHOTOS_CACHE[id]:[]).concat(byId(id)?byId(id).photos||[]:[]);
- const p=all[i]; if(!p)return;
- const src=(p&&p.data)?p.data:p;
- const canDel=(p&&p.id)?canDeletePhotoDoc(p):canDeletePhoto(byId(id));
- const del=canDel?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';
- document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${src}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
+function viewPhoto(id,i){const o=byId(id);if(!o||!o.photos[i])return;const del=canDeletePhoto(o)?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${o.photos[i]}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
 function canDeletePhoto(o){if(typeof can==='function')return isOwner()||can('orders_delete');return ['admin'].includes(state.role)}
-function delPhoto(id,i){
- const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
- const old=(byId(id)?byId(id).photos||[]:[]);
- if(i<docs.length&&docs[i].id){
-  const p=docs[i];
-  if(!canDeletePhotoDoc(p))return alert('Нет прав');
-  if(!confirm('Удалить фото?'))return;
-  fs.collection('photos').doc(p.id).delete().then(function(){
-   PHOTOS_CACHE[id]=docs.filter((x,xi)=>xi!==i); go('details',id);
-  }).catch(e=>alert('Ошибка удаления: '+e.message));
- } else {
-  const oi=i-docs.length;
-  if(!canDeletePhoto(byId(id)))return alert('Нет прав');
-  if(!confirm('Удалить фото?'))return;
-  const o=byId(id);o.photos.splice(oi,1);markOrder(o);save();go('details',id);
- }
-}
-function markOrder(o){state.__mutOrder=o}
+function delPhoto(id,i){const o=byId(id);if(!canDeletePhoto(o))return alert('Нет прав');if(!confirm('Удалить фото?'))return;o.photos.splice(i,1);save();go('details',id)}
 function matAct(id,i,st){const o=byId(id);o.materials[i].status=st;
  if(st==='issue'&&!['completed','paid'].includes(o.status)){o.status='waiting';alert('Материал отмечен «Не найден». Заявка → «Ожидание материала». Требуется решение админа.')}
  else if(st==='issue'){alert('Материал отмечен «Не найден». Заявка уже закрыта — статус не изменён, требуется решение админа.')}
- markOrder(o);save();render()}
+ save();render()}
 function addExtra(id){const n=prompt('Название доп. работы:');if(!n)return;const p=+prompt('Цена доп. работы ₽:','0')||0;
- byId(id).extras.push({name:n,price:p});markOrder(byId(id));save();render()}
-function delExtra(id,i){if(confirm('Удалить доп. работу?')){byId(id).extras.splice(i,1);markOrder(byId(id));save();render()}}
+ byId(id).extras.push({name:n,price:p});save();render()}
+function delExtra(id,i){if(confirm('Удалить доп. работу?')){byId(id).extras.splice(i,1);save();render()}}
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
- markOrder(byId(id));save();render()}
+ save();render()}
 function addNewMat(){const g=x=>document.getElementById(x).value;
  if(!g('nm-name'))return alert('Введите наименование');
  state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
@@ -499,13 +462,11 @@ function saveOrder(){const g=x=>document.getElementById(x).value;
 function closeConflictModal(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
 function doSaveOrder(force){const g=x=>document.getElementById(x).value;
  if(!force)closeConflictModal();
- const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
+ DB.orders.unshift({id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
   status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
   photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
-  materials:state.newMats.slice(),photos:[]};
- DB.orders.unshift(o);
- if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
- saveSettings();alert('Заявка №'+DB.seq+' создана');go('orders')}
+  materials:state.newMats.slice(),photos:[]});
+ save();alert('Заявка №'+DB.seq+' создана');go('orders')}
 function setShare(id,v){DB.users.find(u=>u.id===id).share=+v;save()}
 function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
  if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
@@ -515,7 +476,6 @@ function render(){
  if(!state.role){app.innerHTML=renderLogin();nav.style.display='none';return}
  nav.style.display='flex';
  nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
- if(typeof ORDERS_ERR!=='undefined'&&ORDERS_ERR){app.insertAdjacentHTML('afterbegin','<div style="background:#fef3c7;color:#92400e;padding:8px 16px;font-size:13px">⚠ Ошибка чтения базы — режим только чтения. Изменения не сохраняются.</div>')}
  const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin};
  app.innerHTML=(S[state.screen]||renderOrders)();
  window.scrollTo(0,0);
@@ -564,7 +524,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.3.6';
+const APP_VERSION='1.3.7';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -596,7 +556,6 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
-
 
 
 
