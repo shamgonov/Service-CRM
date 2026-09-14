@@ -968,6 +968,9 @@ function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.ava
 // Если появится бакет Storage — новые фото уходят туда (url в data), старые читаются из photos.
 var PHOTOS_CACHE={};   // orderId -> [{id,data,ts,by}]
 var STOR_CHECKED=false, STOR_OK=false;
+// STOR: Storage недоступен без бакета (нет Blaze) — null, весь Storage-путь через try/catch
+var STOR=null;
+try{ STOR=(window.firebase&&firebase.storage)?firebase.storage():null; }catch(e){ STOR=null; }
 function storReady(){
  if(!STOR) return false;
  try{ STOR.ref('probe-'+Date.now()).toString(); return true; }catch(e){ return false; }
@@ -975,10 +978,12 @@ function storReady(){
 // одноразовая проверка бакета реальной записью при старте
 function checkStorage(cb){
  if(STOR_CHECKED){ cb(STOR_OK); return; }
- if(!STOR){ STOR_CHECKED=true; cb(false); return; }
- STOR.ref('.probe/check.txt').put(new Blob(['ok'],{type:'text/plain'}))
-  .then(function(){ STOR_OK=true; STOR_CHECKED=true; cb(true); })
-  .catch(function(){ STOR_OK=false; STOR_CHECKED=true; cb(false); });
+ if(!STOR){ STOR_CHECKED=true; STOR_OK=false; cb(false); return; }
+ try{
+  STOR.ref('.probe/check.txt').put(new Blob(['ok'],{type:'text/plain'}))
+   .then(function(){ STOR_OK=true; STOR_CHECKED=true; cb(true); })
+   .catch(function(){ STOR_OK=false; STOR_CHECKED=true; cb(false); });
+ }catch(e){ STOR_OK=false; STOR_CHECKED=true; cb(false); }
 }
 function downscale(inp, maxSide, quality, square, cb){
  var f=inp.files&&inp.files[0]; if(!f)return;
@@ -1047,10 +1052,12 @@ function uploadPhoto(inp, id){
   };
   checkStorage(function(ok){
    if(ok){
-    STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
-     .then(function(s){ return s.ref.getDownloadURL(); })
-     .then(function(url){ finishSize(url); })
-     .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
+    try{
+     STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
+      .then(function(s){ return s.ref.getDownloadURL(); })
+      .then(function(url){ finishSize(url); })
+      .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
+    }catch(e){ finishSize(dataUrl); }
    } else finishSize(dataUrl);
   });
  });
@@ -1107,10 +1114,12 @@ function saveProfile(){
    .catch(function(e){ alert('Ошибка сохранения: '+e.message); }); };
  // новый аватар уходит в Storage avatars/{deviceId}.jpg; base64 — фолбэк (старые продолжают читаться)
  if(AVATAR_TMP && storReady()){
-  STOR.ref().child('avatars/'+deviceId()+'.jpg').put(dataUrlToBlob(AVATAR_TMP))
-   .then(function(s){ return s.ref.getDownloadURL(); })
-   .then(function(url){ p.avatar=url; doSave(); })
-   .catch(function(e){ console.warn('storage err',e); doSave(); });
+  try{
+   STOR.ref().child('avatars/'+deviceId()+'.jpg').put(dataUrlToBlob(AVATAR_TMP))
+    .then(function(s){ return s.ref.getDownloadURL(); })
+    .then(function(url){ p.avatar=url; doSave(); })
+    .catch(function(e){ console.warn('storage err',e); doSave(); });
+  }catch(e){ doSave(); }
  } else doSave();
 }
 function savePin(){
