@@ -157,7 +157,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.1</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.3.2</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -358,7 +358,26 @@ function renderReports(){
 </div>
 <div class="card"><div class="sec-title">Материалы (расходы)</div>
  <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
-</div>`}
+</div>
+<div style="padding:0 16px 16px"><button class="btn btn-green" onclick="exportCsv()">⬇ CSV</button></div>`}
+function csvCell(v){v=(v==null?'':String(v));return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function csvDate(s){if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
+function exportCsv(){
+ const st=k=>(ST[k]||{}).t||k;
+ const done=DB.orders.filter(o=>['completed','paid'].includes(o.status));
+ const ws=DB.users.filter(u=>u.role==='worker').map(w=>{
+  const mine=done.filter(o=>o.worker===w.name);const sum=mine.reduce((s,o)=>s+total(o),0);
+  return [w.name,mine.length,sum,w.share,Math.round(sum*w.share/100)];
+ });
+ const L=[];
+ L.push(['Работник','Заявок','Сумма','Доля, %','К выплате'].map(csvCell).join(';'));
+ ws.forEach(r=>L.push(r.map(csvCell).join(';')));
+ L.push('');
+ L.push(['Дата','Клиент','Телефон','Адрес','Статус','Сумма','Исполнитель'].map(csvCell).join(';'));
+ DB.orders.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||''].map(csvCell).join(';')));
+ const blob=new Blob(['\uFEFF'+L.join('\r\n')],{type:'text/csv;charset=utf-8'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='otchet_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
 function renderAdmin(){
  return `
 <div class="header dark"><h1>⚙️ Админ-панель</h1></div>
@@ -474,7 +493,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.3.1';
+const APP_VERSION='1.3.2';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -506,6 +525,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
