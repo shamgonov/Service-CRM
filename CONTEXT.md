@@ -219,3 +219,8 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 ### 11.09.2026 — Видимая диагностика CRM-DBG
 - Чёрная полоса сверху страницы: печатает статус слоёв (firebase/auth/accessJs/mode/ownerFlag/role) и перехватывает JS-ошибки с номером строки.
 - Цель: по скрину полосы точно видеть, какой слой доступа умер, без консоли браузера.
+
+### 14.09.2026 — ReferenceError dev in ownerPanel
+- **Проблема**: панель владельца падала с Uncaught ReferenceError: dev is not defined, приложение откатывалось на демо-вход
+- **Причина**: переменная dev не объявлена внутри ownerPanel()
+- **Фикс**: var dev=deviceId() первой строкой ownerPanel; ревизия областей видимости во всём firebase-access.js; CRM-DBG удалён из прода

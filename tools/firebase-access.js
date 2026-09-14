@@ -1,5 +1,3 @@
-// DBG-START
-if(window.__dbg)window.__dbg('access.js ZAPUSTILSAYA, firebase='+typeof firebase);
 // firebase-access.js
 var auth = firebase.auth();
 var fs = firebase.firestore();
@@ -44,6 +42,7 @@ function renderAccess(){
    (isOwner()?ownerPanel():employeeOrRequest(dev))+'</div>';
 }
 function ownerPanel(){
+ var dev=deviceId();
  var roles=['admin','operator','manager','worker'];
  return '<div class="muted" style="margin-bottom:8px">👑 Режим владельца: тест любой роли</div>'+
   roles.map(function(r){return '<div class="role-card" onclick="enterAs(\''+r+'\')"><b>'+ROLE_NAMES[r]+'</b><div class="muted">тестировать как '+ROLE_NAMES[r]+'</div></div>';}).join('')+
