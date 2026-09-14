@@ -243,6 +243,7 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **UX**: при неверном PIN показывается «Неверный PIN», после 3 попыток — блокировка без дальнейших вводов.
 
 ## ДОЛГИ
+- Офлайн-кэш коллекции orders в localStorage (сейчас офлайн = read-only фолбэк; нужна очередь записи).
 - Жёсткие rules по auth.uid — после миграции владельца и сотрудников с deviceId на auth.uid. Также: серверная проверка автора фото в rules (delete photos) — deviceId анонима недоступен в request.auth.token, нужен custom claim или auth.uid-схема.
 - Миграция с одного документа app/state на коллекцию orders (лимит 1 МБ на документ).
 - True-push уведомления (FCM + Cloud Functions onCreate → topic staff): нужен Blaze-тариф проекта service-crm-9f785 — деплой functions отклонён. После апгрейда: функция + firebase-messaging-compat.js + токен в employees/{deviceId}.fcmToken.
@@ -324,3 +325,10 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **photoReport** для completed/paid: orderHasPhotos — документы photos по orderId ИЛИ старые o.photos.
 - **Миграция в Storage**: ветка сохранена; при старте checkStorage — пробная запись .probe/check.txt; если бакет появился — новые фото в Storage (URL в data), старые читаются из photos. Аватары — без изменений (base64 160px).
 - **firestore.rules**: match /photos/{id} (read: all; write: auth!=null) — ЗАДЕПЛОЕНЫ (18.09).
+
+### 18.09.2026 — Миграция app/state → коллекция orders
+- **Схема**: заявки — по документу в коллекции orders (id=String(order.id), поля заявки целиком; o.photos — legacy-поле старых заявок, новые фото в photos). Чтение: onSnapshot по orders (сорт. по id) + onSnapshot по app/state (users/templates/seq, БЕЗ orders) — любой снапшот → render().
+- **Запись**: мутации заявок (статусы, взятие, завершение, материалы, доп.работы, удаление фото из документа) → markOrder(o)+save() → orderSave(o) — только документ заявки; настройки (setShare, addTpl, delTpl, owner-сид) → saveSettings() — app/state без orders. doSaveOrder: orderSave + saveSettings (seq). Аудит всех 15 save() проведён.
+- **Миграция** (одноразовая, только владелец, при startMain): если app/state.db.orders непуст и флага ordersMigrated нет, а коллекция orders пуста — батч чанками по 400, затем app/state перезаписывается без orders + ordersMigrated:true. Если в orders уже есть данные — только флаг. Идемпотентна (node-тест: повторный запуск — 0 записей).
+- **Фолбэк**: при ошибке чтения orders — legacy app/state.db.orders read-only + жёлтый баннер «режим только чтения»; попытки записи — предупреждение.
+- **firestore.rules**: match /orders/{id} (read: all; write: auth!=null) — ЗАДЕПЛОЕНЫ (18.09).
