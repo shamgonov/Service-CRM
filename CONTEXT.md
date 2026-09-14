@@ -243,10 +243,8 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **UX**: при неверном PIN показывается «Неверный PIN», после 3 попыток — блокировка без дальнейших вводов.
 
 ## ДОЛГИ
-- Офлайн-кэш коллекции orders в localStorage (сейчас офлайн = read-only фолбэк; нужна очередь записи).
 - True-push уведомления (FCM + Cloud Functions onCreate → topic staff): нужен Blaze-тариф проекта service-crm-9f785 — деплой functions отклонён. После апгрейда: функция + firebase-messaging-compat.js + токен в employees/{deviceId}.fcmToken.
 - Создать бакет Firebase Storage (консоль → Storage → Get Started) и выполнить firebase deploy --only storage:rules (storage.rules готовы в репо).
-- Офлайн-режим: window.save=saveCloud отключает запись localStorage (crm_db) — продумать offline-очередь.
 
 ### 15.09.2026 — Личный кабинет «Мой профиль» + PIN-защита устройства
 - **Модель**: employees/{deviceId}.profile = {fio,phone,email,city,schedule,avatar,pin,spec[]}; корневые role/quals/status не трогаются. Аватар — canvas-даунскейл 160px, JPEG 0.8, base64 в profile.avatar (без Storage). Владелец без документа — создаётся при первом открытии профиля (role:'admin', owner:true, status:'approved').
@@ -355,3 +353,11 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - **PIN**: вместо открытого profile.pin — пара {pinSalt, pinHash}: PBKDF2-SHA-256 через crypto.subtle, 100 000 итераций, соль 16 байт (randSalt). Гейт (pinSubmit→verifyPin), установка/смена (savePin→makePinRecord), сброс (resetMyPin/adminResetPin — чистят оба поля) работают через хэш. Мягкая миграция: старый открытый pin при первом успешном вводе гейта пересохраняется в {pinSalt,pinHash}, поле pin удаляется. Фолбэк: crypto.subtle недоступен (старый WebView) → открытый pin + жёлтое предупреждение в профиле (ДОЛГ остаётся). Тест PBKDF2 в node (webcrypto): детерминированность, разные соли → разные хэши, неверный PIN, длины 64/32 hex — 5/5 OK.
 - **Серверные права (uid-привязка)**: при signInAnonymously клиент пишет employees/{deviceId}.uid = auth.uid и usermap/{uid}={deviceId} (create/update только своим uid). Правила задеплоены (Deploy complete): employees update — своему устройству только profile+uid (affectedKeys().hasOnly), create/delete — владелец/админ (+bootstrap владельца при пустом meta, request.resource.data.owner==true); roles write — только владелец/админ; photos delete — автор (by через usermap) или владелец/админ; orders/app/state/requests/meta — как раньше; catch-all deny. isOwner = meta/owner.uid == auth.uid (meta/owner теперь пишет uid при записи). Проверка матрицы правил структурно — 11/11 OK.
 - Из ДОЛГОВ сняты: «хэширование PIN», «жёсткие rules по auth.uid + серверная проверка автора фото».
+
+### 19.09.2026 — Офлайн-режим с очередью (крупный долг закрыт)
+- **Кэш чтения**: каждый снапшот orders и app/state пишется в localStorage (crm_cache_orders, crm_cache_state). При старте без сети — loadCachedData() сразу, баннер «Офлайн: показаны сохранённые данные».
+- **Очередь записей**: офлайн-мутации заявок (orderSave), фото (base64) и настройки складываются в crm_queue с меткой времени; локально применяются сразу (optimistic). Баннер «Офлайн: изменений в очереди — N». При восстановлении сети (online-событие) — flushQueue: последовательная отправка (orderSave по id / photos.set / saveSettings), затем очистка и зелёный «Синхронизировано» 3 сек. Конфликты: серверный снапшот побеждает локальную копию, очередные патчи применяются поверх.
+- **sw.js** (шаблон patch.ps1): navigate-фолбэк — закэшированный последний успешный index.html (если есть), страница «Нет соединения» — только когда кэша нет вовсе.
+- **Boot-guard**: сетевые ошибки (Failed to fetch, NetworkError, ERR_*) не считаются фатальными — штатный офлайн не триггерит чистку кэша.
+- Симуляция в node (vm): офлайн-мутации (2 заявки+фото+настройки) → очередь 4, счётчик в баннере, optimistic-применение, в сеть не уходит; «сеть» → flush → очередь пуста, настройки отправлены, зелёный баннер; перезагрузка офлайн → кэш загружен (заявки, seq). 12/12 OK.
+- Из ДОЛГОВ сняты: «офлайн-кэш orders», «offline-очередь».

@@ -127,8 +127,62 @@ function watchNewOrders(prev, next){
 // === ОБЛАКО: коллекция orders (по документу на заявку) + app/state (настройки) ===
 var ORDERS_SUB=false;   // получен первый снапшот коллекции orders
 var STATE_SUB=false;    // получен первый снапшот app/state
-var ORDERS_ERR=false;   // коллекция orders не читается — фолбэк read-only на legacy
+var ORDERS_ERR=false;   // коллекция orders не читается — фолбэк на кэш/legacy
 var MIGRATION_DONE=false;
+// === ОФЛАЙН-РЕЖИМ: кэш чтения + очередь записей ===
+var OFFLINE=false;              // нет сети (событие/ошибка записи)
+var SYNCING=false;              // идёт отправка очереди
+var SYNC_OK_TS=0;               // момент показа «Синхронизировано»
+function lsGet(k,d){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):d; }catch(e){ return d; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ console.warn('ls err',e); } }
+function cacheOrders(arr){ lsSet('crm_cache_orders',arr); }
+function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]}); }
+function loadCachedData(){
+ var co=lsGet('crm_cache_orders',null), cs=lsGet('crm_cache_state',null);
+ if(co&&co.length&&(!DB.orders||!DB.orders.length))DB.orders=co;
+ if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; }
+ return !!(co&&co.length);
+}
+function queueGet(){ return lsGet('crm_queue',[]); }
+function queueSet(q){ lsSet('crm_queue',q); }
+function queuePush(item){ var q=queueGet(); q.push({t:Date.now(),item:item}); queueSet(q); }
+function queueCount(){ return queueGet().length; }
+function offlineBanner(){
+ var n=queueCount();
+ if(SYNC_OK_TS&&Date.now()-SYNC_OK_TS<3000)return '<div style="background:#d1fae5;color:#065f46;padding:8px 16px;font-size:13px;font-weight:700">✅ Синхронизировано</div>';
+ if(n>0)return '<div style="background:#fef3c7;color:#92400e;padding:8px 16px;font-size:13px;font-weight:700">📴 Офлайн: изменений в очереди — '+n+'</div>';
+ if(OFFLINE)return '<div style="background:#fef3c7;color:#92400e;padding:8px 16px;font-size:13px;font-weight:700">📴 Офлайн: показаны сохранённые данные</div>';
+ return '';
+}
+// последовательная отправка очереди при восстановлении сети
+function flushQueue(){
+ if(SYNCING||OFFLINE)return;
+ var q=queueGet();
+ if(!q.length)return;
+ SYNCING=true;
+ var i=0;
+ function next(){
+  if(i>=q.length){ queueSet([]); SYNCING=false; SYNC_OK_TS=Date.now(); if(typeof render==='function')render(); return; }
+  var it=q[i].item;
+  var done=function(){ i++; next(); };
+  if(it.kind==='order'){ orderSave(it.order); done(); }
+  else if(it.kind==='photo'){
+   fs.collection('photos').doc(it.docId).set(it.doc).then(done).catch(function(e){ console.warn('photo flush err',e); done(); });
+  }
+  else if(it.kind==='settings'){ saveSettings(); done(); }
+  else done();
+ }
+ next();
+}
+(function(){
+ function upd(){
+  var on=navigator.onLine;
+  if(on&&OFFLINE){ OFFLINE=false; flushQueue(); }
+  else if(!on&&!OFFLINE){ OFFLINE=true; if(typeof render==='function')render(); }
+ }
+ if(typeof window.addEventListener==='function'){ window.addEventListener('online',upd); window.addEventListener('offline',upd); }
+ upd();
+})();
 function ordersRef(){ return fs.collection('orders'); }
 
 function watchNewOrders(prev, next){
@@ -152,17 +206,21 @@ function loadCloud(cb){
   arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
   var prev=DB;
   DB.orders=arr;
+  cacheOrders(arr);
   if(!first) watchNewOrders(prev, DB);
   ORDERS_SUB=true; first=false;
   maybeRender();
  }, function(err){
   console.warn('orders snapshot err',err);
   ORDERS_ERR=true; first=false;
-  // фолбэк: legacy-заявки из app/state (read-only)
-  fs.collection('app').doc('state').get().then(function(sdoc){
-   if(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders){ DB.orders=sdoc.data().db.orders; }
-   setTimeout(function(){ if(typeof render==='function')render(); },0);
-  }).catch(function(){ setTimeout(function(){ if(typeof render==='function')render(); },0); });
+  // фолбэк: кэш чтения → legacy app/state
+  var hasCache=loadCachedData();
+  if(!hasCache){
+   fs.collection('app').doc('state').get().then(function(sdoc){
+    if(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders){ DB.orders=sdoc.data().db.orders; }
+    setTimeout(function(){ if(typeof render==='function')render(); },0);
+   }).catch(function(){ setTimeout(function(){ if(typeof render==='function')render(); },0); });
+  } else setTimeout(function(){ if(typeof render==='function')render(); },0);
  });
  // 2) настройки/пользователи/шаблоны — app/state (без orders)
  unsub = fs.collection('app').doc('state').onSnapshot(function(snap){
@@ -171,6 +229,7 @@ function loadCloud(cb){
    DB.users=st.db.users||DB.users||[];
    DB.templates=st.db.templates||DB.templates||[];
    DB.seq=st.db.seq||DB.seq||270;
+   cacheState();
   } else if(isOwner()){
    var init=defaultData(); init.orders=[];
    fs.collection('app').doc('state').set({db:init,ordersMigrated:true});
@@ -178,22 +237,43 @@ function loadCloud(cb){
   STATE_SUB=true;
   ensureOwnerInDb();
   render();
- }, function(err){ console.warn(err); STATE_SUB=true; });
+ }, function(err){
+  console.warn(err); STATE_SUB=true;
+  loadCachedData();
+  if(typeof render==='function')render();
+ });
 }
 // запись настроек (users/templates/seq) — app/state БЕЗ orders
 function saveSettings(){
  if(!DB)return;
  var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]};
- fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){ console.warn(e); });
+ cacheState();
+ if(OFFLINE||ORDERS_ERR&&!STATE_SUB){ queuePush({kind:'settings'}); return; }
+ fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){
+  console.warn(e); OFFLINE=true; queuePush({kind:'settings'}); if(typeof render==='function')render();
+ });
 }
-// запись одной заявки — только её документ
+// запись одной заявки — только её документ; офлайн — патч в очередь
 function orderSave(order){
  if(!order||order.id==null)return;
  var copy={};
  for(var k in order){ if(k!=='id')copy[k]=order[k]; }
+ if(OFFLINE||ORDERS_ERR&&!ORDERS_SUB){
+  queuePush({kind:'order',order:copy,id:order.id});
+  // локально применяем сразу (серверный снапшот потом победит, патчи применяются поверх)
+  if(typeof DB!=='undefined'&&DB.orders){
+   var loc=DB.orders.find(function(x){return x.id==order.id;});
+   if(loc)for(var k2 in copy)loc[k2]=copy[k2];
+  }
+  cacheOrders(DB.orders||[]);
+  if(typeof render==='function')render();
+  return;
+ }
  ordersRef().doc(String(order.id)).set(copy).catch(function(e){
   console.warn('orderSave err',e);
-  if(ORDERS_ERR)alert('Нет соединения с сервером — изменения не сохранены');
+  OFFLINE=true;
+  queuePush({kind:'order',order:copy,id:order.id});
+  if(typeof render==='function')render();
  });
 }
 function orderDelete(id){ ordersRef().doc(String(id)).delete().catch(function(e){ console.warn(e); }); }
@@ -521,6 +601,7 @@ function startMain(){
   }
  }
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
+ if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
  migrateOrdersIfNeeded();
 }
@@ -791,10 +872,22 @@ function uploadPhoto(inp, id){
   var afterSize=function(url){
    var ts=Date.now();
    var doc={orderId:id, data:url, ts:ts, by:deviceId()};
+   if(OFFLINE||ORDERS_ERR&&!ORDERS_SUB){
+    // офлайн: base64 в очередь (отправка при сети)
+    queuePush({kind:'photo',docId:id+'_'+ts,doc:doc});
+    PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
+    go('details',id);
+    return;
+   }
    fs.collection('photos').doc(id+'_'+ts).set(doc).then(function(){
     PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
     go('details',id);
-   }).catch(function(e){ alert('Ошибка сохранения фото: '+e.message); });
+   }).catch(function(e){
+    console.warn(e); OFFLINE=true;
+    queuePush({kind:'photo',docId:id+'_'+ts,doc:doc});
+    PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
+    if(typeof render==='function')render();
+   });
   };
   var finishSize=function(url){
    if(url.indexOf('data:')===0 && url.length>900*1024/3*4){
@@ -819,11 +912,18 @@ function loadOrderPhotos(id, cb){
   arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
   PHOTOS_CACHE[id]=arr;
   cb(arr);
- }).catch(function(e){ console.warn(e); PHOTOS_CACHE[id]=PHOTOS_CACHE[id]||[]; cb(PHOTOS_CACHE[id]); });
+ }).catch(function(e){
+  console.warn(e);
+  // офлайн: фото из очереди (base64) для этой заявки
+  var queued=queueGet().filter(function(q){ return q.item&&q.item.kind==='photo'&&q.item.doc&&q.item.doc.orderId===id; }).map(function(q){ return q.item.doc; });
+  PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat(queued);
+  cb(PHOTOS_CACHE[id]);
+ });
 }
 function orderHasPhotos(id, cb){
  var o=byId?byId(id):null;
  if(o&&o.photos&&o.photos.length){ cb(true); return; }
+ if(queueGet().some(function(q){ return q.item&&q.item.kind==='photo'&&q.item.doc&&q.item.doc.orderId===id; })){ cb(true); return; }
  fs.collection('photos').where('orderId','==',id).limit(1).get().then(function(snap){
   cb(!snap.empty);
  }).catch(function(){ cb(false); });
