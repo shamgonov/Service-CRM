@@ -124,26 +124,114 @@ function watchNewOrders(prev, next){
   if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()) notifyNewOrders(added);
  }catch(e){}
 }
+// === ОБЛАКО: коллекция orders (по документу на заявку) + app/state (настройки) ===
+var ORDERS_SUB=false;   // получен первый снапшот коллекции orders
+var STATE_SUB=false;    // получен первый снапшот app/state
+var ORDERS_ERR=false;   // коллекция orders не читается — фолбэк read-only на legacy
+var MIGRATION_DONE=false;
+function ordersRef(){ return fs.collection('orders'); }
+
+function watchNewOrders(prev, next){
+ if(!prev||!next)return;
+ try{
+  var prevIds={}, added=0;
+  (prev.orders||[]).forEach(function(o){prevIds[o.id]=1;});
+  (next.orders||[]).forEach(function(o){ if(!prevIds[o.id])added++; });
+  if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()) notifyNewOrders(added);
+ }catch(e){}
+}
 function loadCloud(cb){
  if(unsub)unsub();
  var first=true;
+ ORDERS_SUB=false; STATE_SUB=false; ORDERS_ERR=false;
+ var maybeRender=function(){ if(ORDERS_SUB||ORDERS_ERR){ if(cb)cb(); render(); } };
+ // 1) заявки — коллекция orders
+ ordersRef().onSnapshot(function(snap){
+  var arr=[];
+  snap.forEach(function(d){ var o=d.data(); o.id=parseInt(d.id,10)||o.id; arr.push(o); });
+  arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
+  var prev=DB;
+  DB.orders=arr;
+  if(!first) watchNewOrders(prev, DB);
+  ORDERS_SUB=true; first=false;
+  maybeRender();
+ }, function(err){
+  console.warn('orders snapshot err',err);
+  ORDERS_ERR=true; first=false;
+  // фолбэк: legacy-заявки из app/state (read-only)
+  fs.collection('app').doc('state').get().then(function(sdoc){
+   if(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders){ DB.orders=sdoc.data().db.orders; }
+   setTimeout(function(){ if(typeof render==='function')render(); },0);
+  }).catch(function(){ setTimeout(function(){ if(typeof render==='function')render(); },0); });
+ });
+ // 2) настройки/пользователи/шаблоны — app/state (без orders)
  unsub = fs.collection('app').doc('state').onSnapshot(function(snap){
-   var prev=DB;
-   if(snap.exists && snap.data().db){ DB=snap.data().db; }
-   else { DB=defaultData(); fs.collection('app').doc('state').set({db:DB}); }
-   if(!first) watchNewOrders(prev, DB);
-   first=false;
-   ensureOwnerInDb();
-   if(cb)cb(); render();
- }, function(err){ console.warn(err); });
+  var st=(snap.exists&&snap.data())||null;
+  if(st && st.db){
+   DB.users=st.db.users||DB.users||[];
+   DB.templates=st.db.templates||DB.templates||[];
+   DB.seq=st.db.seq||DB.seq||270;
+  } else if(isOwner()){
+   var init=defaultData(); init.orders=[];
+   fs.collection('app').doc('state').set({db:init,ordersMigrated:true});
+  }
+  STATE_SUB=true;
+  ensureOwnerInDb();
+  render();
+ }, function(err){ console.warn(err); STATE_SUB=true; });
 }
-function saveCloud(){ if(DB) fs.collection('app').doc('state').set({db:DB}).catch(function(e){ console.warn(e); }); }
+// запись настроек (users/templates/seq) — app/state БЕЗ orders
+function saveSettings(){
+ if(!DB)return;
+ var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]};
+ fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){ console.warn(e); });
+}
+// запись одной заявки — только её документ
+function orderSave(order){
+ if(!order||order.id==null)return;
+ var copy={};
+ for(var k in order){ if(k!=='id')copy[k]=order[k]; }
+ ordersRef().doc(String(order.id)).set(copy).catch(function(e){
+  console.warn('orderSave err',e);
+  if(ORDERS_ERR)alert('Нет соединения с сервером — изменения не сохранены');
+ });
+}
+function orderDelete(id){ ordersRef().doc(String(id)).delete().catch(function(e){ console.warn(e); }); }
+// одноразовая миграция: app/state.db.orders → коллекция orders (только владелец, чанки по 400)
+function migrateOrdersIfNeeded(){
+ if(!isOwner()||MIGRATION_DONE)return;
+ fs.collection('app').doc('state').get().then(function(sdoc){
+  var legacy=(sdoc.exists&&sdoc.data().db&&sdoc.data().db.orders)||[];
+  var migrated=sdoc.exists&&sdoc.data().ordersMigrated;
+  if(!legacy.length||migrated){ MIGRATION_DONE=true; return; }
+  ordersRef().limit(1).get().then(function(snap){
+   if(!snap.empty){ // уже есть заявки — просто пометить
+    MIGRATION_DONE=true;
+    fs.collection('app').doc('state').set({db:{seq:sdoc.data().db.seq||270,users:sdoc.data().db.users||[],templates:sdoc.data().db.templates||[]},ordersMigrated:true},{merge:true});
+    return;
+   }
+   var batch=fs.batch(), n=0, total=0;
+   legacy.forEach(function(o){
+    var ref=ordersRef().doc(String(o.id));
+    var copy={}; for(var k in o){ if(k!=='id')copy[k]=o[k]; }
+    batch.set(ref,copy); n++; total++;
+    if(n>=400){ batch.commit(); batch=fs.batch(); n=0; }
+   });
+   if(n>0)batch.commit();
+   MIGRATION_DONE=true;
+   var st=sdoc.data().db||{};
+   fs.collection('app').doc('state').set({db:{seq:st.seq||270,users:st.users||[],templates:st.templates||[]},ordersMigrated:true})
+    .then(function(){ console.log('migrated orders:',total); })
+    .catch(function(e){ console.warn(e); });
+  }).catch(function(e){ console.warn('migrate check err',e); });
+ }).catch(function(e){ console.warn(e); });
+}
 function ensureOwnerInDb(){
  if(!DB.users)DB.users=[];
  var dev=deviceId();
  if(isOwner() && !DB.users.find(function(u){return u.deviceId===dev;})){
    DB.users.push({id:'u_owner',name:'Дмитрий (владелец)',role:'admin',share:0,deviceId:dev,status:'approved',quals:[],perms:['all'],owner:true});
-   saveCloud();
+   saveSettings();
  }
 }
 
@@ -433,6 +521,7 @@ function startMain(){
  }
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  loadCloud(function(){});
+ migrateOrdersIfNeeded();
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
 // гейт показывается ДО панели владельца и ДО тест-карточек ролей.
@@ -505,7 +594,19 @@ window.render = function(){
   });
  }
 };
-window.save = function(){ saveCloud(); };
+window.orderSave = orderSave;
+window.saveSettings = saveSettings;
+window.orderDelete = orderDelete;
+// save() из index.html: мутации заявок помечены markOrder (state.__mutOrder) → пишем документ заявки;
+// остальное — настройки (app/state без orders).
+window.save = function(order){
+ if(order && order.id!=null){ orderSave(order); return; }
+ var wasOrder=false;
+ try{
+  if(state && state.__mutOrder){ var o=state.__mutOrder; state.__mutOrder=null; orderSave(o); wasOrder=true; }
+ }catch(e){}
+ if(!wasOrder) saveSettings();
+};
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
 // сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
 window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';

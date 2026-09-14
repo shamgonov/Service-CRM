@@ -345,3 +345,9 @@ Git настроен на UTF-8: `git config --global core.quotepath false`
 - uploadPhoto: даунскейл 1000px/0.65, при base64 > 900КБ — повторный 800px/0.6; лимит 8 фото (учёт legacy o.photos); коллекция photos {orderId,data,ts,by}, id={orderId}_{ts}; Storage-ветка с пробной записью .probe/check.txt при старте (если бакет появится — новые фото в Storage).
 - Галерея: двойное чтение (photos where orderId + legacy o.photos), просмотр на весь экран, удаление (владелец/админ/автор по by; legacy — из массива). orderHasPhotos для completed/paid. window.isOwner/window.deviceId экспортированы.
 - Правила photos не трогались (задеплоены ранее).
+
+### 18.09.2026 — ЭТАП 2: миграция orders (повторно, через гейт)
+- Реализовано заново после отката: коллекция orders (id=String(order.id)); чтение — два onSnapshot (orders сорт. по id + app/state без orders), любой снапшот → render(). Запись: мутации заявок → markOrder(o)+save() → orderSave (только документ); настройки (setShare/addTpl/delTpl/owner-сид/seq) → saveSettings (app/state без orders). Аудит 10 точек мутаций заявок + 3 настройки.
+- Миграция: только владелец при startMain; app/state.db.orders → orders батчами по 400; затем app/state без orders + ordersMigrated:true; если в orders уже есть данные — только флаг. Node-тесты: миграция 3 заявок OK, идемпотентность OK, маршрутизация save(): правка заявки НЕ пишет app/state (0 записей), настройки пишутся (1 запись).
+- Фолбэк: ошибка чтения orders → legacy app/state.db.orders read-only + жёлтый баннер «режим только чтения».
+- Правила orders не трогались (задеплоены ранее). Гейт INLINE_OK 4 пройден перед деплоем.
