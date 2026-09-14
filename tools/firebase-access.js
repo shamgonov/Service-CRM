@@ -123,21 +123,20 @@ function showSystemNotification(ev){
   n.onclick=function(){ try{ window.focus(); if(ev.orderId!=null)go('details',ev.orderId); n.close(); }catch(e){} };
  }catch(e){}
 }
-function pushEvent(type,title,body,orderId){
+function pushEvent(type,title,body,orderId,silent){
  // CAN-права: событие адресовано экрану; без права — не показываем
- var need={order:'orders_view',assigned:'orders_view',completed:'orders_view',request:'staff_manage',material:'shopping',calendar:'calendar',overdue:'orders_view'}[type];
+ var need={order:'orders_view',assigned:'orders_view',completed:'orders_view',request:'staff_manage',material:'shopping',calendar:'calendar',overdue:'orders_view',route:'orders_view'}[type];
  if(need&&!can(need))return;
  // подавление автора: свои правки не уведомляют
  var ev={type:type,title:title,body:body,orderId:orderId==null?null:orderId,ts:Date.now(),read:false};
  EVENTS.push(ev); EVENTS=EVENTS.slice(-50); eventsSave();
  if(Date.now()-LAST_ORDER_TS<3000)return; // первые 3с после своих правок/входа — тихо
- beepNotify();
- showSystemNotification(ev);
+ if(!silent){ beepNotify(); showSystemNotification(ev); }
  updateAppBadge();
  if(typeof render==='function')render();
 }
 function markEventsRead(screen){
- var orderTypes=['order','assigned','completed','overdue'];
+ var orderTypes=['order','assigned','completed','overdue','route'];
  var t={orders:orderTypes,details:orderTypes,tasks:orderTypes,calendar:['calendar'],shopping:['material'],staff:['request']}[screen]||null;
  var ch=false;
  if(t)EVENTS.forEach(function(e){ if(!e.read&&t.indexOf(e.type)>=0){ e.read=true; ch=true; } });
