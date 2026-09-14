@@ -331,7 +331,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.0</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.1</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice();
@@ -705,6 +705,12 @@ function renderAdmin(){
  <input class="input" id="base-addr" value="${escapeHtml(DB.baseAddress||'')}" placeholder="Адрес базы / склада">
  <button class="btn btn-outline" style="margin-top:8px" onclick="DB.baseAddress=document.getElementById('base-addr').value.trim();save();alert('Адрес базы сохранён')">💾 Сохранить</button>
 </div>
+${isOwner()||canFinance()?`<div class="card"><div class="sec-title">☁️ Firebase Storage</div>
+ ${window.__storWarn?`<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 10px;font-size:13px;color:#854d0e;margin-bottom:8px">⚠️ Storage включён, но бакет недоступен — фото идут в базу</div>`:''}
+ <div class="tgl"><span style="font-weight:500;font-size:14px">Фото в Firebase Storage (бакет создан)</span>
+  <label class="switch"><input type="checkbox" id="adm-stor" ${DB.storageEnabled?'checked':''} onchange="toggleStorage(this.checked)"><span class="slider"></span></label></div>
+ <div class="muted" style="margin-top:6px">Включайте только после создания бакета в консоли Firebase. Выключено — фото хранятся в базе (коллекция photos).</div>
+</div>`:''}
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
  ${DB.users.filter(u=>u.role==='worker').map(u=>`
  <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
@@ -920,6 +926,13 @@ function cStageRender(){
  }).join('');
 }
 function cStageDue(i,v){state.cStages[i].dueMode=v;cStageRender()}
+function toggleStorage(on){
+ if(typeof isOwner==='function'&&!isOwner()&&typeof can==='function'&&!can('finance_edit')){render();return alert('Нет прав')}
+ DB.storageEnabled=!!on;
+ if(typeof STOR_CHECKED!=='undefined'){STOR_CHECKED=false;STOR_OK=false}
+ save();render();
+ if(on)alert('Настройка сохранена. Проверка бакета пройдёт при следующем входе; если бакета нет — фото продолжат идти в базу.');
+}
 function otypeChange(v){
  state.cStages=stageDefault(v);
  document.getElementById('c-stages-box').style.display=v==='standard'?'none':'block';
@@ -997,7 +1010,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.5.1';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1029,6 +1042,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 

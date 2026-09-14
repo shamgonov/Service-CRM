@@ -764,6 +764,10 @@ function startMain(){
  }
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  eventsLoad();
+ // проб Storage — один раз за сессию, ТОЛЬКО если владелец включил настройку
+ if(storageEnabled())checkStorage(function(ok){
+  if(!ok)window.__storWarn=true; // жёлтое предупреждение в админке
+ });
  if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
  migrateOrdersIfNeeded();
@@ -993,14 +997,17 @@ var STOR_CHECKED=false, STOR_OK=false;
 // STOR: Storage недоступен без бакета (нет Blaze) — null, весь Storage-путь через try/catch
 var STOR=null;
 try{ STOR=(window.firebase&&firebase.storage)?firebase.storage():null; }catch(e){ STOR=null; }
+// настройка settings.storageEnabled (чекбокс в админке, default false):
+// false → ноль запросов к Storage, всё в коллекцию photos; true → один проб за сессию
+function storageEnabled(){ return !!(DB&&DB.storageEnabled); }
 function storReady(){
- if(!STOR) return false;
+ if(!STOR||!storageEnabled())return false;
  try{ STOR.ref('probe-'+Date.now()).toString(); return true; }catch(e){ return false; }
 }
-// одноразовая проверка бакета реальной записью при старте
+// одноразовая проверка бакета реальной записью — ТОЛЬКО при storageEnabled и раз за сессию
 function checkStorage(cb){
  if(STOR_CHECKED){ cb(STOR_OK); return; }
- if(!STOR){ STOR_CHECKED=true; STOR_OK=false; cb(false); return; }
+ if(!STOR||!storageEnabled()){ STOR_CHECKED=true; STOR_OK=false; cb(false); return; }
  try{
   STOR.ref('.probe/check.txt').put(new Blob(['ok'],{type:'text/plain'}))
    .then(function(){ STOR_OK=true; STOR_CHECKED=true; cb(true); })
@@ -1072,16 +1079,15 @@ function uploadPhoto(inp, id){
     downscale(inp,800,0.6,false,afterSize);
    } else afterSize(url);
   };
-  checkStorage(function(ok){
-   if(ok){
-    try{
-     STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
-      .then(function(s){ return s.ref.getDownloadURL(); })
-      .then(function(url){ finishSize(url); })
-      .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
-    }catch(e){ finishSize(dataUrl); }
-   } else finishSize(dataUrl);
-  });
+  // путь загрузки — синхронно по кэшированному флагу (проб запускается только из админки/старта при storageEnabled)
+  if(STOR_OK&&STOR&&storageEnabled()){
+   try{
+    STOR.ref().child('orders/'+id+'/'+Date.now()+'.jpg').put(dataUrlToBlob(dataUrl))
+     .then(function(s){ return s.ref.getDownloadURL(); })
+     .then(function(url){ finishSize(url); })
+     .catch(function(e){ console.warn('storage err',e); finishSize(dataUrl); });
+   }catch(e){ finishSize(dataUrl); }
+  } else finishSize(dataUrl);
  });
 }
 // галерея: документы photos по orderId + старые фото из документа заявки
