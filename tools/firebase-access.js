@@ -323,16 +323,21 @@ function startMain(){
  if(ME){ state.role=ME.role; state.user=ME.name; }
  loadCloud(function(){});
 }
+// Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
+// гейт показывается ДО панели владельца и ДО тест-карточек ролей.
+function gateThenStart(){
+ getMyDoc(function(){
+  var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
+  if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ showPinGate(); }
+  else startMain();
+ });
+}
 (function startApp(){
  auth.signInAnonymously().catch(function(e){ console.warn(e); });
  ensureRolesSeeded(function(){
   checkApproved(function(ok){
    if(ok){
-    getMyDoc(function(){
-     var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
-     if(pin && sessionStorage.getItem('crm_unlocked')!=='1'){ showPinGate(); }
-     else startMain();
-    });
+    gateThenStart();
    } else {
     window.__accessMode=true;
     document.getElementById('app').innerHTML=renderAccess();
@@ -352,6 +357,10 @@ function startMain(){
 
 var _origRender = window.render;
 window.render = function(){
+ if(MYDOC && MYDOC.profile && MYDOC.profile.pin && sessionStorage.getItem('crm_unlocked')!=='1' && !state.role){
+  showPinGate();
+  return;
+ }
  if(window.__accessMode && !state.role){
   document.getElementById('app').innerHTML=renderAccess();
   document.getElementById('nav').style.display='none';
@@ -374,7 +383,11 @@ window.render = function(){
  applyPermsUI();
 };
 window.save = function(){ saveCloud(); };
-window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;window.__accessMode=true;document.getElementById('nav').style.display='none';document.getElementById('app').innerHTML=renderAccess(); };
+window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
+ sessionStorage.removeItem('crm_unlocked');
+ var pin=(MYDOC&&MYDOC.profile&&MYDOC.profile.pin)||'';
+ if(pin){ PIN_TRIES=0; showPinGate(); }
+ else document.getElementById('app').innerHTML=renderAccess(); };
 
 // ============================================================
 // ЛИЧНЫЙ КАБИНЕТ «МОЙ ПРОФИЛЬ» + PIN-ЗАЩИТА УСТРОЙСТВА
@@ -513,7 +526,9 @@ function pinSubmit(){
  else{
   PIN_TRIES++;
   document.getElementById('app').innerHTML=renderPin();
-  if(PIN_TRIES<3){ var i=document.getElementById('pinInput'); if(i){i.focus();} }
+  if(PIN_TRIES>=3){ return; }
+  var err=document.getElementById('pinErr'); if(err)err.textContent='Неверный PIN';
+  var i=document.getElementById('pinInput'); if(i){i.focus();}
  }
 }
 function showPinGate(){
