@@ -17,7 +17,8 @@ var PERMS_CATALOG = [
  {key:'reports',label:'Отчёты'},
  {key:'admin_templates',label:'Шаблоны и дележка'},
  {key:'staff_manage',label:'Управление сотрудниками'},
- {key:'roles_manage',label:'Управление ролями'}
+ {key:'roles_manage',label:'Управление ролями'},
+ {key:'profile_view',label:'Мой профиль'}
 ];
 function permLabel(k){ if(k==='all')return 'Все права'; var f=PERMS_CATALOG.find(function(x){return x.key===k;}); return f?f.label:k; }
 function allPermKeys(){ return PERMS_CATALOG.map(function(x){return x.key;}); }
@@ -603,6 +604,7 @@ function applyPermsUI(){
  var nav=document.getElementById('nav');
  if(nav){
    Array.prototype.forEach.call(nav.querySelectorAll('.nav-item'), function(el){
+     if(el.hasAttribute('data-profile-nav')){ el.style.display=''; return; } // профиль доступен всем
      var oc=(el.getAttribute('onclick')||'')+ (el.querySelector('span')?el.querySelector('span').getAttribute('onclick')||'':'');
      var m=oc.match(/go\(['"](\w+)['"]\)/);
      if(m){ var need=SCREEN_PERM[m[1]]; if(need && !can(need)) el.style.display='none'; }
