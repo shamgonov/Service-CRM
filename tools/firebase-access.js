@@ -11,6 +11,7 @@ var PERMS_CATALOG = [
  {key:'orders_edit',label:'Правка заявок'},
  {key:'orders_status',label:'Смена статусов'},
  {key:'orders_delete',label:'Удаление заявок'},
+ {key:'orders_cancel',label:'Отмена заявок'},
  {key:'calendar',label:'Календарь'},
  {key:'tasks',label:'Мои задачи'},
  {key:'shopping',label:'Закупки и материалы'},
@@ -259,6 +260,7 @@ setInterval(function(){
   var now=Date.now();
   DB.orders.forEach(function(o){
    if(!o.date||!o.t2)return;
+   if(o.test)return; // тестовые — без уведомлений
    if(['completed','paid','canceled','postponed'].indexOf(o.status)>=0)return;
    var end=new Date(o.date+'T'+o.t2).getTime();
    if(now>end&&!flags[o.id]){
@@ -268,8 +270,41 @@ setInterval(function(){
     else if(isOwner())pushEvent('overdue','⏰ Просрочка — заявка №'+o.id,(esc(o.worker)||'Исполнитель')+' не уложился в срок',o.id);
    }
   });
+  // === напоминание «Скоро выезд»: сегодня, старт в [сейчас … +60 мин], один раз на заявку ===
+  var sflags=lsGet('crm_soon_fired',{});
+  var today=new Date(); var dstr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var nowMin=today.getHours()*60+today.getMinutes();
+  DB.orders.forEach(function(o){
+   if(o.test)return;
+   if(!o.date||o.date!==dstr||!o.t1)return;
+   if(['approved','in_progress','new'].indexOf(o.status)<0)return;
+   if(!(typeof can==='function'&&can('orders_view')))return;
+   var mine=o.worker&&(o.worker===dev||o.worker===myName());
+   if(!mine)return;
+   var p=o.t1.split(':'); var stMin=(+p[0]||0)*60+(+p[1]||0);
+   if(stMin>=nowMin&&stMin<=nowMin+60&&!sflags[o.id]){
+    sflags[o.id]=now; lsSet('crm_soon_fired',sflags);
+    pushEvent('route','🚗 Скоро выезд — заявка №'+o.id,'Выезд в '+esc(o.t1)+' • '+esc(o.address||''),o.id);
+   }
+  });
+  // === ежедневное «Завтра N заявок» в 18:00 ===
+  var dflags=lsGet('crm_tomorrow_fired',{});
+  var h=today.getHours();
+  if(h>=18&&!dflags[dstr]){
+   var tomorrow=new Date(today.getTime()+864e5);
+   var tstr=tomorrow.getFullYear()+'-'+String(tomorrow.getMonth()+1).padStart(2,'0')+'-'+String(tomorrow.getDate()).padStart(2,'0');
+   var tm=DB.orders.filter(function(o){
+    return !o.test&&o.date===tstr&&o.worker&&(o.worker===dev||o.worker===myName())&&['approved','in_progress','new'].indexOf(o.status)>=0;
+   });
+   if(tm.length){
+    dflags[dstr]=now; lsSet('crm_tomorrow_fired',dflags);
+    var first=tm.slice().sort(function(a,b){return (a.t1||'').localeCompare(b.t1||'');})[0];
+    pushEvent('route','📅 Завтра '+tm.length+' '+pluralRu(tm.length),'Первая заявка в '+(first.t1||'?')+' • '+esc(first.address||''),first.id);
+   }
+  }
  }catch(e){}
 },60000);
+function pluralRu(n){ var m=n%10,h=n%100; if(h>=11&&h<=14)return 'заявок'; if(m===1)return 'заявка'; if(m>=2&&m<=4)return 'заявки'; return 'заявок'; }
 function notifyNewOrders(count){
  // совместимость: старые вызовы → события «новая заявка»
  for(var i=0;i<(count||0);i++)pushEvent('order','🆕 Новая заявка','Появилась новая заявка в списке',null);

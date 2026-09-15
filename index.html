@@ -117,10 +117,19 @@ const ST={
  in_progress:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
  waiting:{t:'Ожидание материала',c:'#fee2e2',tc:'#991b1b'},
  postponed:{t:'Перенос',c:'#e5e7eb',tc:'#374151'},
+ canceled:{t:'Отменена',c:'#e5e7eb',tc:'#6b7280'},
  completed:{t:'Выполнено',c:'#d1fae5',tc:'#065f46'},
  paid:{t:'Оплачено',c:'#a7f3d0',tc:'#064e3b'}
 };
 const BUYER={worker:'Работник перед выездом',manager:'Диагност/менеджер',delivery:'Доставка на адрес',stock:'Есть на складе'};
+// === тестовые заявки и отмена ===
+function showTest(){return !!(DB&&DB.showTest)}
+function isTest(o){return !!o.test}
+// тестовые скрыты при showTest=false (списки/календарь/задачи/схема/уведомления);
+// из отчётов/финансов/CSV/долей исключены ВСЕГДА
+function visOrder(o){return !isTest(o)||showTest()}
+function bizOrder(o){return !isTest(o)}
+function canCancel(){if(typeof can==='function')return isOwner()||can('orders_cancel');return ['admin'].includes(state.role)}
 function defaultData(){return{
  seq:270,
  users:[
@@ -310,6 +319,8 @@ function matState(o,m){
 }
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
+ if(isTest(o))b+=`<span class="badge" style="background:#f3f4f6;color:#6b7280">🧪 тест</span>`;
+ if(o.status==='canceled')b+=`<span class="badge" style="background:#e5e7eb;color:#6b7280">отменена</span>`;
  if(orderType(o)!=='standard')b+=`<span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span>`;
  if(orderType(o)==='manufacture'&&orderStages(o).length){const d=orderStages(o).filter(s=>s.done).length;b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🔧 ${d}/${orderStages(o).length}</span>`;}
  if(orderPayments(o).length&&balance(o)>0)b+=`<span class="badge" style="background:#fee2e2;color:#991b1b">💰 долг ${money(balance(o))}</span>`;
@@ -331,10 +342,10 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.1</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.2</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
- let list=DB.orders.slice();
+ let list=DB.orders.slice().filter(visOrder);
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
  if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
@@ -344,7 +355,7 @@ function renderOrders(){
  ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
   `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
 </div>
-${list.map(o=>`<div class="ord" onclick="go('details',${o.id})">
+${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
  <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}</div>
@@ -424,6 +435,7 @@ function routeTimeline(o,editable){
 }
 function routeScreen(id){
  const o=byId(id);if(!o)return;
+ if(!visOrder(o)&&!canCancel())return alert('Тестовая заявка скрыта (включите «Показывать тестовые» в админке)');
  const editable=o.route&&o.route.length?canEditRoute(o):false;
  document.getElementById('app').innerHTML='<div class="header"><button class="back" onclick="go(\''+(state.role==='worker'?'tasks':'details')+'\','+(state.role==='worker'?id:id)+')">←</button><h1>🗺 Схема — №'+o.id+'</h1></div>'+
   '<div class="card">'+routeTimeline(o,editable)+'</div>';
@@ -543,7 +555,13 @@ ${isW||canManage?`<div class="card">
  ${!o.worker&&o.status==='approved'?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}
  ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
  ${o.status==='in_progress'&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
+ ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
+ ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
+  <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
 </div>`:''}
+${o.status==='canceled'?`<div class="card" style="border-left:4px solid #9ca3af"><div class="sec-title">❌ Заявка отменена</div>
+ <div class="muted">Причина: ${escapeHtml(o.cancelReason||'—')}</div>
+ <div class="muted">${o.cancelBy?'Отменил: '+escapeHtml(o.cancelBy)+' • ':''}${o.cancelTs?new Date(o.cancelTs).toLocaleString():''}</div></div>`:''}
 ${paymentsBlock(o)}`}
 function renderCreate(){
  return `
@@ -573,6 +591,8 @@ function renderCreate(){
   ${DB.users.filter(u=>u.role==='worker'||u.role==='manager').map(u=>`<option>${u.name}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo" checked><span class="slider"></span></label></div>
+ ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
+  <label class="switch"><input type="checkbox" id="c-test"><span class="slider"></span></label></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🛒 Материалы <span class="muted" id="matcount"></span></div>
  <div id="newmats"></div>
@@ -585,7 +605,7 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate).sort((a,b)=>(a.t1||'').localeCompare(b.t1||''));
+ const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled').sort((a,b)=>(a.t1||'').localeCompare(b.t1||''));
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
 <div class="card">
@@ -601,8 +621,8 @@ function renderCalendar(){
    </div>`}).join('')}
 </div>`}
 function renderTasks(){
- const mine=DB.orders.filter(o=>o.worker===state.user);
- const free=DB.orders.filter(o=>!o.worker&&o.status==='approved');
+ const mine=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
+ const free=DB.orders.filter(o=>!o.worker&&o.status==='approved'&&visOrder(o));
  return `
 <div class="header green"><h1>✅ Мои задачи</h1><span style="margin-left:auto;font-size:13px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 ${free.length?`<div class="card"><div class="sec-title">🆓 Свободные заявки (можно взять)</div>
@@ -649,7 +669,7 @@ function renderShopping(){
  </div>`).join('')||'<div class="muted">Все материалы закуплены 🎉</div>'}
 </div>`}
 function renderReports(){
- const done=DB.orders.filter(o=>['completed','paid'].includes(o.status));
+ const done=DB.orders.filter(o=>bizOrder(o)&&['completed','paid'].includes(o.status));
  const rev=done.reduce((s,o)=>s+total(o),0);
  const workers=DB.users.filter(u=>u.role==='worker');
  return `
@@ -668,14 +688,14 @@ function renderReports(){
   <b style="color:var(--green)">${money(Math.round(ws*w.share/100))}</b></div>`}).join('')}
 </div>
 <div class="card"><div class="sec-title">Материалы (расходы)</div>
- <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
+ <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.filter(bizOrder).reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
 </div>
 <div style="padding:0 16px 16px"><button class="btn btn-green" onclick="exportCsv()">⬇ CSV</button></div>`}
 function csvCell(v){v=(v==null?'':String(v));return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function csvDate(s){if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
 function exportCsv(){
  const st=k=>(ST[k]||{}).t||k;
- const done=DB.orders.filter(o=>['completed','paid'].includes(o.status));
+ const done=DB.orders.filter(o=>bizOrder(o)&&['completed','paid'].includes(o.status));
  const ws=DB.users.filter(u=>u.role==='worker').map(w=>{
   const mine=done.filter(o=>o.worker===w.name);const sum=mine.reduce((s,o)=>s+total(o),0);
   return [w.name,mine.length,sum,w.share,Math.round(sum*w.share/100)];
@@ -685,12 +705,12 @@ function exportCsv(){
  ws.forEach(r=>L.push(r.map(csvCell).join(';')));
  L.push('');
  L.push(['Дата','Клиент','Телефон','Адрес','Статус','Сумма','Исполнитель'].map(csvCell).join(';'));
- DB.orders.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||''].map(csvCell).join(';')));
+ DB.orders.filter(bizOrder).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||''].map(csvCell).join(';')));
  L.push('');
  L.push(['ПЛАТЕЖИ'].map(csvCell).join(';'));
  L.push(['Дата','Заявка','Клиент','Тип','Метод','Сумма','Примечание'].map(csvCell).join(';'));
  const pays=[];
- DB.orders.forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
+ DB.orders.filter(bizOrder).forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
  pays.sort((a,b)=>String(b.p.date).localeCompare(String(a.p.date)));
  pays.forEach(x=>L.push([csvDate(x.p.date),'№'+x.o.id,x.o.client,PAY_T[x.p.type]||x.p.type,PAY_M[x.p.method]||x.p.method,x.p.sum,x.p.note||''].map(csvCell).join(';')));
  L.push(['ИТОГО приход','','','','',pays.filter(x=>x.p.type!=='materials').reduce((s,x)=>s+(+x.p.sum||0),0),''].map(csvCell).join(';'));
@@ -710,6 +730,11 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">☁️ Fireb
  <div class="tgl"><span style="font-weight:500;font-size:14px">Фото в Firebase Storage (бакет создан)</span>
   <label class="switch"><input type="checkbox" id="adm-stor" ${DB.storageEnabled?'checked':''} onchange="toggleStorage(this.checked)"><span class="slider"></span></label></div>
  <div class="muted" style="margin-top:6px">Включайте только после создания бакета в консоли Firebase. Выключено — фото хранятся в базе (коллекция photos).</div>
+</div>`:''}
+${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🧪 Тестовые заявки</div>
+ <div class="tgl"><span style="font-weight:500;font-size:14px">Показывать тестовые заявки</span>
+  <label class="switch"><input type="checkbox" ${DB.showTest?'checked':''} onchange="DB.showTest=this.checked;save();render()"><span class="slider"></span></label></div>
+ <div class="muted" style="margin-top:6px">Выключено — тестовые скрыты из списков, календаря и задач (но всегда вне отчётов, финансов и CSV).</div>
 </div>`:''}
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
  ${DB.users.filter(u=>u.role==='worker').map(u=>`
@@ -734,7 +759,7 @@ function renderFin(){
  if(!canFinance()){el.innerHTML='<div class="muted">Нет права finance_edit</div>';return}
  const from=document.getElementById('fin-from').value,to=document.getElementById('fin-to').value;
  let pays=[];
- DB.orders.forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
+ DB.orders.filter(bizOrder).forEach(o=>orderPayments(o).forEach(p=>pays.push({o:o,p:p})));
  if(from)pays=pays.filter(x=>x.p.date>=from);
  if(to)pays=pays.filter(x=>x.p.date<=to);
  pays.sort((a,b)=>String(b.p.date).localeCompare(String(a.p.date)));
@@ -749,6 +774,8 @@ function renderFin(){
  el.innerHTML=html;
 }
 function setStatus(id,s){const o=byId(id);
+ // смена статуса на «Отменена» — только через модалку с причиной (право orders_cancel)
+ if(s==='canceled'){ if(!canCancel())return alert('Нет права orders_cancel'); cancelOrderModal(id); return; }
  if((s==='completed'||s==='paid')&&o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {o.status=s;markOrder(o);save();render();} });
   return;
@@ -902,6 +929,7 @@ function doSaveOrder(force){const g=x=>document.getElementById(x).value;
  const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
   status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
   photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
+  test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
   materials:state.newMats.slice(),photos:[],type:otype,payments:[]};
  if(otype!=='standard')o.stages=(state.cStages||[]).slice();
  DB.orders.unshift(o);
@@ -932,6 +960,34 @@ function toggleStorage(on){
  if(typeof STOR_CHECKED!=='undefined'){STOR_CHECKED=false;STOR_OK=false}
  save();render();
  if(on)alert('Настройка сохранена. Проверка бакета пройдёт при следующем входе; если бакета нет — фото продолжат идти в базу.');
+}
+function setTestFlag(id,v){const o=byId(id);o.test=!!v;markOrder(o);save();render()}
+function cancelOrderModal(id){
+ const o=byId(id);
+ if(!canCancel())return alert('Нет права orders_cancel');
+ if(['completed','paid'].includes(o.status))return alert('Закрытую заявку отменить нельзя');
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
+   <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">❌ Отмена заявки №${o.id}</b>
+    <textarea class="input" id="cancel-reason" placeholder="Причина отмены * (обязательно)" style="min-height:70px;margin-bottom:12px"></textarea>
+    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
+    <button class="btn btn-red" onclick="doCancelOrder(${id})">Отменить заявку</button></div>
+   </div></div>`);
+}
+function doCancelOrder(id){
+ const o=byId(id);
+ if(!canCancel())return alert('Нет права orders_cancel');
+ const reason=(document.getElementById('cancel-reason').value||'').trim();
+ if(!reason)return alert('Укажите причину отмены');
+ o.status='canceled';o.cancelReason=reason;o.cancelBy=state.user;o.cancelTs=Date.now();
+ markOrder(o);save();
+ document.querySelector('#app > div[style*="z-index:99"]').remove();
+ render();
+ if(typeof pushEvent==='function'){
+  const txt='Заявка отменена: '+reason;
+  pushEvent('order','❌ '+txt+' — №'+o.id,'Клиент: '+escapeHtml(o.client||'')+' • отменил: '+escapeHtml(state.user||''),o.id);
+ }
 }
 function otypeChange(v){
  state.cStages=stageDefault(v);
@@ -1010,7 +1066,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.1';
+const APP_VERSION='1.5.2';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1042,6 +1098,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
