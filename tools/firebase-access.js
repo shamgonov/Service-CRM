@@ -330,11 +330,11 @@ var SYNC_OK_TS=0;               // момент показа «Синхрони�
 function lsGet(k,d){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):d; }catch(e){ return d; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ console.warn('ls err',e); } }
 function cacheOrders(arr){ lsSet('crm_cache_orders',arr); }
-function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]}); }
+function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[]}); }
 function loadCachedData(){
  var co=lsGet('crm_cache_orders',null), cs=lsGet('crm_cache_state',null);
  if(co&&co.length&&(!DB.orders||!DB.orders.length))DB.orders=co;
- if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; }
+ if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; }
  return !!(co&&co.length);
 }
 function queueGet(){ return lsGet('crm_queue',[]); }
@@ -418,10 +418,10 @@ function loadCloud(cb){
   var st=(snap.exists&&snap.data())||null;
   var changed=false;
   if(st && st.db){
-   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270};
-   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270});
+   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[]};
+   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[]});
    LAST_STATE_JSON=JSON.stringify(ns);
-   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq;
+   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations;
    if(changed)cacheState();
   } else if(isOwner()){
    var init=defaultData(); init.orders=[];
@@ -443,7 +443,7 @@ function loadCloud(cb){
 // запись настроек (users/templates/seq) — app/state БЕЗ orders
 function saveSettings(){
  if(!DB)return;
- var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[]};
+ var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[]};
  cacheState();
  if(OFFLINE||ORDERS_ERR&&!STATE_SUB){ queuePush({kind:'settings'}); return; }
  fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){
@@ -695,8 +695,8 @@ function tabStaff(wrap){
      '<button class="btn-sm btn-blue" onclick="setEmpRole(\''+e.deviceId+'\')">Роль</button>'+
     '</div>'+
     '<div style="display:flex;gap:6px;margin-top:6px">'+
-     '<select class="input" id="q_'+e.deviceId+'" style="flex:1"><option value="">+ квалификация</option>'+
-      '<option>монтажник</option><option>диагност</option><option>электрик</option><option>старший</option></select>'+
+     '<select class="input" id="q_'+e.deviceId+'" style="flex:1"><option value="">+ специализация</option>'+
+      ((DB.specializations||[]).map(function(q){return '<option>'+esc(q)+'</option>';}).join('')||'<option value="" disabled>справочник пуст</option>')+'</select>'+
      '<button class="btn-sm btn-outline" onclick="addQual(\''+e.deviceId+'\')">+</button>'+
      '<button class="btn-sm btn-red" onclick="fireEmp(\''+e.deviceId+'\')">Уволить</button>'+
     '</div>'+
@@ -913,7 +913,7 @@ window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=nul
 // ============================================================
 // ЛИЧНЫЙ КАБИНЕТ «МОЙ ПРОФИЛЬ» + PIN-ЗАЩИТА УСТРОЙСТВА
 // ============================================================
-var QUALS_CATALOG=['монтажник','диагност','электрик','старший'];
+// справочник специализаций — settings.specializations (админка); старый QUALS_CATALOG удалён
 var MYDOC=null;               // кэш employees/{deviceId}
 var AVATAR_TMP=null;          // base64 после даунскейла (до сохранения)
 var PIN_TRIES=0;
@@ -973,7 +973,7 @@ function renderProfile(){
  var avHtml=av
   ?'<img src="'+av+'" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:2px solid var(--blue)">'
   :'<div style="width:88px;height:88px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:34px">👤</div>';
- var quals=(p.spec)||[];
+ var quals=(p.specs||p.spec||[]);
  return '<div class="header dark"><button class="back" onclick="go(\'orders\')">←</button><h1>👤 Мой профиль</h1></div>'+
  '<div class="card" style="text-align:center">'+avHtml+
   '<div><button class="btn-sm btn-outline" style="margin-top:8px" onclick="document.getElementById(\'avFile\').click()">📷 Загрузить фото</button>'+
@@ -988,8 +988,20 @@ function renderProfile(){
   '<div class="field"><label class="label">График работы</label><input class="input" id="pf-schedule" value="'+esc(p.schedule||'')+'" placeholder="напр.: пн-пт 9:00–18:00"></div>'+
  '</div>'+
  '<div class="card"><div class="sec-title">Специализация</div>'+
-  '<div class="chips">'+QUALS_CATALOG.map(function(q){
-   return '<span class="chip '+(quals.indexOf(q)>=0?'sel':'')+'" onclick="this.classList.toggle(\'sel\')">'+esc(q)+'</span>';}).join('')+'</div>'+
+  (function(){
+   var cat=(typeof DB!=='undefined'&&DB.specializations)||[];
+   if(!cat.length&&!quals.length)return '<div class="muted">Справочник пуст, владелец добавит специализации в админке</div>';
+   var html='<div class="chips">';
+   cat.forEach(function(q){
+    html+='<span class="chip '+(quals.indexOf(q)>=0?'sel':'')+'" data-spec="'+esc(q)+'" onclick="this.classList.toggle(\'sel\')">'+esc(q)+'</span>';
+   });
+   // старые значения вне справочника — серые чипы с крестиком
+   quals.forEach(function(q){
+    if(cat.indexOf(q)<0)html+='<span class="chip" style="background:#f3f4f6;color:#6b7280;opacity:.7" data-spec="'+esc(q)+'" data-offbook="1" onclick="this.classList.toggle(\'sel\')">'+esc(q)+' <span class="muted" style="font-size:10px">вне справочника</span> <span style="cursor:pointer;color:var(--red)" onclick="event.stopPropagation();this.parentElement.remove()">✕</span></span>';
+   });
+   if(!cat.length&&quals.length)html+='<div class="muted" style="margin-top:4px">Справочник пуст, владелец добавит специализации в админке</div>';
+   return html+'</div>';
+  })()+
  '</div>'+
  '<div class="card"><div class="sec-title">🔔 Уведомления</div>'+
   '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-sys" '+(nt.sys?'checked':'')+'> Системные уведомления (когда приложение свёрнуто)</label>'+
@@ -1161,10 +1173,13 @@ function saveProfile(){
  if(!MYDOC){alert('Профиль не загружен');return;}
  var g=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
  var spec=[];
- document.querySelectorAll('.card .chip.sel').forEach(function(c){ if(QUALS_CATALOG.indexOf(c.textContent)>=0)spec.push(c.textContent); });
+ document.querySelectorAll('.card .chip.sel').forEach(function(c){
+  var v=c.getAttribute('data-spec')||c.textContent;
+  if(v)spec.push(v);
+ });
  var old=MYDOC.profile||{};
  var p={fio:g('pf-fio'),phone:g('pf-phone'),email:g('pf-email'),city:g('pf-city'),schedule:g('pf-schedule'),
-  spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),
+  specs:spec,spec:spec,avatar:(AVATAR_TMP!==null?AVATAR_TMP:(old.avatar||'')),
   pin:old.pin||'',pinSalt:old.pinSalt||'',pinHash:old.pinHash||'',
   notify:{sys:document.getElementById('pf-nt-sys')?document.getElementById('pf-nt-sys').checked:(old.notify&&old.notify.sys!==false),
    sound:document.getElementById('pf-nt-sound')?document.getElementById('pf-nt-sound').checked:(old.notify&&old.notify.sound!==false),

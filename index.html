@@ -386,7 +386,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.3</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice().filter(visOrder);
@@ -781,6 +781,16 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🧪 Тес�
   <label class="switch"><input type="checkbox" ${DB.showTest?'checked':''} onchange="DB.showTest=this.checked;save();render()"><span class="slider"></span></label></div>
  <div class="muted" style="margin-top:6px">Выключено — тестовые скрыты из списков, календаря и задач (но всегда вне отчётов, финансов и CSV).</div>
 </div>`:''}
+${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Специализации</div>
+ ${(DB.specializations||[]).map((s,i)=>`<div class="info-row" id="spec-row-${i}">
+   <span id="spec-name-${i}">${escapeHtml(s)} <span class="muted">используют: ${(DB.users||[]).filter(u=>((u.profile||{}).specs||[]).indexOf(s)>=0).length}</span></span>
+   <span style="display:flex;gap:6px">
+    <button class="btn-sm btn-outline" onclick="specRename(${i})">✏️</button>
+    <button class="btn-sm btn-red" onclick="specDel(${i})">🗑</button>
+   </span></div>`).join('')||'<div class="muted">Справочник пуст</div>'}
+ <div class="row2" style="margin-top:10px"><input class="input" id="spec-new" placeholder="Новая специализация">
+ <button class="btn btn-outline" onclick="specAdd()">＋ Добавить</button></div>
+</div>`:''}
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
  ${DB.users.filter(u=>u.role==='worker').map(u=>`
  <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
@@ -1010,6 +1020,43 @@ function toggleStorage(on){
  if(on)alert('Настройка сохранена. Проверка бакета пройдёт при следующем входе; если бакета нет — фото продолжат идти в базу.');
 }
 function setTestFlag(id,v){const o=byId(id);o.test=!!v;markOrder(o);save();render()}
+// === справочник специализаций (settings.specializations) ===
+function specCanEdit(){return isOwner()||canFinance()}
+function specAdd(){
+ if(!specCanEdit())return alert('Нет прав');
+ const v=(document.getElementById('spec-new').value||'').trim();
+ if(!v)return alert('Введите название');
+ DB.specializations=DB.specializations||[];
+ if(DB.specializations.indexOf(v)>=0)return alert('Такая специализация уже есть');
+ DB.specializations.push(v);save();render();
+}
+function specRename(i){
+ if(!specCanEdit())return alert('Нет прав');
+ const old=DB.specializations[i];if(old==null)return;
+ const row=document.getElementById('spec-name-'+i);if(!row)return;
+ row.innerHTML='<input class="input" id="spec-edit" value="'+escapeHtml(old)+'" style="max-width:180px;display:inline-block"> <button class="btn-sm btn-green" onclick="specRenameSave('+i+',\''+escapeHtml(old).replace(/'/g,"\\'")+'\')">✓</button>';
+ const inp=document.getElementById('spec-edit');inp.focus();
+ inp.onkeydown=function(e){ if(e.key==='Enter')specRenameSave(i,old); };
+}
+function specRenameSave(i,old){
+ const nv=(document.getElementById('spec-edit').value||'').trim();
+ if(!nv||nv===old){render();return}
+ DB.specializations[i]=nv;
+ // переименование во всех профилях
+ (DB.users||[]).forEach(u=>{
+  const pr=u.profile||{};
+  const arr=pr.specs||pr.spec||[];
+  if(arr.indexOf(old)>=0){ const na=arr.map(x=>x===old?nv:x); pr.specs=na; pr.spec=na; u.profile=pr; }
+ });
+ save();render();
+}
+function specDel(i){
+ if(!specCanEdit())return alert('Нет прав');
+ const v=DB.specializations[i];if(v==null)return;
+ const n=(DB.users||[]).filter(u=>((u.profile||{}).specs||[]).indexOf(v)>=0).length;
+ if(n>0&&!confirm('Специализацию используют '+n+' сотрудников, она исчезнет из их профилей. Удалить?'))return;
+ DB.specializations.splice(i,1);save();render();
+}
 function cancelOrderModal(id){
  const o=byId(id);
  if(!canCancel())return alert('Нет права orders_cancel');
@@ -1115,7 +1162,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.3';
+const APP_VERSION='1.5.4';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1147,6 +1194,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
