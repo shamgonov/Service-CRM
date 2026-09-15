@@ -382,6 +382,28 @@ function ordersRef(){ return fs.collection('orders'); }
 // deep-equal для пропуска холостых рендеров (снапшот без изменений не дёргает DOM)
 function jsonEq(a,b){ try{ return JSON.stringify(a)===JSON.stringify(b); }catch(e){ return false; } }
 var LAST_ORDERS_JSON=null, LAST_STATE_JSON=null;
+// === РАЗОВАЯ ПОМЕТКА ДЕМО-ЗАЯВОК ПРОТОТИПА (сигнатуры удалённого сида) ===
+// Выполняет только владелец при первом старте: совпадение по клиент+адрес+сумма → test:true.
+var DEMO_SIG=[
+ {client:'Иванов Иван',address:'ул. Ленина, 15, кв. 42',price:15000},
+ {client:'Петров Петр',address:'ул. Мира, 8',price:7500},
+ {client:'Сидоров Сидор',address:'ул. Гагарина, 3',price:6500},
+ {client:'Козлова Анна',address:'пр. Победы, 42',price:1500},
+ {client:'Николаев Н.Н.',address:'ул. Садовая, 1',price:14000}
+];
+function markDemoOrdersOnce(){
+ if(!isOwner())return;
+ try{ if(localStorage.getItem('crm_demo_marked')==='1')return; }catch(e){}
+ if(!DB||!DB.orders||!DB.orders.length)return;
+ var n=0;
+ DB.orders.forEach(function(o){
+  if(o.test)return;
+  var hit=DEMO_SIG.some(function(s){ return o.client===s.client&&o.address===s.address&&(+o.price===s.price); });
+  if(hit){ o.test=true; n++; try{ orderSave(o); }catch(e){} }
+ });
+ try{ localStorage.setItem('crm_demo_marked','1'); }catch(e){}
+ if(n)console.log('demo orders marked:',n);
+}
 function loadCloud(cb){
  if(unsub)unsub();
  var first=true;
@@ -397,6 +419,7 @@ function loadCloud(cb){
   LAST_ORDERS_JSON=JSON.stringify(arr);
   DB.orders=arr;
   if(changed)cacheOrders(arr);
+  markDemoOrdersOnce();
   if(!first&&changed)watchNewOrders(prev, DB);
   if(!first&&changed)watchAddedOrders(prev, DB);
   ORDERS_SUB=true; first=false;

@@ -128,7 +128,9 @@ function showTest(){return !!(DB&&DB.showTest)}
 function isTest(o){return !!o.test}
 // тестовые скрыты при showTest=false (списки/календарь/задачи/схема/уведомления);
 // из отчётов/финансов/CSV/долей исключены ВСЕГДА
-function visOrder(o){return !isTest(o)||showTest()}
+function visOrder(o){return !isTest(o)||(showTest()&&adminLike())}
+// тестовые видимы только владельцу/админу и только при включённом тумблере
+function adminLike(){if(typeof isOwner==='function'&&isOwner())return true;return state.role==='admin'||state.user==='Владелец';}
 function bizOrder(o){return !isTest(o)}
 function canCancel(){if(typeof can==='function')return isOwner()||can('orders_cancel');return ['admin'].includes(state.role)}
 // === ИСТОРИЯ ЗАЯВКИ ===
@@ -202,24 +204,7 @@ function defaultData(){return{
   {id:'t4',name:'Обслуживание вентиляции',price:6500},
   {id:'t5',name:'Штробление стены (м.п.)',price:1500},
   {id:'t6',name:'Демонтаж старого блока',price:2000}],
- orders:[
-  {id:248,client:'Иванов Иван',phone:'+7(900)123-45-67',address:'ул. Ленина, 15, кв. 42',desc:'Установка кондиционера, 2 комнаты',
-   status:'in_progress',date:d0,t1:'14:00',t2:'16:00',price:15000,extras:[{name:'Штробление 2 м.п.',price:3000}],
-   photoReport:true,worker:'Вася',photos:[],
-   materials:[
-    {name:'Кабель ВВГ 3×2.5',qty:'30 м',price:4500,buyer:'worker',where:'Электромир, ул. Мира 22',deadline:3,unit:'h',status:'todo'},
-    {name:'Кронштейны усиленные',qty:'2 шт',price:1200,buyer:'worker',where:'Строймаркет',deadline:3,unit:'h',status:'todo'}]},
-  {id:251,client:'Петров Петр',phone:'+7(901)222-33-44',address:'ул. Мира, 8',desc:'Замена розеток, 5 шт',
-   status:'approved',date:d1,t1:'10:00',t2:'12:00',price:7500,extras:[],photoReport:false,worker:'Вася',photos:[],
-   materials:[{name:'Розетки Legrand',qty:'5 шт',price:2500,buyer:'worker',where:'Электромир',deadline:12,unit:'h',status:'todo'}]},
-  {id:264,client:'Сидоров Сидор',phone:'+7(902)333-44-55',address:'ул. Гагарина, 3',desc:'Обслуживание вентиляции',
-   status:'approved',date:d7,t1:'12:00',t2:'14:00',price:6500,extras:[],photoReport:true,worker:null,photos:[],
-   materials:[{name:'Фильтр воздушный F5',qty:'2 шт',price:1800,buyer:'delivery',where:'Склад поставщика → адрес',deadline:2,unit:'d',status:'delivery'}]},
-  {id:266,client:'Козлова Анна',phone:'+7(903)444-55-66',address:'пр. Победы, 42',desc:'Осмотр перед установкой сплит-системы',
-   status:'inspection',date:d0,t1:'17:00',t2:'18:00',price:1500,extras:[],photoReport:true,worker:'Анна',photos:[],materials:[]},
-  {id:240,client:'Николаев Н.Н.',phone:'+7(904)555-66-77',address:'ул. Садовая, 1',desc:'Установка кондиционера',
-   status:'paid',date:d2,t1:'10:00',t2:'13:00',price:14000,extras:[{name:'Демонтаж старого',price:2000}],photoReport:false,worker:'Петя',photos:[],materials:[]}
- ]};}
+ orders:[]};}
 let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:d0,newMats:[]};
 function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}}
 function save(){localStorage.setItem('crm_db',JSON.stringify(DB));
@@ -410,7 +395,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.5</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.6</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice().filter(visOrder);
@@ -1207,7 +1192,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.5';
+const APP_VERSION='1.5.6';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1239,6 +1224,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
