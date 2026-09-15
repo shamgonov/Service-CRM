@@ -733,6 +733,22 @@ function tabRoles(wrap){
    }
    html+='</div>';
  });
+ // --- Специализации (справочник, settings.specializations) ---
+ function specCount(v){ return (DB.users||[]).filter(function(u){ return ((u.profile||{}).specs||[]).indexOf(v)>=0; }).length; }
+ html+='<div class="sec-title" style="margin-top:16px">🛠 Специализации</div>';
+ (DB.specializations||[]).forEach(function(s,i){
+  html+='<div class="mat" style="border-left:4px solid #10b981"><div class="mat-head"><b>'+esc(s)+'</b>'+
+   '<span style="display:flex;gap:6px">'+
+   '<button class="btn-sm btn-outline" onclick="specRename('+i+')">✏️</button>'+
+   '<button class="btn-sm btn-red" onclick="specDel('+i+')">🗑</button></span></div>'+
+   '<div class="muted">используют: '+specCount(s)+'</div>'+
+   '<div id="spec-name-'+i+'"></div></div>';
+ });
+ if(!(DB.specializations||[]).length)html+='<div class="muted">Справочник пуст</div>';
+ html+='<div style="display:flex;gap:6px;margin-top:8px">'+
+  '<input class="input" id="spec-new" placeholder="Новая специализация" style="flex:1">'+
+  '<button class="btn btn-outline" onclick="specAdd()">＋ Добавить</button></div>';
+
  wrap.innerHTML=html;
 }
 
@@ -900,10 +916,26 @@ window.save = function(order){
  if(order && order.id!=null){ orderSave(order); return; }
  var wasOrder=false;
  try{
-  if(state && state.__mutOrder){ var o=state.__mutOrder; state.__mutOrder=null; orderSave(o); wasOrder=true; }
+  if(state && state.__mutOrder){
+   var o=state.__mutOrder; state.__mutOrder=null;
+   // edit-лог: сравнение ключевых полей «было→стало» (снимок делается в markOrder)
+   try{
+    var snap=state.__snapFields||{}; state.__snapFields=null;
+    var changed=[];
+    var cur={sum:totalOf(o),date:o.date,t1:o.t1,t2:o.t2,address:o.address,worker:o.worker,client:o.client};
+    var names={sum:'сумма',date:'дата',t1:'начало',t2:'окончание',address:'адрес',worker:'исполнитель',client:'клиент'};
+    Object.keys(names).forEach(function(k){
+     var a=snap[k],b=cur[k];
+     if(String(a||'')!==String(b||''))changed.push(names[k]+': '+(a==null||a===''?'—':a)+' → '+(b==null||b===''?'—':b));
+    });
+    if(changed.length)logAction(o,'edit',{fields:changed});
+   }catch(e){}
+   orderSave(o); wasOrder=true;
+  }
  }catch(e){}
  if(!wasOrder) saveSettings();
 };
+function totalOf(o){ try{ return (+o.price||0)+((o.extras||[]).reduce(function(s,e){return s+(+e.price||0);},0)); }catch(e){ return 0; } }
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
 // сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
 window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';

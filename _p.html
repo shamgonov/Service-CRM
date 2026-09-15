@@ -69,7 +69,6 @@ h1,h2,h3{font-weight:600}
 <body>
 
 <div id="app"></div>
-<div id="modal-root"></div>
 <nav id="nav" style="display:none"></nav>
 <script>
 // === BOOT-GUARD: самовосстановление при битом кэше SW ===
@@ -165,27 +164,12 @@ function historyBlock(o){
  var hist=(o.history||[]).slice().sort(function(a,b){return String(b.ts).localeCompare(String(a.ts));});
  var html='<div class="card"><div class="sec-title">📜 История</div>';
  if(!hist.length)return html+'<div class="muted">Событий пока нет</div></div>';
- hist.forEach(function(h,idx){
+ hist.forEach(function(h){
   var u=(typeof userNameById==='function'&&userNameById(h.by))||h.by;
-  var line=histLine(h);
-  var open=idx===0; // первое (свежее) событие раскрыто
-  html+='<div class="info-row" style="cursor:pointer;align-items:flex-start" onclick="histToggle(this)">'+
-   '<span>'+ (open?'▾ ':'▸ ')+(HIST_A[h.action]||h.action)+
-    '<div class="hist-details" style="display:'+(open?'block':'none')+';margin-top:4px">'+
-     (line?'<div class="muted">'+escapeHtml(line)+'</div>':'')+
-     '<div class="muted" style="font-size:11px">'+escapeHtml(u)+' • '+new Date(h.ts).toLocaleString()+'</div>'+
-    '</div></span>'+
-   '<span class="muted" style="text-align:right;font-size:12px;white-space:nowrap">'+new Date(h.ts).toLocaleDateString()+'<br>'+new Date(h.ts).toLocaleTimeString().slice(0,5)+'</span></div>';
+  html+='<div class="info-row"><span>'+(HIST_A[h.action]||h.action)+(histLine(h)?'<br><span class="muted">'+escapeHtml(histLine(h))+'</span>':'')+'</span>'+
+   '<span class="muted" style="text-align:right;font-size:12px">'+new Date(h.ts).toLocaleString()+'<br>'+escapeHtml(u)+'</span></div>';
  });
  return html+'</div>';
-}
-function histToggle(el){
- var d=el.querySelector('.hist-details');
- if(!d)return;
- var head=el.querySelector('span');
- var open=d.style.display!=='none';
- d.style.display=open?'none':'block';
- if(head)head.innerHTML=(open?'▸ ':'▾ ')+head.innerHTML.replace(/^[▸▾]\s*/,'');
 }
 function defaultData(){return{
  seq:270,
@@ -226,15 +210,7 @@ function save(){localStorage.setItem('crm_db',JSON.stringify(DB));
  // облачная запись: window.save сам смотрит state.__mutOrder (заявка → её документ, иначе настройки)
  if(typeof window.save==='function')window.save();
 }
-function markOrder(o){
- // фикс для edit-лога: снимок ключевых полей до мутации (сравнение делается в save())
- if(!state.__mutOrder||state.__mutOrder.id!==o.id){
-  state.__snapFields={sum:total(o),date:o.date,t1:o.t1,t2:o.t2,address:o.address,worker:o.worker,client:o.client};
- } else if(!state.__snapFields){
-  state.__snapFields={sum:total(o),date:o.date,t1:o.t1,t2:o.t2,address:o.address,worker:o.worker,client:o.client};
- }
- state.__mutOrder=o;
-}
+function markOrder(o){state.__mutOrder=o}
 function reset(){localStorage.removeItem('crm_db');load();render();alert('Демо-данные сброшены')}
 load();
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
@@ -340,15 +316,15 @@ function paymentsBlock(o){
 function payModal(id,dir){
  const o=byId(id);
  const types=dir==='materials'?['materials']:['advance','partial','full'];
- openModal(
-  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">${dir==='materials'?'📤 Выдать на материалы':'📥 Приход'}</b>
     <select class="input" id="pay-type" style="margin-bottom:8px">${types.map(t=>`<option value="${t}">${PAY_T[t]}</option>`).join('')}</select>
     <input class="input" id="pay-sum" type="number" placeholder="Сумма ₽ *" style="margin-bottom:8px">
     <select class="input" id="pay-method" style="margin-bottom:8px">${Object.keys(PAY_M).map(m=>`<option value="${m}">${PAY_M[m]}</option>`).join('')}</select>
     <input class="input" id="pay-note" placeholder="Примечание" style="margin-bottom:12px">
-    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
     <button class="btn btn-green" onclick="payAdd(${id},'${dir}')">Сохранить</button></div>
    </div></div>`);
 }
@@ -364,7 +340,7 @@ function payAdd(id,dir){
  o.payments.push({id:'p'+Date.now(),sum:sum,type:t,method:method,date:new Date().toISOString().slice(0,10),note:note});
  logAction(o,t==='materials'?'payment_materials':'payment_received',t==='materials'?{sum:sum}:{sum:sum,type:t,method:method,note:note});
  markOrder(o);save();
- document.querySelector('#modal-root > div[style*="z-index:99"]').remove();
+ document.querySelector('#app > div[style*="z-index:99"]').remove();
  render();
  if(typeof pushEvent==='function'){
   if(t==='materials')pushEvent('stage','📤 Аванс на материалы выдан — заявка №'+o.id,money(sum)+' для '+escapeHtml(o.worker||'исполнителя'),o.id);
@@ -410,7 +386,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.5</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice().filter(visOrder);
@@ -877,8 +853,8 @@ function closeOrderModal(id){
  const pays=orderPayments(o).filter(p=>p.type!=='materials');
  const hadPays=pays.length>0;
  const bal=balance(o);
- openModal(
-  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
    <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">🧾 Закрытие заказа №${o.id}</b>
     ${rows.map(r=>`<div class="info-row"><span>${escapeHtml(r.n)}</span><b>${money(r.s)}</b></div>`).join('')}
@@ -887,7 +863,7 @@ function closeOrderModal(id){
     <div class="info-row"><span class="muted">Остаток</span><b style="color:var(--red)">${money(bal)}</b></div>
     <button class="btn btn-green" style="width:100%;margin-top:12px" onclick="closeOrderPay(${o.id})">✅ Заказчик внёс остаток (${money(bal)})</button>
     ${!hadPays?`<button class="btn btn-blue" style="width:100%;margin-top:8px" onclick="closeOrderFull(${o.id})">💵 Оплачено полностью (${money(total(o))})</button>`:''}
-    <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="closeModal()">Отмена</button>
+    <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
    </div></div>`);
 }
 function closeOrderPay(id){
@@ -912,8 +888,7 @@ function closeOrderFull(id){
  if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(total(o))+' (полная оплата при закрытии)',o.id);
  doCompleteOrder(id);
 }
-function closeOrderModalRemove(){closeModal()}
-// === модальный root ВНЕ области render(): снапшоты/таймеры не уничтожают открытые модалки ===
+function closeOrderModalRemove(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
 function doCompleteOrder(id){const o=byId(id);
  if(o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
@@ -991,7 +966,7 @@ function saveOrder(){const g=x=>document.getElementById(x).value;
  if(conf.length){
   const c=conf[0];
   const canOv=canOverrideConflict();
-  openModal(
+  document.getElementById('app').insertAdjacentHTML('beforeend',
    `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px">
     <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px;text-align:center">
      <div style="font-size:34px">⚠️</div>
@@ -1004,22 +979,7 @@ function saveOrder(){const g=x=>document.getElementById(x).value;
  }
  doSaveOrder(false);
 }
-function closeConflictModal(){closeModal()}
-// === модальный root ВНЕ области render(): снапшоты/таймеры не уничтожают открытые модалки ===
-function openModal(html){
- var root=document.getElementById('modal-root');
- if(!root){root=document.createElement('div');root.id='modal-root';document.body.appendChild(root);}
- root.innerHTML=html;
-}
-function closeModal(){
- var root=document.getElementById('modal-root');
- if(root)root.innerHTML='';
-}
-function modalIsOpen(){
- var root=document.getElementById('modal-root');
- return !!(root&&root.firstElementChild);
-}
-function closeOrderModalRemove(){closeModal()}
+function closeConflictModal(){const m=document.querySelector('#app > div[style*="z-index:99"]');if(m)m.remove()}
 function doSaveOrder(force){const g=x=>document.getElementById(x).value;
  if(!force)closeConflictModal();
  const otype=document.getElementById('c-otype')?document.getElementById('c-otype').value:'standard';
@@ -1080,7 +1040,7 @@ function specRename(i){
 }
 function specRenameSave(i,old){
  const nv=(document.getElementById('spec-edit').value||'').trim();
- if(!nv||nv===old){refreshAdminView();return}
+ if(!nv||nv===old){render();return}
  DB.specializations[i]=nv;
  // переименование во всех профилях
  (DB.users||[]).forEach(u=>{
@@ -1088,30 +1048,25 @@ function specRenameSave(i,old){
   const arr=pr.specs||pr.spec||[];
   if(arr.indexOf(old)>=0){ const na=arr.map(x=>x===old?nv:x); pr.specs=na; pr.spec=na; u.profile=pr; }
  });
- save();refreshAdminView();
+ save();render();
 }
 function specDel(i){
  if(!specCanEdit())return alert('Нет прав');
  const v=DB.specializations[i];if(v==null)return;
  const n=(DB.users||[]).filter(u=>((u.profile||{}).specs||[]).indexOf(v)>=0).length;
  if(n>0&&!confirm('Специализацию используют '+n+' сотрудников, она исчезнет из их профилей. Удалить?'))return;
- DB.specializations.splice(i,1);save();refreshAdminView();
-}
-// обновление текущего экрана админки: staff (вкладка ролей) или admin
-function refreshAdminView(){
- if(state.screen==='staff'&&typeof loadStaff==='function'){loadStaff();return}
- render();
+ DB.specializations.splice(i,1);save();render();
 }
 function cancelOrderModal(id){
  const o=byId(id);
  if(!canCancel())return alert('Нет права orders_cancel');
  if(['completed','paid'].includes(o.status))return alert('Закрытую заявку отменить нельзя');
- openModal(
-  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+ document.getElementById('app').insertAdjacentHTML('beforeend',
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()">
    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">❌ Отмена заявки №${o.id}</b>
     <textarea class="input" id="cancel-reason" placeholder="Причина отмены * (обязательно)" style="min-height:70px;margin-bottom:12px"></textarea>
-    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="this.closest('div[style*=z-index]').remove()">Отмена</button>
     <button class="btn btn-red" onclick="doCancelOrder(${id})">Отменить заявку</button></div>
    </div></div>`);
 }
@@ -1123,7 +1078,7 @@ function doCancelOrder(id){
  o.status='canceled';o.cancelReason=reason;o.cancelBy=state.user;o.cancelTs=Date.now();
  logAction(o,'cancel',{reason:reason});
  markOrder(o);save();
- document.querySelector('#modal-root > div[style*="z-index:99"]').remove();
+ document.querySelector('#app > div[style*="z-index:99"]').remove();
  render();
  if(typeof pushEvent==='function'){
   const txt='Заявка отменена: '+reason;
@@ -1207,7 +1162,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.5';
+const APP_VERSION='1.5.4';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1239,7 +1194,6 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
-
 
 
 
