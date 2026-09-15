@@ -12,6 +12,7 @@ var PERMS_CATALOG = [
  {key:'orders_status',label:'Смена статусов'},
  {key:'orders_delete',label:'Удаление заявок'},
  {key:'orders_cancel',label:'Отмена заявок'},
+ {key:'orders_history',label:'Просмотр истории заявок'},
  {key:'calendar',label:'Календарь'},
  {key:'tasks',label:'Мои задачи'},
  {key:'shopping',label:'Закупки и материалы'},
@@ -1101,6 +1102,7 @@ function uploadPhoto(inp, id){
    }
    fs.collection('photos').doc(id+'_'+ts).set(doc).then(function(){
     PHOTOS_CACHE[id]=(PHOTOS_CACHE[id]||[]).concat([doc]);
+    try{ var o=byId?byId(id):null; if(o){ logAction(o,'photo_add',{count:1}); orderSave(o); } }catch(e){}
     go('details',id);
    }).catch(function(e){
     console.warn(e); OFFLINE=true;

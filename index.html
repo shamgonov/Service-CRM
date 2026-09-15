@@ -130,6 +130,47 @@ function isTest(o){return !!o.test}
 function visOrder(o){return !isTest(o)||showTest()}
 function bizOrder(o){return !isTest(o)}
 function canCancel(){if(typeof can==='function')return isOwner()||can('orders_cancel');return ['admin'].includes(state.role)}
+// === ИСТОРИЯ ЗАЯВКИ ===
+function logAction(order,action,details){
+ if(!order)return order;
+ order.history=order.history||[];
+ order.history.push({ts:new Date().toISOString(),by:(typeof deviceId==='function'?deviceId():'system'),action:action,details:details||null});
+ if(order.history.length>100)order.history=order.history.slice(-100);
+ return order;
+}
+const HIST_A={create:'Создана',assign:'Назначен исполнитель',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки'};
+function userNameById(devId){
+ if(!devId)return '';
+ if(devId==='system')return 'система';
+ var u=(DB.users||[]).find(function(x){return x.deviceId===devId;});
+ return u?u.name:devId;
+}
+function histLine(h){
+ var d=h.details||{};
+ var txt='';
+ if(h.action==='create')txt=(d.client||'')+' • '+(d.sum!=null?money(d.sum):'');
+ else if(h.action==='assign')txt='исполнитель: '+(d.worker||'—');
+ else if(h.action==='status_change')txt=(ST[d.from]&&ST[d.from].t||d.from||'')+' → '+(ST[d.to]&&ST[d.to].t||d.to||'');
+ else if(h.action==='payment_received')txt=money(d.sum)+' • '+(PAY_T[d.type]||d.type||'')+' • '+(PAY_M[d.method]||d.method||'')+(d.note?' • '+d.note:'');
+ else if(h.action==='payment_materials')txt=money(d.sum);
+ else if(h.action==='stage_add'||h.action==='stage_complete')txt='«'+(d.stageTitle||'')+'»';
+ else if(h.action==='cancel')txt='причина: '+(d.reason||'—');
+ else if(h.action==='photo_add')txt=(d.count||1)+' шт.';
+ else if(h.action==='edit')txt=(d.fields||[]).join(', ');
+ return txt;
+}
+function historyBlock(o){
+ if(!(typeof can==='function'&&can('orders_history'))&&!isOwner())return '';
+ var hist=(o.history||[]).slice().sort(function(a,b){return String(b.ts).localeCompare(String(a.ts));});
+ var html='<div class="card"><div class="sec-title">📜 История</div>';
+ if(!hist.length)return html+'<div class="muted">Событий пока нет</div></div>';
+ hist.forEach(function(h){
+  var u=(typeof userNameById==='function'&&userNameById(h.by))||h.by;
+  html+='<div class="info-row"><span>'+(HIST_A[h.action]||h.action)+(histLine(h)?'<br><span class="muted">'+escapeHtml(histLine(h))+'</span>':'')+'</span>'+
+   '<span class="muted" style="text-align:right;font-size:12px">'+new Date(h.ts).toLocaleString()+'<br>'+escapeHtml(u)+'</span></div>';
+ });
+ return html+'</div>';
+}
 function defaultData(){return{
  seq:270,
  users:[
@@ -241,6 +282,7 @@ function stageStart(id,i){const o=byId(id);const s=orderStages(o)[i];if(!s)retur
 function stageDone(id,i){
  const o=byId(id);const st=orderStages(o);const s=st[i];if(!s)return;
  s.done=true;s.ts_done=Date.now();
+ logAction(o,'stage_complete',{stageTitle:s.title});
  var nxt=st[i+1];
  markOrder(o);save();render();
  if(typeof pushEvent==='function'&&nxt&&nxt.by)pushEvent('stage','✅ Этап «'+escapeHtml(s.title)+'» готов — заявка №'+o.id,'Следующий этап: '+escapeHtml(nxt.title||'')+' — для '+escapeHtml(nxt.by),o.id);
@@ -251,6 +293,7 @@ function stageAdd(id){
  const o=byId(id);if(!canEditRoute(o))return;
  const t=prompt('Название этапа:');if(!t)return;
  o.stages.push({id:'st'+Date.now(),type:'custom',title:t,plan_start:'',plan_ready:'',done:false,by:'',ts_done:null});
+ logAction(o,'stage_add',{stageTitle:t});
  markOrder(o);save();render();
 }
 function paymentsBlock(o){
@@ -295,6 +338,7 @@ function payAdd(id,dir){
  if(dir==='materials'&&!confirm('Выдать на материалы '+money(sum)+'?'))return;
  o.payments=o.payments||[];
  o.payments.push({id:'p'+Date.now(),sum:sum,type:t,method:method,date:new Date().toISOString().slice(0,10),note:note});
+ logAction(o,t==='materials'?'payment_materials':'payment_received',t==='materials'?{sum:sum}:{sum:sum,type:t,method:method,note:note});
  markOrder(o);save();
  document.querySelector('#app > div[style*="z-index:99"]').remove();
  render();
@@ -342,7 +386,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.2</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.5.3</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice().filter(visOrder);
@@ -562,7 +606,8 @@ ${isW||canManage?`<div class="card">
 ${o.status==='canceled'?`<div class="card" style="border-left:4px solid #9ca3af"><div class="sec-title">❌ Заявка отменена</div>
  <div class="muted">Причина: ${escapeHtml(o.cancelReason||'—')}</div>
  <div class="muted">${o.cancelBy?'Отменил: '+escapeHtml(o.cancelBy)+' • ':''}${o.cancelTs?new Date(o.cancelTs).toLocaleString():''}</div></div>`:''}
-${paymentsBlock(o)}`}
+${paymentsBlock(o)}
+${historyBlock(o)}`}
 function renderCreate(){
  return `
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
@@ -777,11 +822,11 @@ function setStatus(id,s){const o=byId(id);
  // смена статуса на «Отменена» — только через модалку с причиной (право orders_cancel)
  if(s==='canceled'){ if(!canCancel())return alert('Нет права orders_cancel'); cancelOrderModal(id); return; }
  if((s==='completed'||s==='paid')&&o.photoReport){
-  orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {o.status=s;markOrder(o);save();render();} });
+  orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {logAction(o,'status_change',{from:o.status,to:s});o.status=s;markOrder(o);save();render();} });
   return;
  }
- o.status=s;markOrder(o);save();render()}
-function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';markOrder(o);save();routeGenerate(o);save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
+ logAction(o,'status_change',{from:o.status,to:s});o.status=s;markOrder(o);save();render()}
+function takeOrder(id){const o=byId(id);o.worker=state.user;o.status='approved';logAction(o,'assign',{worker:o.worker});logAction(o,'status_change',{from:'new',to:'approved'});markOrder(o);save();routeGenerate(o);save();alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
 function finishOrder(id){const o=byId(id);
  // manufacture: заказ завершается, когда все этапы готовы
  if(orderType(o)==='manufacture'&&orderStages(o).length){
@@ -817,6 +862,7 @@ function closeOrderPay(id){
  if(bal<=0)return closeOrderModalRemove(id);
  o.payments=o.payments||[];
  o.payments.push({id:'p'+Date.now(),sum:bal,type:'full',method:'cash',date:new Date().toISOString().slice(0,10),note:'при закрытии'});
+ logAction(o,'payment_received',{sum:bal,type:'full',method:'cash',note:'при закрытии'});
  markOrder(o);save();
  closeOrderModalRemove(id);
  if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(bal)+' (остаток при закрытии), баланс '+money(balance(o)),o.id);
@@ -826,6 +872,7 @@ function closeOrderFull(id){
  const o=byId(id);if(!canFinance())return alert('Нет прав');
  o.payments=o.payments||[];
  o.payments.push({id:'p'+Date.now(),sum:total(o),type:'full',method:'cash',date:new Date().toISOString().slice(0,10),note:'оплата полностью при закрытии'});
+ logAction(o,'payment_received',{sum:total(o),type:'full',method:'cash',note:'оплата полностью при закрытии'});
  markOrder(o);save();
  closeOrderModalRemove(id);
  if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(total(o))+' (полная оплата при закрытии)',o.id);
@@ -873,8 +920,8 @@ function matAct(id,i,st){const o=byId(id);o.materials[i].status=st;
  else if(st==='issue'){alert('Материал отмечен «Не найден». Заявка уже закрыта — статус не изменён, требуется решение админа.')}
  markOrder(o);save();render()}
 function addExtra(id){const n=prompt('Название доп. работы:');if(!n)return;const p=+prompt('Цена доп. работы ₽:','0')||0;
- byId(id).extras.push({name:n,price:p});markOrder(byId(id));save();render()}
-function delExtra(id,i){if(confirm('Удалить доп. работу?')){byId(id).extras.splice(i,1);markOrder(byId(id));save();render()}}
+ var o=byId(id);o.extras.push({name:n,price:p});logAction(o,'edit',{fields:['доп. работа: '+n+' ('+money(p)+')']});markOrder(o);save();render()}
+function delExtra(id,i){if(confirm('Удалить доп. работу?')){var o=byId(id);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
@@ -930,7 +977,8 @@ function doSaveOrder(force){const g=x=>document.getElementById(x).value;
   status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
   photoReport:document.getElementById('c-photo').checked,worker:g('c-worker')||null,
   test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
-  materials:state.newMats.slice(),photos:[],type:otype,payments:[]};
+  materials:state.newMats.slice(),photos:[],type:otype,payments:[],history:[]};
+ logAction(o,'create',{type:otype,client:o.client,sum:total(o)});
  if(otype!=='standard')o.stages=(state.cStages||[]).slice();
  DB.orders.unshift(o);
  if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
@@ -981,6 +1029,7 @@ function doCancelOrder(id){
  const reason=(document.getElementById('cancel-reason').value||'').trim();
  if(!reason)return alert('Укажите причину отмены');
  o.status='canceled';o.cancelReason=reason;o.cancelBy=state.user;o.cancelTs=Date.now();
+ logAction(o,'cancel',{reason:reason});
  markOrder(o);save();
  document.querySelector('#app > div[style*="z-index:99"]').remove();
  render();
@@ -1066,7 +1115,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.5.2';
+const APP_VERSION='1.5.3';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1098,6 +1147,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
