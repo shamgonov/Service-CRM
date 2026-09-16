@@ -113,30 +113,55 @@ APP.dispatch('change',ev(sel2));           // onchange-обработчик уж
 runTimers();
 t('7) change применил pending-рендер',APP.rebuilds===2);
 
+// 1.5b после change в select пауза снята → отложенный (async) render() применяется сразу
+//      (так работает смена статуса: orderHasPhotos → render уже после onchange)
+APP.dispatch('focusin',ev(sel2));
+vm.runInContext('render()',sb);              // выбор ещё не завершён — пауза держит
+t('7b) до выбора в select — без перерисовки',APP.rebuilds===2);
+APP.dispatch('change',ev(sel2));             // выбор завершён
+vm.runInContext('render()',sb);              // async-рендер после change (фотоотчёт)
+t('7c) async render после change применён сразу',APP.rebuilds===3);
+
+// 1.5c change в input: значение зафиксировано → pending применён, пауза снята
+const inp2=APP.appendChild(mkEl('input','c-note'));
+APP.dispatch('focusin',ev(inp2));
+vm.runInContext('render()',sb);
+APP.dispatch('change',ev(inp2));
+t('7d) до тика после change перерисовки нет',APP.rebuilds===3);
+runTimers();
+t('7e) change в input применил pending',APP.rebuilds===4);
+vm.runInContext('render()',sb);
+t('7f) после change пауза снята → render проходит',APP.rebuilds===5);
+APP.dispatch('focusout',ev(inp2,null));
+runTimers();
+t('7g) blur без pending → лишней перерисовки нет',APP.rebuilds===5);
+
 // 1.6 переход между полями одной формы — пауза держится
+const b0=APP.rebuilds;
 const i1=APP.appendChild(mkEl('input','f1')), i2=APP.appendChild(mkEl('input','f2'));
 APP.dispatch('focusin',ev(i1));
 APP.dispatch('focusout',ev(i1,i2));
 APP.dispatch('focusin',ev(i2));
 vm.runInContext('render()',sb);
-t('8) focusout→focusin в другое поле внутри #app: без перерисовки',APP.rebuilds===2);
+t('8) focusout→focusin в другое поле внутри #app: без перерисовки',APP.rebuilds===b0);
 APP.dispatch('focusout',ev(i2,null));
 runTimers();
-t('9) выход из поля применил pending',APP.rebuilds===3);
+t('9) выход из поля применил pending',APP.rebuilds===b0+1);
 
 // 1.7 страховка: тап по кнопке/пункту меню (без событий focus на мобильных)
+const b1=APP.rebuilds;
 const sel3=APP.appendChild(mkEl('select','d-status3'));
 APP.dispatch('focusin',ev(sel3));
 vm.runInContext('render()',sb);
 DOC.dispatch('click',ev(mkEl('div','nav-item')));
 runTimers();
-t('10) клик вне поля применил pending-рендер',APP.rebuilds===4);
+t('10) клик вне поля применил pending-рендер',APP.rebuilds===b1+1);
 // клик по самому полю pending не применяет
 APP.dispatch('focusin',ev(sel3));
 vm.runInContext('render()',sb);
 DOC.dispatch('click',ev(sel3));
 runTimers();
-t('11) клик по select не снимает паузу',APP.rebuilds===4);
+t('11) клик по select не снимает паузу',APP.rebuilds===b1+1);
 APP.dispatch('focusout',ev(sel3,null));
 runTimers();
 
