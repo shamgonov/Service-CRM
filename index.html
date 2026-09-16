@@ -383,6 +383,24 @@ function matState(o,m){
  if(diff<3*36e5)return{k:'urgent',t:'⏳ Срок наступает',c:'#fef3c7',tc:'#92400e',cd:'осталось '+dur(diff)};
  return{k:'todo',t:'📋 К закупке',c:'#f0fdf4',tc:'#065f46',cd:'осталось '+dur(diff)};
 }
+// Метки относительного времени (обратный отсчёт дедлайна материала) обновляются ТОЧЕЧНО —
+// только текстовые узлы [data-tleft]. Полный render() по тикеру не делается: он закрывал
+// открытые select и сбрасывал DOM.
+function tickTimeLabels(){
+ const app=document.getElementById('app');
+ if(!app||typeof DB==='undefined'||!DB||!DB.orders)return;
+ const els=app.querySelectorAll('[data-tleft]');
+ Array.prototype.forEach.call(els,function(el){
+  const p=String(el.getAttribute('data-tleft')||'').split(':');
+  const o=DB.orders.find(function(x){return String(x.id)===p[0];});
+  if(!o)return;
+  const m=(o.materials||[])[+p[1]];
+  if(!m)return;
+  const cd=matState(o,m).cd;
+  if(el.textContent!==cd)el.textContent=cd;
+ });
+}
+setInterval(tickTimeLabels,1000);
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
  if(isTest(o))b+=`<span class="badge" style="background:#f3f4f6;color:#6b7280">🧪 тест</span>`;
@@ -408,7 +426,7 @@ function login(role,name){state.role=role;state.user=name;state.screen=role==='w
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.6.3</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.6.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
  let list=DB.orders.slice().filter(visOrder);
@@ -589,7 +607,7 @@ function renderDetails(id){
  <div class="mat" style="border-left:4px solid ${s.tc}">
   <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span>
    <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
-  <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b>'+s.cd+'</b>':''}</div>
+   <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
   ${['todo'].includes(m.status)||['urgent','critical'].includes(s.k)?`
   <div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green" onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
@@ -811,7 +829,7 @@ ${reqs.length?`<div class="card"><div class="sec-title">📝 Отдельные 
   <span class="badge" style="background:${r.s.c};color:${r.s.tc}">${r.s.t}</span></div>
   <div class="muted">Заявка №${r.o.id} • ${escapeHtml(r.o.client)} • работы ${r.o.date.slice(8)}.${r.o.date.slice(5,7)} ${r.o.t1}<br>
   ${BUYER[r.m.buyer]} • 📍 ${escapeHtml(r.m.where||'—')} • ${money(r.m.price)}<br>
-  ⏳ Дедлайн: за ${r.m.deadline} ${r.m.unit==='h'?'ч':'дн'} ${r.s.cd?'• <b style="color:'+r.s.tc+'">'+r.s.cd+'</b>':''}</div>
+   ⏳ Дедлайн: за ${r.m.deadline} ${r.m.unit==='h'?'ч':'дн'} ${r.s.cd?'• <b data-tleft="'+r.o.id+':'+r.i+'" style="color:'+r.s.tc+'">'+r.s.cd+'</b>':''}</div>
   ${['todo','urgent','critical'].includes(r.s.k)?`<div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green" onclick="matAct(${r.o.id},${r.i},'bought')">✅ Куплено</button>
    <button class="btn-sm btn-red" onclick="matAct(${r.o.id},${r.i},'issue')">❌ Не найти</button></div>`:''}
@@ -1305,7 +1323,36 @@ function otypeChange(v){
 function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
  if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
 function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.splice(i,1);save();render()}}
+// === ПАУЗА ПОЛНОГО РЕНДЕРА: открытый select/input/textarea не должен схлопываться ===
+// Пока пользователь в поле внутри #app — render() DOM не трогает, запрос запоминается как pending.
+// Выход из поля (focusout), завершение выбора (change) или тап по кнопке/пункту меню — pending применяется.
+var RENDER_HOLD=null,RENDER_PENDING=false;
+function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
+function renderHoldGate(){if(!RENDER_HOLD)return false;RENDER_PENDING=true;return true}
+function renderHoldFlush(){if(!RENDER_HOLD)return;RENDER_HOLD=null;if(RENDER_PENDING){RENDER_PENDING=false;render()}}
+function renderHoldLater(){setTimeout(renderHoldFlush,0)}
+(function(){
+ var app=document.getElementById('app');
+ if(!app){console.warn('render-hold: #app not found');return}
+ app.addEventListener('focusin',function(e){if(renderHoldEditable(e.target)){RENDER_HOLD=e.target;RENDER_PENDING=false}});
+ app.addEventListener('focusout',function(e){
+  var n=e.relatedTarget;
+  // переход в другое поле внутри #app — остаёмся на паузе, DOM не трогаем
+  if(renderHoldEditable(n)&&app.contains(n))return;
+  renderHoldFlush();
+ });
+ // выбор в select/значение в поле изменено: всплытие идёт после onchange-обработчика цели,
+ // поэтому собственный render() обработчика уже помечен как pending — применяем его в следующем тике
+ app.addEventListener('change',function(e){if(renderHoldEditable(e.target))renderHoldLater()});
+ // страховка для мобильных браузеров: тап по кнопке/пункту меню может не снимать focus с поля
+ document.addEventListener('click',function(e){
+  var tg=e.target&&e.target.tagName;
+  if(tg==='SELECT'||tg==='INPUT'||tg==='TEXTAREA'||tg==='LABEL')return;
+  renderHoldLater();
+ });
+})();
 function render(){
+ if(renderHoldGate())return;
  const app=document.getElementById('app'),nav=document.getElementById('nav');
  if(!state.role){app.innerHTML=renderLogin();nav.style.display='none';return}
  // сохраняем прокрутку и фокус до перезаписи DOM
@@ -1374,7 +1421,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.6.3';
+const APP_VERSION='1.6.4';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1406,6 +1453,8 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
+
 
 
 

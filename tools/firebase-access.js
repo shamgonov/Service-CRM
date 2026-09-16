@@ -962,6 +962,9 @@ function gateThenStart(){
 
 var _origRender = window.render;
 window.render = function(){
+ // пауза полного рендера: пока пользователь в select/input/textarea внутри #app —
+ // запрос запоминается (pending), DOM не перезаписывается, раскрытый select не схлопывается
+ if(typeof renderHoldGate==='function'&&renderHoldGate())return;
  if(pinSet(MYDOC&&MYDOC.profile) && sessionStorage.getItem('crm_unlocked')!=='1' && !state.role){
   showPinGate();
   return;
@@ -991,10 +994,14 @@ window.render = function(){
  // детали заявки: подтянуть фото из коллекции photos и перерисовать галерею
  if(state.screen==='details' && state.orderId!=null && typeof fs!=='undefined' && fs){
   var oid=state.orderId;
-  loadOrderPhotos(oid, function(){
-   if(state.screen==='details' && state.orderId===oid && typeof render==='function'){
-    setTimeout(function(){ if(state.screen==='details'&&state.orderId===oid)render(); },0);
-   }
+  loadOrderPhotos(oid, function(arr){
+   if(state.screen!=='details'||state.orderId!==oid)return;
+   // полный render только если набор фото изменился: иначе render→loadOrderPhotos→render
+   // даёт непрерывную перерисовку экрана (открытый select схлопывался, ввод сбрасывался)
+   var sig=(arr||[]).map(function(p){return p.id;}).join(',');
+   if(PHOTOS_SIG[oid]===sig)return;
+   PHOTOS_SIG[oid]=sig;
+   setTimeout(function(){ if(state.screen==='details'&&state.orderId===oid)render(); },0);
   });
  }
 };
@@ -1173,6 +1180,7 @@ function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.ava
 // Документ: {orderId, data (base64 JPEG), ts, by}, id = {orderId}_{ts}.
 // Если появится бакет Storage — новые фото уходят туда (url в data), старые читаются из photos.
 var PHOTOS_CACHE={};   // orderId -> [{id,data,ts,by}]
+var PHOTOS_SIG={};     // orderId -> подпись набора фото (перерисовка только при изменении)
 var STOR_CHECKED=false, STOR_OK=false;
 // STOR: Storage недоступен без бакета (нет Blaze) — null, весь Storage-путь через try/catch
 var STOR=null;
