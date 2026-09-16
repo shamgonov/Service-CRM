@@ -1,7 +1,7 @@
 // Гейт деплоя: синтаксическая проверка ВСЕХ инлайн-<script> в index.html.
 // Возврат 1 (деплой запрещён), если хоть один блок не парсится.
-const fs=require('fs'),vm=require('vm');
-const h=fs.readFileSync('index.html','utf8');
+const fs=require('fs'),vm=require('vm'),path=require('path');
+const h=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const re=/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi;
 let m,i=0,fail=0;
 while((m=re.exec(h))){ i++;

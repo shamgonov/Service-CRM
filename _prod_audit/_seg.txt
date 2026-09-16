@@ -1,0 +1,7 @@
+﻿95:  sb.__prompt='650';
+96:  vm.runInContext("shoppingBuy('"+rec.id+"')",sb);
+97:  t('13) «Закуплено»: bought, factPrice=650, дата, закрыл',
+98:   rec.status==='bought'&&rec.factPrice===650&&rec.dateBought==='2026-09-15'&&rec.closedBy==='Оля');
+99:  sb.DB.shopping.push({id:'sq-x',source:'manual',status:'new',name:'Хомуты',qty:'10',unit:'шт',ts:1});
+100:  sb.__prompt='';
+101:  vm.runInContext("shoppingBuy('sq-x')",sb);

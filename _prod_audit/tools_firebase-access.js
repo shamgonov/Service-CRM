@@ -16,8 +16,6 @@ var PERMS_CATALOG = [
  {key:'calendar',label:'Календарь'},
  {key:'tasks',label:'Мои задачи'},
  {key:'shopping',label:'Закупки и материалы'},
- {key:'shopping_create',label:'Создание запросов на закуп'},
- {key:'shopping_close',label:'Закрытие запросов на закуп'},
  {key:'reports',label:'Отчёты'},
  {key:'admin_templates',label:'Шаблоны и дележка'},
  {key:'staff_manage',label:'Управление сотрудниками'},
@@ -31,8 +29,8 @@ function allPermKeys(){ return PERMS_CATALOG.map(function(x){return x.key;}); }
 // Встроенные роли для сида
 var BUILTIN_ROLES = [
  {id:'admin', name:'Админ', builtin:true, perms:['all']},
- {id:'operator', name:'Оператор', builtin:true, perms:['orders_view','orders_create','orders_edit','orders_status','calendar','shopping','shopping_close','reports']},
- {id:'manager', name:'Менеджер', builtin:true, perms:['orders_view','orders_edit','orders_status','calendar','shopping','shopping_create','shopping_close']},
+ {id:'operator', name:'Оператор', builtin:true, perms:['orders_view','orders_create','orders_edit','orders_status','calendar','shopping','reports']},
+ {id:'manager', name:'Менеджер', builtin:true, perms:['orders_view','orders_edit','orders_status','calendar','shopping']},
  {id:'worker', name:'Работник', builtin:true, perms:['orders_view','tasks','calendar','shopping']}
 ];
 // Совместимость: старые константные права по ключу роли
@@ -332,11 +330,11 @@ var SYNC_OK_TS=0;               // момент показа «Синхрони�
 function lsGet(k,d){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):d; }catch(e){ return d; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ console.warn('ls err',e); } }
 function cacheOrders(arr){ lsSet('crm_cache_orders',arr); }
-function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[]}); }
+function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[]}); }
 function loadCachedData(){
  var co=lsGet('crm_cache_orders',null), cs=lsGet('crm_cache_state',null);
  if(co&&co.length&&(!DB.orders||!DB.orders.length))DB.orders=co;
- if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; if(DB.shopping===undefined)DB.shopping=cs.shopping||[]; }
+ if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; }
  return !!(co&&co.length);
 }
 function queueGet(){ return lsGet('crm_queue',[]); }
@@ -443,10 +441,10 @@ function loadCloud(cb){
   var st=(snap.exists&&snap.data())||null;
   var changed=false;
   if(st && st.db){
-   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[],shopping:st.db.shopping||[]};
-   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[],shopping:DB.shopping||[]});
+   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[]};
+   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[]});
    LAST_STATE_JSON=JSON.stringify(ns);
-   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations; DB.shopping=ns.shopping;
+   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations;
    if(changed)cacheState();
   } else if(isOwner()){
    var init=defaultData(); init.orders=[];
@@ -468,7 +466,7 @@ function loadCloud(cb){
 // запись настроек (users/templates/seq) — app/state БЕЗ orders
 function saveSettings(){
  if(!DB)return;
- var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[]};
+ var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[]};
  cacheState();
  if(OFFLINE||ORDERS_ERR&&!STATE_SUB){ queuePush({kind:'settings'}); return; }
  fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){
@@ -834,7 +832,6 @@ function deleteRole(id){
 function startMain(){
  if(ME){
   state.role=ME.role; state.user=ME.name;
-  state.tasksTab='free'; // посадка в «Мои задачи» — «Доступные»
   // запоминаем профиль устройства (кроме владельца — он видит панель 👑)
   if(!isOwner()){
    try{ localStorage.setItem('crm_last_user', JSON.stringify({name:ME.name||'', role:ME.role||'', avatar:(ME.profile&&ME.profile.avatar)||''})); }catch(e){}
