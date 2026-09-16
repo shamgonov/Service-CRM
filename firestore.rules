@@ -40,11 +40,15 @@ service cloud.firestore {
       // приём сотрудника владельцем/админом; bootstrap владельца при пустом meta
       allow create: if isOwner() || isAdmin() ||
         (ownerBootstrap() && request.resource.data.owner == true);
-      // своему устройству — только профиль и uid-привязка; владельцу/админу — любые поля
+      // своему устройству — только профиль и uid-привязка; владельцу/админу — любые поля.
+      // uid==null (новое устройство до первой привязки) разрешён тому же auth.uid —
+      // иначе первый saveProfile/savePin на новом устройстве ловит permission-denied
       allow update: if isOwner() || isAdmin() ||
         (request.auth != null &&
-         request.auth.uid == resource.data.uid &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['profile','uid']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['profile','uid']) &&
+         (resource.data.uid == request.auth.uid ||
+          !('uid' in resource.data) ||
+          resource.data.uid == null));
       // увольнение — только владелец/админ
       allow delete: if isOwner() || isAdmin();
     }

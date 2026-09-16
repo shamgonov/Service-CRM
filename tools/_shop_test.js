@@ -44,7 +44,7 @@ function loadFns(sb,fns){
   throw new Error('fn not found: '+f);
  });
 }
-const SHOP_FNS=['renderShopping','canShoppingCreate','visOrder','adminLike','showTest','isTest','matState','dur','BUYER','total','orderType'];
+const SHOP_FNS=['renderShopping','canShoppingCreate','canShoppingClose','visOrder','adminLike','showTest','isTest','matState','dur','BUYER','total','orderType'];
 
 // 1) Нет демо-каталога закупок: shopping нигде не инициализируется демо-данными
 t('1) демо-каталога закупок нет (ни seeded-элементов, ни DEMO-констант)',
@@ -85,6 +85,44 @@ t('2) shopping в cache/save/snapshot',
  sb.DB={orders:[],shopping:[],showTest:false};
  sb.__inputs={'sq-name':'Хак'};
  loadFns(sb,SHOP_FNS.concat(['shoppingForm','shoppingCreate','shoppingBuy','shoppingCancel']));
+ const h=vm.runInContext('renderShopping()',sb);
+ t('5) без права кнопки «＋ Запрос» нет',!h.includes('＋ Запрос на закуп'));
+ vm.runInContext('shoppingForm()',sb);
+ vm.runInContext('shoppingCreate()',sb);
+ t('6) без права прямой вызов: «Нет прав», запись не создана',
+  String(sb.__alert||'').includes('Нет прав')&&(sb.DB.shopping||[]).length===0);
+}
+
+// 5b-5c) Без права shopping_close
+{
+ const sb=mkSandbox(['shopping','shopping_create']);
+ sb.DB={orders:[],shopping:[{id:'sq-n',source:'manual',status:'new',name:'Кран',qty:'1',unit:'шт',ts:1}],showTest:false};
+ loadFns(sb,SHOP_FNS.concat(['shoppingForm','shoppingCreate','shoppingBuy','shoppingCancel']));
+ const h=vm.runInContext('renderShopping()',sb);
+ t('5b) без shopping_close: кнопка «＋ Запрос» есть, кнопок Закуплено/Отменить нет',
+  h.includes('＋ Запрос на закуп')&&!h.includes('shoppingBuy')&&!h.includes('shoppingCancel'));
+ sb.__prompt='';
+ vm.runInContext("shoppingBuy('sq-n')",sb);
+ t('5c) shoppingBuy без права: «Нет прав», статус не изменился',
+  String(sb.__alert||'').includes('Нет прав')&&sb.DB.shopping[0].status==='new');
+}
+
+// 7-16) С правом: полный цикл
+{
+ const sb=mkSandbox(['shopping','shopping_create','shopping_close']);
+ sb.DB={orders:[],shopping:[],showTest:false};
+ sb.__inputs={'sq-name':'Фильтры F7','sq-qty':'4','sq-unit':'шт','sq-price':'1200','sq-vendor':'Электромир','sq-due':'2026-09-20','sq-note':'срочно'};
+ loadFns(sb,SHOP_FNS.concat(['shoppingForm','shoppingCreate','shoppingBuy','shoppingCancel']));
+ const h=vm.runInContext('renderShopping()',sb);
+ t('7) с правом кнопка «＋ Запрос на закуп» есть',h.includes('＋ Запрос на закуп'));
+ vm.runInContext('shoppingForm()',sb);
+ t('8) форма открывается (modal с полями sq-*)',!!sb.__modal&&sb.__modal.includes('sq-name')&&sb.__modal.includes('sq-due'));
+ vm.runInContext('shoppingCreate()',sb);
+ const rec=(sb.DB.shopping||[])[0];
+ t('9) создан запрос: source=manual, status=new, поля+парсинг цены',
+  !!rec&&rec.source==='manual'&&rec.status==='new'&&rec.name==='Фильтры F7'&&rec.qty==='4'&&rec.unit==='шт'&&rec.price===1200&&rec.vendor==='Электромир'&&rec.due==='2026-09-20'&&rec.note==='срочно');
+ t('10) сохранение + закрытие модалки + событие material',
+  sb.__saved>0&&sb.__modalClosed>0&&(sb.__events||[]).some(e=>e.ty==='material'));
  const h2=vm.runInContext('renderShopping()',sb);
  t('11) запрос в списке: бейдж «отдельный запрос» + кнопки Закуплено/Отменить',
   h2.includes('отдельный запрос')&&h2.includes("shoppingBuy('"+rec.id+"')")&&h2.includes("shoppingCancel('"+rec.id+"')"));
@@ -115,6 +153,18 @@ t('2) shopping в cache/save/snapshot',
  t('17) bizOrder/total завязаны только на orders (shopping их не касается)',
   vm.runInContext('bizOrder({id:1})',sb)===true&&vm.runInContext('bizOrder({id:1,test:true})',sb)===false&&
   !app.includes('DB.shopping.reduce')&&!app.includes('shopping.forEach'));
+}
+
+// 18) Взятие заявки переключает таб «Мои задачи» на «Мои»
+{
+ const sb=mkSandbox(['tasks']);
+ sb.DB={orders:[{id:5,worker:null,status:'approved',by:'Оля',client:'К',address:'А',date:'2026-09-16',t1:'10:00',t2:'12:00',price:1000,extras:[],photos:[],materials:[],type:'standard',payments:[],history:[]}],shopping:[]};
+ loadFns(sb,['takeOrder','routeGenerate','markOrder','logAction','orderStages','byId','canTakeOrder']);
+ // заглушки, которые takeOrder вызывает, но в песочнице не нужны
+ vm.runInContext('function routeGenerate(){};function markOrder(){};function logAction(){};function save(){};function render(){}',sb);
+ vm.runInContext('takeOrder(5)',sb);
+ t('18) takeOrder → tasksTab=mine + crm_tasks_tab=mine в localStorage',
+  sb.state.tasksTab==='mine'&&sb.localStorage.getItem('crm_tasks_tab')==='mine');
 }
 
 console.log(fails?'\nFAILS: '+fails:'\nALL PASS');

@@ -55,15 +55,27 @@ var STAFF_TAB='requests';// активная вкладка админки
 
 // === ПРАВА ===
 function roleById(id){ return ROLES.find(function(r){return r.id===id;}); }
+// роли сотрудника: новый формат employees.roles (массив), миграция старого role → [role]
+function rolesOf(e){
+ if(!e)return [];
+ if(Array.isArray(e.roles))return e.roles.filter(function(x){return x;});
+ return e.role?[e.role]:[];
+}
+function unionPermsFor(roleIds){
+ var out=[];
+ (roleIds||[]).forEach(function(id){
+  var r=roleById(id);
+  if(!r){ var b=BUILTIN_ROLES.find(function(x){return x.id===id;}); if(!b)return; r=b; }
+  (r.perms||[]).forEach(function(p){ if(out.indexOf(p)<0)out.push(p); });
+ });
+ return out;
+}
 function myPerms(){
  if(isOwner()) return ['all'];
- var src = TESTROLE ? TESTROLE : (ME?ME.role:null);
- if(!src) return [];
- var r = roleById(src);
- if(r) return r.perms||[];
- // если роль ещё не в кэше (гонка) — fallback по встроенным
- var b = BUILTIN_ROLES.find(function(x){return x.id===src;});
- return b?b.perms:[];
+ var src = TESTROLE ? [TESTROLE] : (ME?rolesOf(ME):[]);
+ if(!src.length) return [];
+ // объединение прав всех ролей сотрудника
+ return unionPermsFor(src);
 }
 function can(p){
  if(isOwner()) return true;
@@ -658,13 +670,24 @@ function checkApproved(cb){
 }
 
 // === АДМИНКА (вкладки) ===
+function staffTabs(){
+ var tabs=[];
+ if(can('staff_manage')){ tabs.push(['requests','📨 Заявки']); tabs.push(['staff','👥 Сотрудники']); }
+ if(can('roles_manage')) tabs.push(['roles','🏷 Роли']);
+ return tabs;
+}
 function renderStaff(){
+ var tabs=staffTabs();
+ if(!tabs.length) return '<div class="header dark"><button class="back" onclick="logout()">←</button><h1>👥 Управление</h1></div>'+
+  '<div class="card"><div class="muted">Нет прав staff_manage / roles_manage</div></div>';
+ var has=function(t){return tabs.some(function(x){return x[0]===t;});};
+ if(!has(STAFF_TAB)) STAFF_TAB=tabs[0][0];
  return '<div class="header dark"><button class="back" onclick="logout()">←</button><h1>👥 Управление</h1></div>'+
-  '<div class="filters">'+
-   [['requests','📨 Заявки'],['staff','👥 Сотрудники'],['roles','🏷 Роли']].map(function(t){
-     return '<button class="fbtn '+(STAFF_TAB===t[0]?'active':'')+'" onclick="setStaffTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+
-  '</div>'+
-  '<div id="staffList" class="card"><div class="muted">Загрузка...</div></div>';
+   '<div class="filters">'+
+    tabs.map(function(t){
+      return '<button class="fbtn '+(STAFF_TAB===t[0]?'active':'')+'" onclick="setStaffTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+
+   '</div>'+
+   '<div id="staffList" class="card"><div class="muted">Загрузка...</div></div>';
 }
 function setStaffTab(t){ STAFF_TAB=t; document.getElementById('app').innerHTML=renderStaff(); setTimeout(loadStaff,80); }
 
@@ -709,29 +732,31 @@ function tabStaff(wrap){
  fs.collection('employees').get().then(function(es){
   var html='<div class="sec-title">Принятые сотрудники</div>';
   if(es.empty)html+='<div class="muted">Пока никого</div>';
+  var allRoles=ROLES.length?ROLES:BUILTIN_ROLES;
   es.forEach(function(d){var e=d.data(); e.deviceId=e.deviceId||d.id;
-   var r=roleById(e.role);
-   html+='<div class="mat"><b>'+esc(e.name)+'</b> — '+esc(r?r.name:(ROLE_NAMES[e.role]||e.role))+
-    ' <span class="badge" style="background:#d1fae5;color:#065f46">'+((e.quals||[]).map(esc).join(', ')||'—')+'</span>'+
-    '<div class="muted" style="margin:4px 0">'+esc(e.deviceId)+'</div>'+
-    '<div style="margin:4px 0">'+permsSummaryLine(r?r.perms:[])+'</div>'+
-    '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'+
-     '<select class="input" id="srole_'+e.deviceId+'" style="flex:1;min-width:120px">'+roleOptions(e.role)+'</select>'+
-     '<button class="btn-sm btn-blue" onclick="setEmpRole(\''+e.deviceId+'\')">Роль</button>'+
-    '</div>'+
-    '<div style="display:flex;gap:6px;margin-top:6px">'+
-     '<select class="input" id="q_'+e.deviceId+'" style="flex:1"><option value="">+ специализация</option>'+
-      ((DB.specializations||[]).map(function(q){return '<option>'+esc(q)+'</option>';}).join('')||'<option value="" disabled>справочник пуст</option>')+'</select>'+
-     '<button class="btn-sm btn-outline" onclick="addQual(\''+e.deviceId+'\')">+</button>'+
-     '<button class="btn-sm btn-red" onclick="fireEmp(\''+e.deviceId+'\')">Уволить</button>'+
-    '</div>'+
-    '<div style="display:flex;gap:6px;margin-top:6px">'+
-     '<button class="btn-sm btn-blue" onclick="viewEmpProfile(\''+e.deviceId+'\')">👤 Профиль</button>'+
-     '<button class="btn-sm btn-outline" onclick="adminResetPin(\''+e.deviceId+'\')">🔑 Сбросить PIN</button>'+
-    '</div></div>';
-  });
-  wrap.innerHTML=html;
- }).catch(function(e){ wrap.innerHTML='<div class="muted">Ошибка: '+esc(e.message)+'</div>'; });
+    var roles=rolesOf(e);
+    var rnames=roles.map(function(x){var r=roleById(x);return r?(r.name||x):x;}).join(' + ')||'— без роли —';
+    html+='<div class="mat"><b>'+esc(e.name)+'</b> — '+esc(rnames)+
+     ' <span class="badge" style="background:#d1fae5;color:#065f46">'+((e.quals||[]).map(esc).join(', ')||'—')+'</span>'+
+     '<div class="muted" style="margin:4px 0">'+esc(e.deviceId)+'</div>'+
+     '<div style="margin:4px 0">'+permsSummaryLine(unionPermsFor(roles))+'</div>'+
+     '<div class="muted" style="margin:6px 0 4px;font-size:12px">Роли (можно несколько):</div>'+
+     '<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0">'+
+      allRoles.map(function(r){return '<label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" '+(roles.indexOf(r.id)>=0?'checked':'')+' onchange="toggleEmpRole(\''+e.deviceId+'\',\''+r.id+'\',this.checked)"> '+esc(r.name||r.id)+'</label>';}).join('')+
+     '</div>'+
+     '<div style="display:flex;gap:6px;margin-top:6px">'+
+      '<select class="input" id="q_'+e.deviceId+'" style="flex:1"><option value="">+ специализация</option>'+
+       ((DB.specializations||[]).map(function(q){return '<option>'+esc(q)+'</option>';}).join('')||'<option value="" disabled>справочник пуст</option>')+'</select>'+
+      '<button class="btn-sm btn-outline" onclick="addQual(\''+e.deviceId+'\')">+</button>'+
+      '<button class="btn-sm btn-red" onclick="fireEmp(\''+e.deviceId+'\')">Уволить</button>'+
+     '</div>'+
+     '<div style="display:flex;gap:6px;margin-top:6px">'+
+      '<button class="btn-sm btn-blue" onclick="viewEmpProfile(\''+e.deviceId+'\')">👤 Профиль</button>'+
+      '<button class="btn-sm btn-outline" onclick="adminResetPin(\''+e.deviceId+'\')">🔑 Сбросить PIN</button>'+
+     '</div></div>';
+   });
+   wrap.innerHTML=html;
+  }).catch(function(e){ wrap.innerHTML='<div class="muted">Ошибка: '+esc(e.message)+'</div>'; });
 }
 
 // --- Вкладка Роли ---
@@ -779,29 +804,58 @@ function tabRoles(wrap){
 
 // --- Действия админки ---
 function approve(dev,name){
+ if(!can('staff_manage'))return alert('Нет права staff_manage');
  var role=document.getElementById('role_'+dev).value;
- var r=roleById(role);
- fs.collection('employees').doc(dev).set({deviceId:dev,name:name,role:role,status:'approved',quals:[],perms:(r?r.perms:[])||[],ts:Date.now()});
+ fs.collection('employees').doc(dev).set({deviceId:dev,name:name,role:role,roles:[role],status:'approved',quals:[],ts:Date.now()});
  fs.collection('requests').doc(dev).delete();
+ // сотрудник попадает в базу исполнителей (DB.users → селекты заявок) — синхронно всем
+ try{
+  if(DB&&DB.users&&!DB.users.find(function(u){return u.deviceId===dev;})){
+   DB.users.push({id:'u_'+dev,name:name,role:role,share:0,deviceId:dev,status:'approved'});
+   if(typeof saveSettings==='function')saveSettings();
+  }
+ }catch(e){}
  setTimeout(loadStaff,500);
 }
-function reject(dev){ fs.collection('requests').doc(dev).delete(); setTimeout(loadStaff,500); }
+function reject(dev){ if(!can('staff_manage'))return alert('Нет права staff_manage'); fs.collection('requests').doc(dev).delete(); setTimeout(loadStaff,500); }
+// мультивыбор ролей: чекбокс роли у сотрудника → employees.roles (массив) + role=первая
+function toggleEmpRole(dev,roleId,on){
+ if(!can('roles_manage'))return alert('Нет права roles_manage');
+ fs.collection('employees').doc(dev).get().then(function(d){
+  if(!d.exists)return alert('Сотрудник не найден');
+  var e=d.data();
+  var roles=rolesOf(e);
+  var i=roles.indexOf(roleId);
+  if(on&&i<0)roles.push(roleId);
+  if(!on&&i>=0)roles.splice(i,1);
+  fs.collection('employees').doc(dev).update({roles:roles,role:roles[0]||''}).then(function(){
+   if(ME&&ME.deviceId===dev){ ME.roles=roles; ME.role=roles[0]||''; if(typeof render==='function')render(); }
+   try{ var w=DB.users&&DB.users.find(function(u){return u.deviceId===dev;}); if(w)w.role=roles[0]||''; if(typeof saveSettings==='function')saveSettings(); }catch(e){}
+   setTimeout(loadStaff,300);
+  });
+ }).catch(function(e){ alert('Ошибка: '+e.message); });
+}
 function setEmpRole(dev){
+ // legacy-совместимость: запись одной роли теперь через roles:[role]
+ if(!can('roles_manage'))return alert('Нет права roles_manage');
  var role=document.getElementById('srole_'+dev).value;
- var r=roleById(role);
- fs.collection('employees').doc(dev).update({role:role,perms:(r?r.perms:[])||[]}).then(function(){
-   if(ME && ME.deviceId===dev){ ME.role=role; ME.perms=(r?r.perms:[])||[]; }
-   alert('Роль обновлена'); setTimeout(loadStaff,300);
+ fs.collection('employees').doc(dev).update({role:role,roles:[role]}).then(function(){
+  if(ME && ME.deviceId===dev){ ME.role=role; ME.roles=[role]; }
+  alert('Роль обновлена'); setTimeout(loadStaff,300);
  });
 }
 function addQual(dev){
+ if(!can('staff_manage'))return alert('Нет права staff_manage');
  var q=document.getElementById('q_'+dev).value; if(!q)return;
  fs.collection('employees').doc(dev).get().then(function(d){var e=d.data();var qs=e.quals||[];if(qs.indexOf(q)<0)qs.push(q);
   fs.collection('employees').doc(dev).update({quals:qs});setTimeout(loadStaff,400);});
 }
-function fireEmp(dev){ if(confirm('Уволить сотрудника?')){fs.collection('employees').doc(dev).delete();setTimeout(loadStaff,400);} }
+function fireEmp(dev){ if(!can('staff_manage'))return alert('Нет права staff_manage'); if(confirm('Уволить сотрудника?')){fs.collection('employees').doc(dev).delete();
+ try{ DB.users=(DB.users||[]).filter(function(u){return u.deviceId!==dev;}); if(typeof saveSettings==='function')saveSettings(); }catch(e){}
+ setTimeout(loadStaff,400);} }
 
 function togglePerm(roleId,key,on){
+ if(!can('roles_manage'))return alert('Нет права roles_manage');
  var r=roleById(roleId); if(!r)return;
  if(roleId==='admin')return alert('Роль администратора защищена');
  if(r.builtin===undefined)r.builtin=false;
@@ -816,12 +870,14 @@ function togglePerm(roleId,key,on){
  });
 }
 function createRole(){
+ if(!can('roles_manage'))return alert('Нет права roles_manage');
  var name=prompt('Название новой роли:'); if(!name)return; name=name.trim(); if(!name)return;
  var id='r_'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
  var obj={id:id,name:name,perms:['orders_view'],builtin:false};
  fs.collection('roles').doc(id).set(obj).then(function(){ ROLES.push(obj); setTimeout(loadStaff,300); });
 }
 function deleteRole(id){
+ if(!can('roles_manage'))return alert('Нет права roles_manage');
  if(id==='admin')return alert('Нельзя удалить роль администратора');
  fs.collection('employees').where('role','==',id).limit(1).get().then(function(snap){
    if(!snap.empty){ alert('Сначала переведите сотрудников на другую роль'); return; }
@@ -840,6 +896,15 @@ function startMain(){
    try{ localStorage.setItem('crm_last_user', JSON.stringify({name:ME.name||'', role:ME.role||'', avatar:(ME.profile&&ME.profile.avatar)||''})); }catch(e){}
   }
  }
+ // права применяются сразу: снапшот roles пересчитывает ROLES и перерисовывает UI
+ try{
+  fs.collection('roles').onSnapshot(function(snap){
+   var arr=[]; snap.forEach(function(d){ var r=d.data(); r.id=r.id||d.id; arr.push(r); });
+   BUILTIN_ROLES.forEach(function(b){ if(!arr.find(function(x){return x.id===b.id;})) arr.push(b); });
+   ROLES=arr;
+   if(typeof render==='function')render();
+  });
+ }catch(e){}
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  eventsLoad();
  // проб Storage — один раз за сессию, ТОЛЬКО если владелец включил настройку
@@ -1011,6 +1076,14 @@ function verifyPin(profile,entered){
 function pinSet(profile){ return !!(profile&&((profile.pinHash&&profile.pinSalt)||profile.pin)); }
 
 function myDocRef(){ return fs.collection('employees').doc(deviceId()); }
+// запись своего профиля: uid-привязка отдельной операцией ДО update({profile}) —
+// иначе на новом устройстве (uid ещё не записан) update ловит permission-denied
+function myDocWriteProfile(p,cb){
+ var u=auth.currentUser&&auth.currentUser.uid;
+ var step2=function(){ myDocRef().update({profile:p}).then(function(){ if(cb)cb(null); }).catch(function(e){ if(cb)cb(e); }); };
+ if(!u)return step2();
+ myDocRef().set({uid:u},{merge:true}).then(step2).catch(function(e){ if(cb)cb(e); });
+}
 
 function getMyDoc(cb){
  var dev=deviceId();
@@ -1080,6 +1153,7 @@ function renderProfile(){
 }
 
 function addProfileNavItem(){
+ if(typeof can==='function'&&!can('profile_view'))return; // право «Мой профиль» из матрицы
  var nav=document.getElementById('nav'); if(!nav)return;
  if(nav.querySelector('[data-profile-nav]'))return;
  var d=document.createElement('div');
@@ -1248,8 +1322,7 @@ function saveProfile(){
   try{ Notification.requestPermission(); }catch(e){}
  }
  var doSave=function(){ MYDOC.profile=p; AVATAR_TMP=null;
-  myDocRef().update({profile:p}).then(function(){ alert('Профиль сохранён'); render(); })
-   .catch(function(e){ alert('Ошибка сохранения: '+e.message); }); };
+   myDocWriteProfile(p,function(err){ if(err)return alert('Ошибка сохранения: '+err.message); alert('Профиль сохранён'); render(); }); };
  // новый аватар уходит в Storage avatars/{deviceId}.jpg; base64 — фолбэк (старые продолжают читаться)
  if(AVATAR_TMP && storReady()){
   try{
@@ -1264,22 +1337,22 @@ function savePin(){
  var v=(document.getElementById('pf-pin').value||'').trim();
  if(!/^\d{4}$/.test(v))return alert('PIN — ровно 4 цифры');
  if(!MYDOC)return alert('Профиль не загружен');
+ var ok=function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен'); render(); };
+ var err=function(e){ alert('Ошибка: '+e.message); };
  if(!subtleOK){ MYDOC.profile=MYDOC.profile||{}; MYDOC.profile.pin=v;
-  myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен (без хэширования — старый WebView)'); render(); })
-   .catch(function(e){ alert('Ошибка: '+e.message); });
+  myDocWriteProfile(MYDOC.profile,function(e){ if(e)return err(e); ok(); });
   return; }
  makePinRecord(v).then(function(rec){
   MYDOC.profile=MYDOC.profile||{};
   MYDOC.profile.pinSalt=rec.pinSalt; MYDOC.profile.pinHash=rec.pinHash; delete MYDOC.profile.pin;
-  myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); alert('PIN установлен'); render(); })
-   .catch(function(e){ alert('Ошибка: '+e.message); });
+  myDocWriteProfile(MYDOC.profile,function(e){ if(e)return err(e); ok(); });
  }).catch(function(){ alert('Не удалось установить PIN (нет поддержки шифрования)'); });
 }
 function resetMyPin(){
  if(!confirm('Убрать PIN с этого устройства?'))return;
  if(!MYDOC)return;
  MYDOC.profile=MYDOC.profile||{}; delete MYDOC.profile.pin; delete MYDOC.profile.pinHash; delete MYDOC.profile.pinSalt;
- myDocRef().update({profile:MYDOC.profile}).then(function(){ sessionStorage.setItem('crm_unlocked','1'); render(); });
+ myDocWriteProfile(MYDOC.profile,function(){ sessionStorage.setItem('crm_unlocked','1'); render(); });
 }
 
 // --- PIN-экран при старте ---
@@ -1314,12 +1387,12 @@ function pinSubmit(){
   sessionStorage.setItem('crm_unlocked','1'); PIN_TRIES=0;
   var finish=function(){ startMain(); };
   // мягкая миграция: старый открытый pin → {pinSalt,pinHash} при первом успешном вводе
-  if(prof&&prof.pin&&!prof.pinHash&&subtleOK){
-   makePinRecord(prof.pin).then(function(rec){
-    MYDOC.profile.pinSalt=rec.pinSalt; MYDOC.profile.pinHash=rec.pinHash; delete MYDOC.profile.pin;
-    myDocRef().update({profile:MYDOC.profile}).then(finish).catch(finish);
-   }).catch(finish);
-  } else finish();
+   if(prof&&prof.pin&&!prof.pinHash&&subtleOK){
+    makePinRecord(prof.pin).then(function(rec){
+     MYDOC.profile.pinSalt=rec.pinSalt; MYDOC.profile.pinHash=rec.pinHash; delete MYDOC.profile.pin;
+     myDocWriteProfile(MYDOC.profile,finish);
+    }).catch(finish);
+   } else finish();
  });
 }
 function showPinGate(){
@@ -1362,7 +1435,7 @@ if(typeof window.deviceId!=='function'){ window.deviceId = deviceId; }
 var SCREEN_PERM = {
  create:'orders_create', calendar:'calendar', tasks:'tasks',
  shopping:'shopping', reports:'reports', admin:'admin_templates',
- staff:'staff_manage', orders:'orders_view'
+ staff:'staff_manage', orders:'orders_view', profile:'profile_view'
 };
 
 // Guard перехода на экран

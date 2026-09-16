@@ -1,9 +1,0 @@
-const fs=require('fs');
-const s=fs.readFileSync('tools/_shop_test.js','utf8');
-console.log('lines='+s.split('\n').length);
-console.log("has_shopping_create="+s.includes("'shopping_create'"));
-console.log("has_t17="+s.includes("17)"));
-console.log("has_t16="+s.includes("16)"));
-console.log("has_t11="+s.includes("t('11)"));
-const idx=s.indexOf("mkSandbox([");
-console.log('first_call_at='+idx);
