@@ -28,7 +28,8 @@ function mkSandbox(){
   isOwner:()=>sb.__owner===true,
   can:p=>{if(sb.__owner)return true;return (sb.__perms||[]).indexOf(p)>=0;},
   alert:m=>{sb.__alert=String(m)},confirm:()=>true,prompt:(m,d)=>sb.__prompt!==undefined?sb.__prompt:(d||''),
-  render:()=>{sb.__renders=(sb.__renders||0)+1},save:()=>{},routeGenerate:()=>{},markOrder:()=>{},
+   render:()=>{sb.__renders=(sb.__renders||0)+1},save:()=>{},routeGenerate:()=>{},markOrder:()=>{},
+   go:(s,id)=>{sb.__go=[s,id]},
   logAction:(o,a,d)=>{o.history=o.history||[];o.history.push({action:a,details:d});},
   deviceId:()=>'dev-test',pushEvent:()=>{},saveSettings:()=>{},
   document:{getElementById:id=>sb.__els[id]||null,querySelectorAll:()=>[],createElement:()=>({setAttribute(){},})},
@@ -73,21 +74,22 @@ sb0=null;
  t('5) doEditOrder применяет все поля (клиент/адрес/цена/тип/фото)',r.client==='Иван 2'&&r.address==='А2'&&r.price===2000&&r.type==='manufacture'&&r.photoReport===true&&r.date==='2026-09-17');
  t('6) лог edit: было→стало в details.fields',(r.history||[]).some(h=>h.action==='edit'&&JSON.stringify(h.details||{}).includes('Иван')));
 }
-// 3) canTakeOrder/takeOrder: создатель, владелец, orders_edit; исполнитель=создатель при создании
+// 3) взятие в работу: право orders_take, гейт-модалка, блокировка без права
 {
- const sb=mkSandbox(); sb.__loaded={}; sb.__perms=[]; sb.__owner=false;
- load(sb,['canTakeOrder','takeOrder','canCancel','canDeleteOrder','canShopMats','byId']);
- vm.runInContext('var sb_o={id:5,status:"approved",by:"Оля",worker:null,history:[]};DB={orders:[sb_o],users:[]};state.user="Оля";',sb);
- t('7) создатель может «взять в работу»',vm.runInContext('canTakeOrder(sb_o)',sb)===true);
+ const sb=mkSandbox(); sb.__loaded={}; sb.__perms=[]; sb.__owner=false; sb.__go=null; sb.__els={};
+ load(sb,['canTakeOrder','showTakeBtn','adminLike','isInwork','takeGateModal','takeConfirm','takeOrder','byId','orderType','total','OTYPE','logAction','markOrder','routeGenerate']);
+ vm.runInContext('var sb_o={id:5,status:"approved",by:"Оля",worker:null,history:[],price:1000,extras:[],materials:[],payments:[],date:"2026-09-16",t1:"10:00",t2:"12:00",client:"Иван",address:"А"};DB={orders:[sb_o],users:[]};state.user="Оля";',sb);
+ t('7) создатель может «взять в работу» неявно (без права)',vm.runInContext('canTakeOrder(sb_o)',sb)===true);
  vm.runInContext('state.user="Друг"',sb);
- t('8) не создатель без прав — не может',vm.runInContext('canTakeOrder(sb_o)',sb)===false);
- sb.__perms=['orders_edit'];
- t('9) с orders_edit — может',vm.runInContext('canTakeOrder(sb_o)',sb)===true);
+ t('8) не создатель без orders_take — не может',vm.runInContext('canTakeOrder(sb_o)',sb)===false);
+ sb.__perms=['orders_take'];
+ t('9) с orders_take — может',vm.runInContext('canTakeOrder(sb_o)',sb)===true);
  vm.runInContext('takeOrder(5)',sb);
- t('10) takeOrder назначил исполнителя и статус approved',sb.DB.orders[0].worker==='Друг'&&sb.DB.orders[0].status==='approved');
- sb.__perms=[]; sb.state.user='Кто-то';
- vm.runInContext('takeOrder(5)',sb);
- t('11) повторное взятие без права — блокировано «Нет прав»',(sb.__alert||'').includes('Нет прав'));
+ t('10) takeOrder открывает гейт и НЕ меняет заявку (нужно подтверждение)',
+  !!sb.__modal&&sb.DB.orders[0].worker===null&&sb.DB.orders[0].status==='approved');
+ sb.__modal=null; sb.__perms=[]; sb.state.user='Кто-то';
+ vm.runInContext('takeConfirm(5)',sb);
+ t('11) прямое подтверждение без права — блокировано «Нет прав»',(sb.__alert||'').includes('Нет прав')&&sb.DB.orders[0].worker!== 'Кто-то');
 }
 // 4) активные сотрудники: уволенные исключены
 {

@@ -155,16 +155,20 @@ t('2) shopping в cache/save/snapshot',
   !app.includes('DB.shopping.reduce')&&!app.includes('shopping.forEach'));
 }
 
-// 18) Взятие заявки переключает таб «Мои задачи» на «Мои»
+// 18) Взятие заявки: гейт не меняет, подтверждение → таб «В работе»
 {
  const sb=mkSandbox(['tasks']);
  sb.DB={orders:[{id:5,worker:null,status:'approved',by:'Оля',client:'К',address:'А',date:'2026-09-16',t1:'10:00',t2:'12:00',price:1000,extras:[],photos:[],materials:[],type:'standard',payments:[],history:[]}],shopping:[]};
- loadFns(sb,['takeOrder','routeGenerate','markOrder','logAction','orderStages','byId','canTakeOrder']);
- // заглушки, которые takeOrder вызывает, но в песочнице не нужны
- vm.runInContext('function routeGenerate(){};function markOrder(){};function logAction(){};function save(){};function render(){}',sb);
+ loadFns(sb,['takeGateModal','takeConfirm','takeOrder','showTakeBtn','canTakeOrder','isInwork','orderType','OTYPE','total','routeGenerate','markOrder','logAction','orderStages','byId']);
+ // заглушки, которые takeConfirm вызывает, но в песочнице не нужны
+ vm.runInContext('function routeGenerate(){};function markOrder(){};function logAction(){};function save(){};function render(){};var __go=null;function go(s,id){__go=[s,id]}',sb);
  vm.runInContext('takeOrder(5)',sb);
- t('18) takeOrder → tasksTab=mine + crm_tasks_tab=mine в localStorage',
-  sb.state.tasksTab==='mine'&&sb.localStorage.getItem('crm_tasks_tab')==='mine');
+ t('18a) гейт-модалка открыта, заявка не измена',!!sb.__modal&&sb.DB.orders[0].worker===null&&sb.DB.orders[0].status==='approved');
+ vm.runInContext('takeConfirm(5)',sb);
+ t('18b) подтверждение → inwork + tasksTab=work + crm_tasks_tab=work + переход в details',
+  sb.DB.orders[0].status==='inwork'&&sb.DB.orders[0].worker==='Оля'&&sb.DB.orders[0].takenBy==='Оля'&&
+  sb.state.tasksTab==='work'&&sb.localStorage.getItem('crm_tasks_tab')==='work'&&
+  String(sb.__go)==='details,5');
 }
 
 console.log(fails?'\nFAILS: '+fails:'\nALL PASS');

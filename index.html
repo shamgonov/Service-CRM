@@ -116,6 +116,7 @@ const ST={
  inspection:{t:'Осмотр/диагностика',c:'#dbeafe',tc:'#1e40af'},
  approved:{t:'Смета согласована',c:'#ede9fe',tc:'#5b21b6'},
  in_progress:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
+ inwork:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
  waiting:{t:'Ожидание материала',c:'#fee2e2',tc:'#991b1b'},
  postponed:{t:'Перенос',c:'#e5e7eb',tc:'#374151'},
  canceled:{t:'Отменена',c:'#e5e7eb',tc:'#6b7280'},
@@ -133,8 +134,24 @@ function visOrder(o){return !isTest(o)||(showTest()&&adminLike())}
 function adminLike(){if(typeof isOwner==='function'&&isOwner())return true;return state.role==='admin'||state.user==='Владелец';}
 function bizOrder(o){return !isTest(o)}
 function canCancel(){if(typeof can==='function')return isOwner()||can('orders_cancel');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
-// «Взять в работу»: владелец, orders_edit или создатель заявки
-function canTakeOrder(o){if(typeof can==='function')return isOwner()||can('orders_edit')||(o.by&&o.by===state.user);return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+// «Взять в работу»: право orders_take (по умолчанию owner/admin/manager/operator),
+// создатель заявки имеет его неявно всегда
+function canTakeOrder(o){if(typeof can==='function')return isOwner()||can('orders_take')||(o&&o.by&&o.by===state.user);return (typeof isOwner==='function'&&isOwner())||['admin','manager','operator'].includes(state.role)}
+// «В работе»: canonical-статус inwork + legacy in_progress (старые заявки без takenBy)
+function isInwork(o){return !!o&&(o.status==='inwork'||o.status==='in_progress')}
+// чужие взятые заявки: владелец/админ или право orders_view_all
+function canViewAllOrders(){if(typeof adminLike==='function'&&adminLike())return true;if(typeof can==='function')return can('orders_view_all');return false}
+// взятая другим работником заявка скрыта тем, у кого нет orders_view_all
+function hiddenTakeFromMe(o){return isInwork(o)&&!!o.worker&&o.worker!==state.user&&!canViewAllOrders()}
+// кнопка «Взять в работу»: статус new/approved + право + (исполнитель пуст ИЛИ я создатель/owner/admin)
+function showTakeBtn(o){
+ if(!o||['new','approved'].indexOf(o.status)<0)return false;
+ if(!canTakeOrder(o))return false;
+ if(!o.worker)return true;
+ if(typeof isOwner==='function'&&isOwner())return true;
+ if(o.by&&o.by===state.user)return true;
+ return typeof adminLike==='function'&&adminLike();
+}
 // удаление заявки: владелец или право orders_delete
 function canDeleteOrder(){if(typeof can==='function')return isOwner()||can('orders_delete');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 function deleteOrder(id){
@@ -154,7 +171,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={create:'Создана',assign:'Назначен исполнитель',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки'};
+const HIST_A={create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -165,7 +182,9 @@ function histLine(h){
  var d=h.details||{};
  var txt='';
  if(h.action==='create')txt=(d.client||'')+' • '+(d.sum!=null?money(d.sum):'');
- else if(h.action==='assign')txt='исполнитель: '+(d.worker||'—');
+  else if(h.action==='assign')txt='исполнитель: '+(d.worker||'—')+(d.from?' (вместо '+d.from+')':'');
+  else if(h.action==='take')txt=(d.worker||'')+(d.from?' (вместо '+d.from+')':'');
+  else if(h.action==='calendar_move')txt=(d.fields||[]).join(', ');
  else if(h.action==='status_change')txt=(ST[d.from]&&ST[d.from].t||d.from||'')+' → '+(ST[d.to]&&ST[d.to].t||d.to||'');
  else if(h.action==='payment_received')txt=money(d.sum)+' • '+(PAY_T[d.type]||d.type||'')+' • '+(PAY_M[d.method]||d.method||'')+(d.note?' • '+d.note:'');
  else if(h.action==='payment_materials')txt=money(d.sum);
@@ -419,19 +438,20 @@ const NAVS={
  admin:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
  operator:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['create','➕','Новая'],['reports','📊','Отчеты']],
  manager:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
- worker:[['tasks','✅','Мои задачи'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
+ worker:[['tasks','🔍','Поиск заказов'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
 };
 function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}render()}
 function login(role,name){state.role=role;state.user=name;state.screen=role==='worker'?'tasks':'orders';render()}
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.6.5</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.6.6</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function renderOrders(){
- let list=DB.orders.slice().filter(visOrder);
+ // чужие взятые (inwork) скрыты без права orders_view_all
+ let list=DB.orders.slice().filter(o=>visOrder(o)&&!hiddenTakeFromMe(o));
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
- if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','waiting'].includes(o.status));
+  if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','inwork','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
  return `
 <div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
@@ -443,8 +463,8 @@ ${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${o.statu
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
  <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}</div>
- <div style="margin-top:6px">${badges(o)}</div>
- <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
+  <div style="margin-top:6px">${badges(o)}${isInwork(o)&&o.worker?`<span class="badge" style="background:#ffedd5;color:#9a3412">🚜 ${escapeHtml(o.worker)}</span>`:''}</div>
+  <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
 </div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
 // === СХЕМА ВЫПОЛНЕНИЯ ЗАДАЧИ: маршрут точками ===
 // order.route = [{id,type:'supplier'|'client'|'base'|'custom',title,address,status:'pending'|'way'|'arrived'|'done',ts_arrived,ts_done,geo}]
@@ -583,11 +603,11 @@ function renderDetails(id){
  <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${escapeHtml(o.desc)}</span></div>
  ${canManage?`<div style="margin-top:10px"><label class="label">Сменить статус</label>
  <select class="input" onchange="setStatus(${o.id},this.value)">
-  ${Object.keys(ST).map(k=>`<option value="${k}" ${o.status===k?'selected':''}>${ST[k].t}</option>`).join('')}
+   ${Object.keys(ST).filter(k=>k!=='in_progress').map(k=>`<option value="${k}" ${o.status===k||(k==='inwork'&&o.status==='in_progress')?'selected':''}>${ST[k].t}</option>`).join('')}
  </select></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🗺 Схема выполнения</div>
- ${(o.route&&o.route.length)||o.status==='approved'||o.status==='in_progress'?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Схема появится после взятия заявки в работу</div>`}
+  ${(o.route&&o.route.length)||o.status==='approved'||isInwork(o)?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Схема появится после взятия заявки в работу</div>`}
  <button class="btn btn-outline" style="margin-top:8px" onclick="routeScreen(${o.id})">🗺 Открыть схему</button>
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
@@ -636,11 +656,11 @@ function renderDetails(id){
   ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
  </div>
 </div>
-${isW||canManage?`<div class="card">
- ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
- ${canTakeOrder(o)&&!o.worker&&o.status==='approved'?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}
- ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (на адресе)</button>`:''}
- ${o.status==='in_progress'&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
+${isW||canManage||showTakeBtn(o)?`<div class="card">
+  ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
+  ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
+  ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
+  ${isInwork(o)&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
  ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
@@ -709,42 +729,47 @@ function renderCalendar(){
    </div>`}).join('')}
 </div>`}
 function renderTasks(){
- // табы: Доступные / Мои (выбор в localStorage, посадка — «Доступные»)
- const tab=state.tasksTab||(function(){try{return localStorage.getItem('crm_tasks_tab')||'free'}catch(e){return 'free'}})();
- const mine=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
- const free=DB.orders.filter(o=>!o.worker&&o.status==='approved'&&visOrder(o));
- const active=mine.filter(o=>['approved','in_progress','waiting'].includes(o.status));
- const doneT=mine.filter(o=>['completed','paid'].includes(o.status));
+ // вкладки: Доступные / В работе / Завершённые (выбор в localStorage, посадка — «Доступные»)
+ const tabRaw=state.tasksTab||(function(){try{return localStorage.getItem('crm_tasks_tab')||'free'}catch(e){return 'free'}})();
+ const tab=tabRaw==='mine'?'work':tabRaw; // старый ключ «Мои» → «В работе»
+ const own=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
+ // «Доступные»: new/approved, исполнитель пуст или я; чужие взятые (inwork) скрыты
+ const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&(!o.worker||o.worker===state.user)&&!hiddenTakeFromMe(o));
+ const work=own.filter(o=>isInwork(o)&&!hiddenTakeFromMe(o));
+ const doneT=own.filter(o=>['completed','paid'].includes(o.status));
  return `
-<div class="header green"><h1>✅ Мои задачи</h1><span style="margin-left:auto;font-size:13px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
+<div class="header green"><h1>🔍 Поиск заказов</h1><span style="margin-left:auto;font-size:13px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="filters">
  <button class="fbtn ${tab==='free'?'active':''}" onclick="setTasksTab('free')">🆓 Доступные (${free.length})</button>
- <button class="fbtn ${tab==='mine'?'active':''}" onclick="setTasksTab('mine')">👷 Мои (${active.length})</button>
+ <button class="fbtn ${tab==='work'?'active':''}" onclick="setTasksTab('work')">🚜 В работе (${work.length})</button>
+ <button class="fbtn ${tab==='done'?'active':''}" onclick="setTasksTab('done')">✅ Завершённые (${doneT.length})</button>
 </div>
 ${tab==='free'?`<div class="card">
- ${free.map(o=>`<div class="mat"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${escapeHtml(o.desc)}</div>
-  <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
-  ${canTakeOrder(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">✅ Взять в работу</button>`:''}</div>`).join('')||'<div class="muted">Свободных заявок нет</div>'}
-</div>`:`
-<div class="card"><div class="sec-title">📋 Мои активные</div>
- ${active.map(o=>`
- <div class="mat" style="border-left:4px solid ${o.status==='in_progress'?'#f59e0b':'#8b5cf6'}">
-  <div style="cursor:pointer" onclick="go('details',${o.id})"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
-  <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
-  <div style="margin:4px 0">${badges(o)}</div>
-  <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
-  ${orderType(o)==='manufacture'&&orderStages(o).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
-  <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
-  ${o.status==='approved'&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'in_progress')">🚗 Приступил (я на адресе)</button>`:''}
-  ${o.status==='in_progress'&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
- </div>`).join('')||'<div class="muted">Активных нет</div>'}
-</div>
-<div class="card"><div class="sec-title">✔️ Завершенные (мои)</div>
- ${doneT.map(o=>`
- <div class="mat"><b>${escapeHtml(o.client)}</b> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
- <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
-</div>`}`}
+  ${free.map(o=>`<div class="mat"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
+   <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${escapeHtml(o.desc)}</div>
+   <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
+   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
+   ${o.worker===state.user&&o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (я на адресе)</button>`:''}
+   <button class="btn-sm btn-outline" style="margin-top:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button></div>`).join('')||'<div class="muted">Свободных заявок нет</div>'}
+ </div>`:tab==='work'?`
+<div class="card"><div class="sec-title">🚜 Мои заказы в работе</div>
+  ${work.map(o=>`
+  <div class="mat" style="border-left:4px solid #f59e0b">
+   <div style="cursor:pointer" onclick="go('details',${o.id})"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
+   <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
+   <div style="margin:4px 0">${badges(o)}</div>
+   <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
+   ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
+   <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
+   <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
+   ${isInwork(o)&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
+  </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
+ </div>`:`
+<div class="card"><div class="sec-title">✅ Завершённые (мои)</div>
+  ${doneT.map(o=>`
+  <div class="mat" style="cursor:pointer" onclick="go('details',${o.id})"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span> <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>
+  <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
+ </div>`}`}
 function setTasksTab(t){state.tasksTab=t;try{localStorage.setItem('crm_tasks_tab',t)}catch(e){}render()}
 function canShoppingCreate(){if(typeof can==='function')return isOwner()||can('shopping_create');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 function canShoppingClose(){if(typeof can==='function')return isOwner()||can('shopping_close');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
@@ -849,7 +874,7 @@ function renderReports(){
 <div class="card"><div class="sec-title">Сводка</div>
  <div class="info-row"><span class="muted">Всего заявок</span><b>${DB.orders.length}</b></div>
  <div class="info-row"><span class="muted">Выполнено / оплачено</span><b style="color:var(--green)">${done.length}</b></div>
- <div class="info-row"><span class="muted">В работе</span><b>${DB.orders.filter(o=>o.status==='in_progress').length}</b></div>
+ <div class="info-row"><span class="muted">В работе</span><b>${DB.orders.filter(o=>isInwork(o)).length}</b></div>
  <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(rev)}</b></div>
  <div class="info-row"><span class="muted">Средний чек</span><b>${money(done.length?Math.round(rev/done.length):0)}</b></div>
 </div>
@@ -963,13 +988,49 @@ function setStatus(id,s){const o=byId(id);
   return;
  }
  logAction(o,'status_change',{from:o.status,to:s});o.status=s;markOrder(o);save();render()}
-function takeOrder(id){const o=byId(id);if(!canTakeOrder(o))return alert('Нет прав');o.worker=state.user;o.status='approved';logAction(o,'assign',{worker:o.worker});logAction(o,'status_change',{from:'new',to:'approved'});markOrder(o);save();routeGenerate(o);save();state.tasksTab='mine';try{localStorage.setItem('crm_tasks_tab','mine')}catch(e){}alert('Заявка №'+id+' взята в работу. Отметьте «Приступил», когда будете на адресе.');render()}
+// === ВЗЯТИЕ В РАБОТУ ЧЕРЕЗ ГЕЙТ-МОДАЛКУ (в #modal-root, вне зоны render) ===
+function takeGateModal(id){
+ const o=byId(id);if(!o)return;
+ if(!showTakeBtn(o))return alert('Нет права orders_take');
+ const stg=(o.stages||[]);
+ openModal(
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">🚜 Взять в работу заявку №${o.id}?</b>
+    <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
+    <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right;max-width:60%">${escapeHtml(o.address||'—')}</b></div>
+    <div class="info-row"><span class="muted">Дата / время</span><b>${o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—'} • ${o.t1||'—'}–${o.t2||'—'}</b></div>
+    <div class="info-row"><span class="muted">Сумма</span><b style="color:var(--green)">${money(total(o))}</b></div>
+    <div class="info-row"><span class="muted">Тип работ</span><b>${OTYPE[orderType(o)]}</b></div>
+    <div class="info-row"><span class="muted">Этапов</span><b>${stg.length||'нет'}</b></div>
+    ${o.worker?`<div class="info-row"><span class="muted">Сейчас исполнитель</span><b style="color:var(--red)">${escapeHtml(o.worker)}</b></div>`:''}
+    <div class="row2" style="margin-top:12px">
+     <button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+     <button class="btn btn-green" onclick="takeConfirm(${o.id})">✅ Подтвердить</button></div>
+   </div></div>`);
+}
+function takeConfirm(id){
+ const o=byId(id);if(!o)return closeModal();
+ if(!showTakeBtn(o)){closeModal();return alert('Нет права orders_take')}
+ const prev=o.worker||'';
+ o.worker=state.user;o.status='inwork';o.takenBy=state.user;o.takenTs=Date.now();
+ if(prev&&prev!==state.user)logAction(o,'take',{worker:o.worker,from:prev});
+ else logAction(o,'take',{worker:o.worker});
+ markOrder(o);save();
+ routeGenerate(o);save();
+ if(prev&&prev!==state.user&&typeof pushEvent==='function')
+  pushEvent('assigned','🚜 Заявка №'+o.id+' взята: '+(state.user||''),'Исполнитель: '+prev+' → '+(state.user||''),o.id);
+ closeModal();
+ state.tasksTab='work';try{localStorage.setItem('crm_tasks_tab','work')}catch(e){}
+ render();
+ go('details',o.id);
+}
+// совместимость со старыми вызовами: брать можно только через гейт подтверждения
+function takeOrder(id){takeGateModal(id)}
 function finishOrder(id){const o=byId(id);
- // manufacture: заказ завершается, когда все этапы готовы
- if(orderType(o)==='manufacture'&&orderStages(o).length){
-  const und=orderStages(o).filter(s=>!s.done);
-  if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
- }
+ // завершение блокируется, пока в заявке есть неподтверждённые этапы (любой тип, если этапы есть)
+ const und=(o.stages||[]).filter(s=>!s.done);
+ if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
  // кассовое закрытие: при остатке > 0 — модалка
  if(balance(o)>0){closeOrderModal(id);return}
  doCompleteOrder(id);
@@ -1091,7 +1152,7 @@ function findConflicts(worker,date,t1,t2,skipId){
  if(!worker||!date)return [];
  const s1=toMin(t1),e1=toMin(t2);
  if(s1==null||e1==null)return [];
- return DB.orders.filter(o=>o.id!==skipId&&o.worker===worker&&o.date===date&&['new','inspection','approved','in_progress','waiting','postponed'].includes(o.status))
+  return DB.orders.filter(o=>o.id!==skipId&&o.worker===worker&&o.date===date&&['new','inspection','approved','in_progress','inwork','waiting','postponed'].includes(o.status))
   .filter(o=>{const s2=toMin(o.t1),e2=toMin(o.t2);return s2!=null&&e2!=null&&s1<e2&&s2<e1;});
 }
 function canOverrideConflict(){if(typeof can==='function')return isOwner()||can('orders_edit');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
@@ -1429,7 +1490,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.6.5';
+const APP_VERSION='1.6.6';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -1461,6 +1522,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 

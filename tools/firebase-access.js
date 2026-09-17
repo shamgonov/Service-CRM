@@ -12,6 +12,8 @@ var PERMS_CATALOG = [
  {key:'orders_status',label:'Смена статусов'},
  {key:'orders_delete',label:'Удаление заявок'},
  {key:'orders_cancel',label:'Отмена заявок'},
+ {key:'orders_take',label:'Взятие заказов в работу'},
+ {key:'orders_view_all',label:'Просмотр всех заявок, включая чужие в работе'},
  {key:'orders_history',label:'Просмотр истории заявок'},
  {key:'calendar',label:'Календарь'},
  {key:'tasks',label:'Мои задачи'},
@@ -31,8 +33,8 @@ function allPermKeys(){ return PERMS_CATALOG.map(function(x){return x.key;}); }
 // Встроенные роли для сида
 var BUILTIN_ROLES = [
  {id:'admin', name:'Админ', builtin:true, perms:['all']},
- {id:'operator', name:'Оператор', builtin:true, perms:['orders_view','orders_create','orders_edit','orders_status','calendar','shopping','shopping_close','reports']},
- {id:'manager', name:'Менеджер', builtin:true, perms:['orders_view','orders_edit','orders_status','calendar','shopping','shopping_create','shopping_close']},
+ {id:'operator', name:'Оператор', builtin:true, perms:['orders_view','orders_create','orders_edit','orders_status','orders_take','calendar','shopping','shopping_close','reports']},
+ {id:'manager', name:'Менеджер', builtin:true, perms:['orders_view','orders_edit','orders_status','orders_take','calendar','shopping','shopping_create','shopping_close']},
  {id:'worker', name:'Работник', builtin:true, perms:['orders_view','tasks','calendar','shopping']}
 ];
 // Совместимость: старые константные права по ключу роли
@@ -292,7 +294,7 @@ setInterval(function(){
   DB.orders.forEach(function(o){
    if(o.test)return;
    if(!o.date||o.date!==dstr||!o.t1)return;
-   if(['approved','in_progress','new'].indexOf(o.status)<0)return;
+   if(['approved','in_progress','inwork','new'].indexOf(o.status)<0)return;
    if(!(typeof can==='function'&&can('orders_view')))return;
    var mine=o.worker&&(o.worker===dev||o.worker===myName());
    if(!mine)return;
@@ -309,7 +311,7 @@ setInterval(function(){
    var tomorrow=new Date(today.getTime()+864e5);
    var tstr=tomorrow.getFullYear()+'-'+String(tomorrow.getMonth()+1).padStart(2,'0')+'-'+String(tomorrow.getDate()).padStart(2,'0');
    var tm=DB.orders.filter(function(o){
-    return !o.test&&o.date===tstr&&o.worker&&(o.worker===dev||o.worker===myName())&&['approved','in_progress','new'].indexOf(o.status)>=0;
+     return !o.test&&o.date===tstr&&o.worker&&(o.worker===dev||o.worker===myName())&&['approved','in_progress','inwork','new'].indexOf(o.status)>=0;
    });
    if(tm.length){
     dflags[dstr]=now; lsSet('crm_tomorrow_fired',dflags);
