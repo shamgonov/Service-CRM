@@ -985,11 +985,11 @@ window.render = function(){
  if(state.screen==='profile'){
   document.getElementById('nav').style.display='flex';
   document.getElementById('app').innerHTML=renderProfile();
-  addProfileNavItem();
+  //addProfileNavItem(); // дубль: профиль уже в NAVS через buildNav
   return;
  }
  if(_origRender)_origRender();
- addProfileNavItem();
+ //addProfileNavItem(); // дубль: профиль уже в NAVS через buildNav
  applyPermsUI();
  applyEventBadges();
  updateAppBadge();
