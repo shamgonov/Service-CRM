@@ -172,7 +172,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
+const HIST_A={pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -1497,7 +1497,7 @@ function stageMarkDone(id,stageId){
  const s=(o.stages||[]).find(x=>x.id===stageId);
  if(!s||s.autoOnly)return alert('Этот этап отмечается из карточки');
  s.done=true;s.ts_done=Date.now();s.by=state.user;
- logAction(o,'stage_done',{stage:s.title});
+ logAction(o,'stage_complete',{stageTitle:s.title});
  markOrder(o);orderSave(o);
  if(state.schemeTray===id)render();
 }
@@ -1529,13 +1529,11 @@ function autoMarkPaymentDone(id){
  const payStage=(o.stages||[]).find(x=>x.id==='st_pay');
  if(payStage&&!payStage.done){
   payStage.done=true;payStage.ts_done=Date.now();payStage.by=state.user;
-  logAction(o,'stage_done',{stage:'Оплата (авто)'});
+  logAction(o,'stage_complete',{stageTitle:'Оплата (авто)'});
   markOrder(o);orderSave(o);
   setTimeout(()=>notifyCurrentStage(),300);
  }
 }
-
-// === ПРОВЕРКА: все этапы кроме последнего готовы? ===
 function allStagesReadyForComplete(o){
  const st=o.stages||[];
  if(!st.length)return true;
