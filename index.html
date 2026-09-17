@@ -295,7 +295,7 @@ function stageTimeline(o,editable){
     '<span style="cursor:pointer;color:var(--red)" onclick="stageDel('+o.id+','+i+')">✕</span></span>':'')+'</div>'+
    '<div class="muted">Срок: '+escapeHtml(stageDueLabel(s))+(s.by?' • исполнитель: '+escapeHtml(s.by):'')+'</div>'+
    (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
-   ((editable||(typeof state!=='undefined'&&state.user===o.worker))&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
+   (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
     ${!s.plan_start&&s.by?`<button class="btn-sm btn-blue" onclick="stageStart(${o.id},${i})">▶ Приступить</button>`:''}
     <button class="btn-sm btn-green" onclick="stageDone(${o.id},${i})">✅ Этап готов</button></div>`:'')+
   '</div>';
@@ -556,13 +556,10 @@ function routeAddPoint(id){
  markOrder(o);save();routeScreen(id);
 }
 function routeArrive(id,i){
- const o=byId(id);
- const isExec=(typeof state!=='undefined'&&state.user===o.worker);
- if(!isExec&&!canDoRoute(o))return alert('Нет прав');
+ const o=byId(id);if(!canDoRoute(o))return alert('Нет прав');
  const p=o.route[i];
- p.status='arrived';p.ts_arrived=Date.now();
- markOrder(o);save();routeScreen(id);
- if(false){var apply=function(geo){
+ var apply=function(geo){ p.status='arrived';p.ts_arrived=Date.now();if(geo)p.geo=geo;
+  markOrder(o);save();routeScreen(id);
   // связка «материалы ↔ аванс»: на точке поставщика предложить списать выданный аванс
   if(p.type==='supplier'&&canFinance()&&materialsPaid(o)>0){
    const spent=prompt('Подтвердите сумму закупки (выдано на материалы: '+money(materialsPaid(o))+'):','')||'';
@@ -611,9 +608,9 @@ function renderDetails(id){
    ${Object.keys(ST).filter(k=>k!=='in_progress').map(k=>`<option value="${k}" ${o.status===k||(k==='inwork'&&o.status==='in_progress')?'selected':''}>${ST[k].t}</option>`).join('')}
  </select></div>`:''}
 </div>
-<div class="card"><div class="sec-title">📋 Этапы и схема</div>
-  ${(o.route&&o.route.length)||o.status==='approved'||isInwork(o)?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Этапы будут добавлены владельцем или менеджером</div>`}
- <button class="btn btn-outline" style="margin-top:8px" onclick="routeScreen(${o.id})">📋 Открыть этапы</button>
+<div class="card"><div class="sec-title">🗺 Схема выполнения</div>
+  ${(o.route&&o.route.length)||o.status==='approved'||isInwork(o)?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Схема появится после взятия заявки в работу</div>`}
+ <button class="btn btn-outline" style="margin-top:8px" onclick="routeScreen(${o.id})">🗺 Открыть схему</button>
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
  <div class="photos" id="photoGrid">${(function(){
@@ -765,7 +762,7 @@ ${tab==='free'?`<div class="card">
    <div style="margin:4px 0">${badges(o)}</div>
    <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
-   <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">📋 Этапы</button>
+   <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
    ${isInwork(o)&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
