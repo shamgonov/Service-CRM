@@ -297,7 +297,7 @@ function stageTimeline(o,editable){
    (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
    (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
     ${!s.plan_start&&s.by?`<button class="btn-sm btn-blue" onclick="stageStart(${o.id},${i})">▶ Приступить</button>`:''}
-    <button class="btn-sm btn-green" onclick="stageDone(${o.id},${i})">✅ Этап готов</button></div>`:'')+
+    ${typeof stageMarkDone==='function'&&s.id?`<button class="btn-sm btn-green" onclick="stageMarkDone(${o.id},'${s.id}')">✅ Готово</button>`:`<button class="btn-sm btn-green" onclick="stageDone(${o.id},${i})">✅ Этап готов</button>`}</div>`:'')+
   '</div>';
  });
  if(editable)html+='<button class="btn-sm btn-outline" style="margin-top:8px" onclick="stageAdd('+o.id+')">＋ Этап</button>';
@@ -660,7 +660,7 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:''}
+  ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`}`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
  ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
@@ -714,18 +714,26 @@ function renderCreate(){
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
  const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled').sort((a,b)=>(a.t1||'').localeCompare(b.t1||''));
+ const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
 <div class="card">
- <div class="sec-title">Загрузка на ${state.calDate.slice(8)}.${state.calDate.slice(5,7)}</div>
- ${['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'].map(slot=>{
-   const inSlot=list.filter(o=>o.t1<slot.split('–')[1]&&o.t2>slot.split('–')[0]);
+ <div class="sec-title">Загрузка на ${state.calDate.slice(8)}.${state.calDate.slice(5,7)} <span class="muted" style="font-weight:400;font-size:12px">(клик — открыть/создать, удержание — перенести)</span></div>
+ ${slots.map((slot,si)=>{
+   const [sStart,sEnd]=slot.split('–');
+   const inSlot=list.filter(o=>o.t1<sEnd&&o.t2>sStart);
    const busy=inSlot.filter(o=>o.worker);
-   return `<div class="slot" style="${busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4'}">
+   return `<div class="slot" data-slot="${si}" data-start="${sStart}" data-end="${sEnd}"
+    style="${CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
+    onmousedown="calSlotClick(event,${si},'${sStart}','${sEnd}')" ontouchstart="calSlotClick(event,${si},'${sStart}','${sEnd}')"
+    onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
+    ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
     <b style="font-size:13px">${slot}</b>
-    ${inSlot.length?inSlot.map(o=>`<div style="font-size:13px;margin-top:4px;cursor:pointer" onclick="go('details',${o.id})">
-     ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} • ${escapeHtml(o.address)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
-    :'<div class="muted" style="margin-top:2px">🟩 свободно</div>'}
+    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" style="font-size:13px;margin-top:4px;cursor:grab"
+     onmousedown="calOrderDown(event,${o.id},${si})" ontouchstart="calOrderDown(event,${o.id},${si})"
+     onclick="event.stopPropagation();go('details',${o.id})">
+     ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
+    :'<div class="muted" style="margin-top:2px">🟩 свободно — клик для новой заявки</div>'}
    </div>`}).join('')}
 </div>`}
 function renderTasks(){
@@ -762,7 +770,7 @@ ${tab==='free'?`<div class="card">
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&orderType(o)!=='manufacture'?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:''}
+   ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`}`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
 <div class="card"><div class="sec-title">✅ Завершённые (мои)</div>
@@ -1055,6 +1063,7 @@ function closeOrderModal(id){
    </div></div>`);
 }
 function closeOrderPay(id){
+ autoMarkPaymentDone(id);
  const o=byId(id);if(!canFinance())return alert('Нет прав');
  const bal=balance(o);
  if(bal<=0)return closeOrderModalRemove(id);
@@ -1067,6 +1076,7 @@ function closeOrderPay(id){
  doCompleteOrder(id);
 }
 function closeOrderFull(id){
+ autoMarkPaymentDone(id);
  const o=byId(id);if(!canFinance())return alert('Нет прав');
  o.payments=o.payments||[];
  o.payments.push({id:'p'+Date.now(),sum:total(o),type:'full',method:'cash',date:new Date().toISOString().slice(0,10),note:'оплата полностью при закрытии'});
@@ -1438,6 +1448,114 @@ function drawClock(){const c=window._clk;if(!c)return;const root=document.getEle
 function clockTap(e){const svg=e.currentTarget,rect=svg.getBoundingClientRect();const x=(e.clientX-rect.left)*(200/rect.width)-100,y=(e.clientY-rect.top)*(200/rect.height)-100;const dist=Math.sqrt(x*x+y*y);let ang=Math.atan2(y,x)*180/Math.PI+90;if(ang<0)ang+=360;if(dist<55){window._clk.h=Math.round(ang/30)%12;}else{window._clk.m=Math.round(ang/6/5)*5%60;}drawClock();}
 function saveClockPicker(){const c=window._clk;if(!c)return;MYDOC.profile.schedule=MYDOC.profile.schedule||{days:[],from:'09:00',to:'18:00'};MYDOC.profile.schedule[c.field]=String(c.h).padStart(2,'0')+':'+String(c.m).padStart(2,'0');saveProfile();closeClockPicker();render();}
 function closeClockPicker(){window._clk=null;const r=document.getElementById('clockPickerRoot');if(r)r.innerHTML='';}
+// === СХЕМА ВЫПОЛНЕНИЯ: автогенерация этапов при взятии ===
+function takeConfirm(id){
+ const o=byId(id);if(!o)return;
+ if(!showTakeBtn(o))return alert('Нет прав на взятие заявки');
+ o.status='inwork';
+ if(!o.worker)o.worker=state.user;
+ o.takenBy=state.user;
+ o.takenTs=Date.now();
+ // Автогенерация 7 этапов
+ const hasMats=(o.materials||[]).length>0;
+ o.stages=[
+  {id:'st_call',type:'custom',title:'Созвон с заказчиком',done:false},
+  {id:'st_left',type:'custom',title:'Выехал',done:false},
+ ];
+ if(hasMats)o.stages.push({id:'st_buy',type:'custom',title:'Закупка/комплектация материалов',done:false});
+ o.stages.push(
+  {id:'st_arrive',type:'custom',title:'К заказчику',done:false},
+  {id:'st_work',type:'custom',title:'Приступил к работе',done:false},
+  {id:'st_pay',type:'custom',title:'Оплата',done:false,autoOnly:true},
+  {id:'st_done',type:'custom',title:'Завершить',done:false,autoOnly:true}
+ );
+ logAction(o,'take',{by:state.user});
+ markOrder(o);orderSave(o);saveSettings();
+ closeModal();
+ go('details',id);
+}
+
+// === ОКНО СХЕМЫ: открывается из карточки, сворачивается в боковой трей ===
+function openSchemeTray(id){
+ const o=byId(id);if(!o)return;
+ state.schemeTray=id;
+ render();
+}
+function closeSchemeTray(){
+ state.schemeTray=null;
+ render();
+}
+
+// === КНОПКА ЭТАПА: отметить готовым (только для этапов 1-5) ===
+function stageMarkDone(id,stageId){
+ const o=byId(id);if(!o)return;
+ const s=(o.stages||[]).find(x=>x.id===stageId);
+ if(!s||s.autoOnly)return alert('Этот этап отмечается из карточки');
+ s.done=true;s.ts_done=Date.now();s.by=state.user;
+ logAction(o,'stage_done',{stage:s.title});
+ markOrder(o);orderSave(o);
+ if(state.schemeTray===id)render();
+}
+
+// === АВТООТМЕТКА ОПЛАТЫ: вызывается из closeOrderPay/closeOrderFull/setStatus('paid') ===
+function autoMarkPaymentDone(id){
+ const o=byId(id);if(!o)return;
+ const payStage=(o.stages||[]).find(x=>x.id==='st_pay');
+ if(payStage&&!payStage.done){
+  payStage.done=true;payStage.ts_done=Date.now();payStage.by=state.user;
+  logAction(o,'stage_done',{stage:'Оплата (авто)'});
+  markOrder(o);orderSave(o);
+ }
+}
+
+// === ПРОВЕРКА: все этапы кроме последнего готовы? ===
+function allStagesReadyForComplete(o){
+ const st=o.stages||[];
+ if(!st.length)return true;
+ const allButLast=st.slice(0,-1);
+ return allButLast.every(s=>s.done);
+}
+
+// === КАЛЕНДАРЬ: клик по свободному слоту → новая заявка с предзаполнением ===
+var CAL_HOLD=null,CAL_SRC=null,CAL_DRAG=null;
+function calSlotClick(e,si,sStart,sEnd){
+ if(e.target.closest('.cal-order'))return;
+ CAL_HOLD=setTimeout(()=>{CAL_HOLD=null;if(can('orders_edit')){CAL_SRC=si;render();}},400);
+}
+function calSlotRelease(e,si,sStart,sEnd){
+ if(CAL_HOLD){
+  clearTimeout(CAL_HOLD);CAL_HOLD=null;
+  if(!can('orders_create'))return;
+  state.calPrefill={date:state.calDate,t1:sStart,t2:sEnd};
+  go('create');
+ }
+}
+function calOrderDown(e,oid,si){
+ e.stopPropagation();e.preventDefault();
+ CAL_HOLD=setTimeout(()=>{CAL_HOLD=null;if(can('orders_edit')){CAL_SRC=si;CAL_DRAG=oid;render();}},400);
+}
+function calDrop(e,ti,tStart,tEnd){
+ e.preventDefault();
+ if(CAL_DRAG==null||CAL_SRC==null||CAL_SRC===ti){CAL_SRC=null;CAL_DRAG=null;render();return;}
+ const src=byId(CAL_DRAG);if(!src){CAL_SRC=null;CAL_DRAG=null;render();return;}
+ const tgtOrders=DB.orders.filter(o=>o.date===state.calDate&&o.t1<tEnd&&o.t2>tStart&&o.id!==CAL_DRAG);
+ const swap=tgtOrders.length?tgtOrders[0]:null;
+ const srcDur=(toMin(src.t2)-toMin(src.t1));
+ const newT1=tStart,newT2=String(Math.floor((toMin(tStart)+srcDur)/60)).padStart(2,'0')+':'+String((toMin(tStart)+srcDur)%60).padStart(2,'0');
+ let msg='<b>Перенос заявки №'+src.id+'</b><br>'+src.date+' '+src.t1+'–'+src.t2+' → '+state.calDate+' '+newT1+'–'+newT2;
+ if(swap){msg+='<br><br><b>Обмен с заявкой №'+swap.id+'</b><br>'+swap.date+' '+swap.t1+'–'+swap.t2+' ↔ '+src.date+' '+src.t1+'–'+src.t2;}
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📅 Подтвердите изменение</b><div style="margin-bottom:14px;font-size:14px">'+msg+'</div><div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="CAL_SRC=null;CAL_DRAG=null;closeModal();render()">Отмена</button><button class="btn btn-blue" onclick="calConfirmMove('+src.id+',\''+newT1+'\',\''+newT2+'\','+(swap?swap.id:'null')+')">Подтвердить</button></div></div></div>');
+}
+function calConfirmMove(oid,newT1,newT2,swapId){
+ const o=byId(oid);if(!o){closeModal();return;}
+ const old={date:o.date,t1:o.t1,t2:o.t2};
+ if(swapId){const s=byId(swapId);if(s){const st={date:s.date,t1:s.t1,t2:s.t2};s.date=old.date;s.t1=old.t1;s.t2=old.t2;logAction(s,'edit',{fields:['date: '+st.date+'→'+s.date,'t1: '+st.t1+'→'+s.t1,'t2: '+st.t2+'→'+s.t2]});markOrder(s);orderSave(s);}}
+ o.date=state.calDate;o.t1=newT1;o.t2=newT2;
+ logAction(o,'edit',{fields:['date: '+old.date+'→'+o.date,'t1: '+old.t1+'→'+o.t1,'t2: '+old.t2+'→'+o.t2]});
+ markOrder(o);orderSave(o);
+ CAL_SRC=null;CAL_DRAG=null;closeModal();render();
+ pushEvent('calendar','📅 Календарь изменён — №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id);
+}
 function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
 function renderHoldGate(){if(!RENDER_HOLD){RENDER_PENDING=false;return false}RENDER_PENDING=true;return true}
 // применить накопленный запрос, паузу не трогая
@@ -1484,7 +1602,20 @@ function render(){
  const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
- app.innerHTML=banner+(S[state.screen]||renderOrders)();
+  app.innerHTML=banner+(S[state.screen]||renderOrders)();
+ if(state.schemeTray){
+  const so=byId(state.schemeTray);
+  if(so){
+   const trayHtml=`<div style="position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;overflow-y:auto;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+     <b style="font-size:14px">Вы выполняете заказ №${so.id}</b>
+     <button class="btn-sm btn-outline" onclick="closeSchemeTray()">✕ Свернуть</button>
+    </div>
+    ${stageTimeline(so,true)}
+   </div>`;
+   document.body.insertAdjacentHTML('beforeend',trayHtml);
+  }
+ }
  // восстановление прокрутки и фокуса (без сброса на верх при снапшотах/таймерах)
  requestAnimationFrame(function(){
   window.scrollTo(0,_y||0);
