@@ -12,6 +12,7 @@ var PERMS_CATALOG = [
  {key:'orders_status',label:'Смена статусов'},
  {key:'orders_delete',label:'Удаление заявок'},
  {key:'orders_cancel',label:'Отмена заявок'},
+ {key:'orders_restore',label:'Возобновление отменённых заявок'},
  {key:'orders_take',label:'Взятие заказов в работу'},
  {key:'orders_view_all',label:'Просмотр всех заявок, включая чужие в работе'},
  {key:'orders_history',label:'Просмотр истории заявок'},

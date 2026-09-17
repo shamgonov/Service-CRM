@@ -172,7 +172,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
+const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -462,6 +462,16 @@ function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
  <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.7.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
+function markViewed(id){
+ const o=byId(id);if(!o)return;
+ const devId=typeof deviceId==='function'?deviceId():'system';
+ o.viewedBy=o.viewedBy||{};
+ if(!o.viewedBy[devId]){
+  o.viewedBy[devId]=new Date().toISOString();
+  logAction(o,'view',{by:state.user});
+  markOrder(o);orderSave(o);
+ }
+}
 function renderOrders(){
  // чужие взятые (inwork) скрыты без права orders_view_all
  let list=DB.orders.slice().filter(o=>visOrder(o)&&!hiddenTakeFromMe(o));
@@ -556,7 +566,7 @@ function routeScreen(id){
  const o=byId(id);if(!o)return;
  if(!visOrder(o)&&!canCancel())return alert('Тестовая заявка скрыта (включите «Показывать тестовые» в админке)');
  const editable=o.route&&o.route.length?canEditRoute(o):false;
- document.getElementById('app').innerHTML='<div class="header"><button class="back" onclick="go(\''+(state.role==='worker'?'tasks':'details')+'\','+(state.role==='worker'?id:id)+')">←</button><h1>🗺 Схема — №'+o.id+'</h1></div>'+
+ document.getElementById('app').innerHTML='<div class="header"><button class="back" onclick="go('+'${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1>${(o.viewedBy&&Object.keys(o.viewedBy).length)?'<span class="badge" style="background:#d1fae5;color:#065f46">👁 '+(o.viewedBy?Object.keys(o.viewedBy).length:0)+'</span>':''}</div>\''+(state.role==='worker'?'tasks':'details')+'\','+(state.role==='worker'?id:id)+')">←</button><h1>🗺 Схема — №'+o.id+'</h1></div>'+
   '<div class="card">'+routeTimeline(o,editable)+'</div>';
 }
 function routeMove(id,i,d){const o=byId(id);if(!canEditRoute(o))return;const r=o.route;const j=i+d;if(j<0||j>=r.length)return;const t=r[i];r[i]=r[j];r[j]=t;markOrder(o);save();routeScreen(id)}
@@ -603,7 +613,7 @@ function renderDetails(id){
  const canManage=(typeof can==='function')?can('orders_status'):['admin','operator','manager'].includes(state.role);
  const isW=state.role==='worker'&&!(typeof can==='function'&&can('orders_view'));
  return `
-<div class="header"><button class="back" onclick="go('${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1></div>
+<div class="header"><button class="back" onclick="go('+'${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1>${(o.viewedBy&&Object.keys(o.viewedBy).length)?'<span class="badge" style="background:#d1fae5;color:#065f46">👁 '+(o.viewedBy?Object.keys(o.viewedBy).length:0)+'</span>':''}</div>'${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1></div>
 <div class="card">
  <div>${badges(o)}</div>
  <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
@@ -675,6 +685,7 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
   ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
+${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
  ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
 </div>`:''}
@@ -685,7 +696,7 @@ ${paymentsBlock(o)}
 ${historyBlock(o)}`}
 function renderCreate(){
  return `
-<div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
+<div class="header"><button class="back" onclick="go('+'${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1>${(o.viewedBy&&Object.keys(o.viewedBy).length)?'<span class="badge" style="background:#d1fae5;color:#065f46">👁 '+(o.viewedBy?Object.keys(o.viewedBy).length:0)+'</span>':''}</div>'orders')">←</button><h1>Новая заявка</h1></div>
 <div class="card">
  <div class="field"><label class="label">Клиент *</label><input class="input" id="c-client" placeholder="ФИО"></div>
  <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..."></div>
@@ -1292,6 +1303,14 @@ function specDel(i){
 // обновление текущего экрана админки: staff (вкладка ролей) или admin
 function refreshAdminView(){
  if(state.screen==='staff'&&typeof loadStaff==='function'){loadStaff();return}
+ render();
+}
+function restoreOrder(id){
+ const o=byId(id);if(!o)return;
+ if(!can('orders_restore'))return alert('Нет права orders_restore');
+ o.status='new';
+ logAction(o,'restore',{by:state.user});
+ markOrder(o);orderSave(o);
  render();
 }
 function cancelOrderModal(id){
