@@ -262,7 +262,7 @@ const STAGE_T={measure:'Замер',make:'Изготовление',install:'М�
 const PAY_T={advance:'Аванс',partial:'Частичный',full:'Полный',materials:'На материалы'};
 const PAY_M={cash:'Наличные',card:'Карта',transfer:'Перевод'};
 function orderType(o){return o.type||'standard'}
-function orderStages(o){return (orderType(o)==='manufacture'&&o.stages)||[]}
+function orderStages(o){return o.stages||[];}
 function orderPayments(o){return o.payments||[]}
 function totalPaid(o){return orderPayments(o).filter(p=>p.type!=='materials').reduce((s,p)=>s+(+p.sum||0),0)}
 function materialsPaid(o){return orderPayments(o).filter(p=>p.type==='materials').reduce((s,p)=>s+(+p.sum||0),0)}
@@ -1498,6 +1498,19 @@ function stageMarkDone(id,stageId){
 }
 
 // === АВТООТМЕТКА ОПЛАТЫ: вызывается из closeOrderPay/closeOrderFull/setStatus('paid') ===
+function genDefaultStages(o){
+ const hasMats=(o.materials||[]).length>0;
+ const st=[{id:'st_call',type:'custom',title:'Созвон с заказчиком',done:false},{id:'st_left',type:'custom',title:'Выехал',done:false}];
+ if(hasMats)st.push({id:'st_buy',type:'custom',title:'Закупка/комплектация материалов',done:false});
+ st.push({id:'st_arrive',type:'custom',title:'К заказчику',done:false},{id:'st_work',type:'custom',title:'Приступил к работе',done:false},{id:'st_pay',type:'custom',title:'Оплата',done:false,autoOnly:true},{id:'st_done',type:'custom',title:'Завершить',done:false,autoOnly:true});
+ return st;
+}
+function ensureStages(o){
+ if(!o||!isInwork(o))return;
+ if((o.stages||[]).length)return;
+ o.stages=genDefaultStages(o);
+ markOrder(o);orderSave(o);
+}
 function autoMarkPaymentDone(id){
  const o=byId(id);if(!o)return;
  const payStage=(o.stages||[]).find(x=>x.id==='st_pay');
@@ -1604,7 +1617,7 @@ function render(){
  if(typeof offlineBanner==='function')banner=offlineBanner();
   app.innerHTML=banner+(S[state.screen]||renderOrders)();
  if(state.schemeTray){
-  const so=byId(state.schemeTray);
+  const so=byId(state.schemeTray);if(so)ensureStages(so);
   if(so){
    const trayHtml=`<div style="position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;overflow-y:auto;padding:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
