@@ -117,6 +117,7 @@ const ST={
  approved:{t:'Смета согласована',c:'#ede9fe',tc:'#5b21b6'},
  in_progress:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
  inwork:{t:'В работе',c:'#ffedd5',tc:'#9a3412'},
+ paused:{t:'На паузе',c:'#fef3c7',tc:'#92400e'},
  waiting:{t:'Ожидание материала',c:'#fee2e2',tc:'#991b1b'},
  postponed:{t:'Перенос',c:'#e5e7eb',tc:'#374151'},
  canceled:{t:'Отменена',c:'#e5e7eb',tc:'#6b7280'},
@@ -602,7 +603,7 @@ function renderDetails(id){
  ${canDeleteOrder()?`<button class="btn-sm btn-red" style="margin-top:8px;margin-left:6px" onclick="deleteOrder(${o.id})">🗑 Удалить</button>`:''}
  <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${escapeHtml(o.desc)}</span></div>
  ${canManage?`<div style="margin-top:10px"><label class="label">Сменить статус</label>
- <select class="input" onchange="setStatus(${o.id},this.value)">
+ 
    ${Object.keys(ST).filter(k=>k!=='in_progress').map(k=>`<option value="${k}" ${o.status===k||(k==='inwork'&&o.status==='in_progress')?'selected':''}>${ST[k].t}</option>`).join('')}
  </select></div>`:''}
 </div>
@@ -660,7 +661,7 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`}`:''}
+  ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
  ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
@@ -770,7 +771,7 @@ ${tab==='free'?`<div class="card">
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`}`:''}
+   ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
 <div class="card"><div class="sec-title">✅ Завершённые (мои)</div>
@@ -1017,22 +1018,7 @@ function takeGateModal(id){
      <button class="btn btn-green" onclick="takeConfirm(${o.id})">✅ Подтвердить</button></div>
    </div></div>`);
 }
-function takeConfirm(id){
- const o=byId(id);if(!o)return closeModal();
- if(!showTakeBtn(o)){closeModal();return alert('Нет права orders_take')}
- const prev=o.worker||'';
- o.worker=state.user;o.status='inwork';o.takenBy=state.user;o.takenTs=Date.now();
- if(prev&&prev!==state.user)logAction(o,'take',{worker:o.worker,from:prev});
- else logAction(o,'take',{worker:o.worker});
- markOrder(o);save();
- routeGenerate(o);save();
- if(prev&&prev!==state.user&&typeof pushEvent==='function')
-  pushEvent('assigned','🚜 Заявка №'+o.id+' взята: '+(state.user||''),'Исполнитель: '+prev+' → '+(state.user||''),o.id);
- closeModal();
- state.tasksTab='work';try{localStorage.setItem('crm_tasks_tab','work')}catch(e){}
- render();
- go('details',o.id);
-}
+
 // совместимость со старыми вызовами: брать можно только через гейт подтверждения
 function takeOrder(id){takeGateModal(id)}
 function finishOrder(id){const o=byId(id);
@@ -1371,6 +1357,13 @@ function doEditOrder(id){
  if(!g('e-client'))return alert('Укажите клиента');
  const before={client:o.client,phone:o.phone,address:o.address,date:o.date,t1:o.t1,t2:o.t2,price:+o.price||0,desc:o.desc,status:o.status,type:orderType(o),worker:o.worker,photoReport:o.photoReport,test:!!o.test};
  const newWorker=g('e-worker')||null;
+ if(newWorker&&newWorker!==o.worker){
+  const boughtMats=(o.materials||[]).some(m=>m.status==='bought');
+  o.stages=(o.stages||[]).map(s=>{
+   if(s.id==='st_buy'&&boughtMats)return s;
+   return {...s,done:false,ts_done:null,by:null};
+  });
+ }
  // конфликт исполнителя при смене
  const conf=newWorker?findConflicts(newWorker,g('e-date'),g('e-t1'),g('e-t2'),o.id):[];
  if(conf.length&&!confirm('Исполнитель занят в это время ('+conf.length+' пересечений). Всё равно сохранить?'))return;
@@ -1510,6 +1503,14 @@ function ensureStages(o){
  if((o.stages||[]).length)return;
  o.stages=genDefaultStages(o);
  markOrder(o);orderSave(o);
+}
+function pauseOrder(id){
+ const o=byId(id);if(!o)return;
+ o.status='paused';
+ logAction(o,'pause',{by:state.user});
+ markOrder(o);orderSave(o);
+ state.schemeTray=null;
+ render();
 }
 function autoMarkPaymentDone(id){
  const o=byId(id);if(!o)return;
