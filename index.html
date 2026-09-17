@@ -556,25 +556,23 @@ function routeAddPoint(id){
  markOrder(o);save();routeScreen(id);
 }
 function routeArrive(id,i){
- const o=byId(id);if(!canDoRoute(o))return alert('Нет прав');
+ const o=byId(id);
+ const isExec=(typeof state!=='undefined'&&state.user===o.worker);
+ if(!isExec&&!canDoRoute(o))return alert('Нет прав');
  const p=o.route[i];
- var apply=function(geo){ p.status='arrived';p.ts_arrived=Date.now();if(geo)p.geo=geo;
-  markOrder(o);save();routeScreen(id);
-  // связка «материалы ↔ аванс»: на точке поставщика предложить списать выданный аванс
-  if(p.type==='supplier'&&canFinance()&&materialsPaid(o)>0){
-   const spent=prompt('Подтвердите сумму закупки (выдано на материалы: '+money(materialsPaid(o))+'):','')||'';
-   const s=+spent||0;
-   if(s>0){
-    const rest=Math.max(0,materialsPaid(o)-s);
-    o.payments.push({id:'p'+Date.now(),sum:materialsPaid(o),type:'materials',method:'cash',date:new Date().toISOString().slice(0,10),note:'закупка '+p.title+': '+money(s)+', остаток '+money(rest)});
-    markOrder(o);save();
-    alert('Списано '+money(s)+', остаток аванса '+money(rest));
-   }
+ p.status='arrived';p.ts_arrived=Date.now();
+ markOrder(o);save();routeScreen(id);
+ if(p.type==='supplier'&&canFinance()&&materialsPaid(o)>0){
+  const spent=prompt('Подтвердите сумму закупки (выдано на материалы: '+money(materialsPaid(o))+'):','')||'';
+  const s=+spent||0;
+  if(s>0){
+   const rest=Math.max(0,materialsPaid(o)-s);
+   o.payments.push({id:'p'+Date.now(),sum:materialsPaid(o),type:'materials',method:'cash',date:new Date().toISOString().slice(0,10),note:'закупка '+p.title+': '+money(s)+', остаток '+money(rest)});
+   markOrder(o);save();
+   alert('Списано '+money(s)+', остаток аванса '+money(rest));
   }
-  if(typeof pushEvent==='function')pushEvent('route','📍 Прибытие — заявка №'+o.id,escapeHtml(o.worker||'')+' прибыл: '+escapeHtml(p.title),o.id,true); };
- if(navigator.geolocation){
-  navigator.geolocation.getCurrentPosition(function(pos){apply({lat:pos.coords.latitude,lon:pos.coords.longitude});},function(){apply(null);},{timeout:5000});
- } else apply(null);
+ }
+ if(typeof pushEvent==='function')pushEvent('route','📍 Прибытие — заявка №'+o.id,escapeHtml(o.worker||'')+' прибыл: '+escapeHtml(p.title),o.id,true);
 }
 function routeDonePoint(id,i){
  const o=byId(id);if(!canDoRoute(o))return alert('Нет прав');
