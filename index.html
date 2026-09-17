@@ -443,7 +443,7 @@ const NAVS_BASE={
 };
 function buildNav(role){const b=(NAVS_BASE[role]||[]).slice();if(typeof can==='function'&&can('profile_view'))b.push(['profile','👤','Профиль']);return b;}
 const NAVS=new Proxy({},{get:function(t,k){return buildNav(k);}});
-function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}render()}
+function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}else{state.calPrefill=null}render()}
 function login(role,name){
  state.role=role;state.user=name;
  const active=DB.orders.find(o=>o.worker===name&&['inwork','paused'].includes(o.status));
@@ -625,10 +625,6 @@ function renderDetails(id){
  ${canEditOrder(o)?`<button class="btn-sm btn-outline" style="margin-top:8px" onclick="editOrderModal(${o.id})">✏️ Редактировать</button>`:''}
  ${canDeleteOrder()?`<button class="btn-sm btn-red" style="margin-top:8px;margin-left:6px" onclick="deleteOrder(${o.id})">🗑 Удалить</button>`:''}
  <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${escapeHtml(o.desc)}</span></div>
- ${canManage?`<div style="margin-top:10px"><label class="label">Сменить статус</label>
- 
-   ${Object.keys(ST).filter(k=>k!=='in_progress').map(k=>`<option value="${k}" ${o.status===k||(k==='inwork'&&o.status==='in_progress')?'selected':''}>${ST[k].t}</option>`).join('')}
- </select></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🗺 Схема выполнения</div>
   ${(o.route&&o.route.length)||o.status==='approved'||isInwork(o)?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Схема появится после взятия заявки в работу</div>`}
@@ -704,7 +700,7 @@ function renderCreate(){
  <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..."></div>
  <div class="field"><label class="label">Адрес *</label><input class="input" id="c-address" placeholder="улица, дом, квартира"></div>
  <div class="field"><label class="label">Дата и интервал</label>
-  <div class="row2"><input class="input" id="c-date" type="date" value="${d1}"><input class="input" id="c-t1" type="time" value="14:00"><input class="input" id="c-t2" type="time" value="16:00"></div>
+  <div class="row2"><input class="input" id="c-date" type="date" value="${state.calPrefill?state.calPrefill.date:d1}"><input class="input" id="c-t1" type="time" value="${state.calPrefill?state.calPrefill.t1:'14:00'}"><input class="input" id="c-t2" type="time" value="${state.calPrefill?state.calPrefill.t2:'16:00'}"></div>
   <div class="chips" style="margin-top:8px">
    <span class="chip" onclick="setDur(1,this)">Осмотр 1 ч</span><span class="chip" onclick="setDur(2,this)">2 ч</span>
    <span class="chip" onclick="setDur(3,this)">3 ч</span><span class="chip" onclick="setDur(4,this)">Полдня</span></div>
