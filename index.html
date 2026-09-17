@@ -224,6 +224,7 @@ function histToggle(el){
 }
 function defaultData(){return{
  seq:270,
+ clients:[],
  users:[
   {id:'u1',name:'Дмитрий',role:'admin',share:0},
   {id:'u2',name:'Оля',role:'operator',share:0},
@@ -1852,7 +1853,7 @@ function render(){
  var _fpos=(_ae&&typeof _ae.selectionStart==='number')?_ae.selectionStart:null;
  nav.style.display='flex';
  nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
- const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
+ const S={orders:renderOrders,details:()=>renderDetails(state.orderId),create:renderCreate,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
   app.innerHTML=banner+(S[state.screen]||renderOrders)();
