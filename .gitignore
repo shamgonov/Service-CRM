@@ -9,3 +9,4 @@ tools/release_notes.txt
 *.log
 .vscode/_p.html
 prod.html
+tools/patches.js
