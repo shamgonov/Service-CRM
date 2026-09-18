@@ -795,7 +795,7 @@ function renderCreate(){
    <span class="chip" onclick="setDur(1,this)">Осмотр 1 ч</span><span class="chip" onclick="setDur(2,this)">2 ч</span>
    <span class="chip" onclick="setDur(3,this)">3 ч</span><span class="chip" onclick="setDur(4,this)">Полдня</span></div>
  </div>
- <div class="tgl"><span style="font-weight:500;font-size:14px">\u23EA \u0412\u043D\u0435\u0441\u0435\u043D\u0438\u0435 \u0437\u0430\u0434\u043D\u0438\u043C \u0447\u0438\u0441\u043B\u043E\u043C</span><label class="switch"><input type="checkbox" id="c-backfill" onchange="bfToggle(this.checked)"><span class="slider"></span></label></div><div class="field" id="bf-status-box" style="display:none"><label class="label">\u0421\u0442\u0430\u0442\u0443\u0441 \u0437\u0430\u0434\u043D\u0438\u043C \u0447\u0438\u0441\u043B\u043E\u043C</label><select class="input" id="c-backfill-status"><option value="completed">\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E</option><option value="paid">\u041E\u043F\u043B\u0430\u0447\u0435\u043D\u043E</option></select></div><div class="field"><label class="label">Тип заявки</label>
+ <div class="field"><label class="label">Тип заявки</label>
   <select class="input" id="c-type"><option value="new">Согласованная работа</option><option value="inspection">Осмотр / диагностика / замеры</option></select></div>
  <div class="field"><label class="label">Вид заказа</label>
   <select class="input" id="c-otype" onchange="otypeChange(this.value)"><option value="standard">Стандарт</option><option value="manufacture">С изготовлением</option><option value="service">Сервисный</option></select></div>
@@ -814,9 +814,9 @@ function renderCreate(){
  ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" id="c-test"><span class="slider"></span></label></div>`:''}
  ${(isOwner()||(typeof can==='function'&&can('orders_edit')))?`<div class="tgl"><span style="font-weight:500;font-size:14px">⏪ Внесение задним числом</span>
-  <label class="switch"><input type="checkbox" id="c-bf" onchange="bfToggle()"><span class="slider"></span></label></div>
+  <label class="switch"><input type="checkbox" id="c-backfill" onchange="bfToggle(this.checked)"><span class="slider"></span></label></div>
  <div id="bf-row" style="display:none"><div class="field"><label class="label">Статус вносимой заявки</label>
-  <select class="input" id="c-bf-status"><option value="completed">Выполнена</option><option value="paid">Выполнена и оплачена</option></select></div></div>`:''}
+  <select class="input" id="c-backfill-status"><option value="completed">Выполнена</option><option value="paid">Выполнена и оплачена</option></select></div></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🛒 Материалы <span class="muted" id="matcount"></span></div>
  <div id="newmats"></div>
