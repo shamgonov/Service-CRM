@@ -13,7 +13,6 @@ var PERMS_CATALOG = [
  {key:'orders_delete',label:'Удаление заявок'},
  {key:'orders_cancel',label:'Отмена заявок'},
  {key:'orders_restore',label:'Возобновление отменённых заявок'},
- {key:'orders_restore',label:'Возобновление отменённых заявок'},
  {key:'orders_take',label:'Взятие заказов в работу'},
  {key:'orders_view_all',label:'Просмотр всех заявок, включая чужие в работе'},
  {key:'orders_history',label:'Просмотр истории заявок'},
@@ -918,6 +917,8 @@ function startMain(){
  if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
  migrateOrdersIfNeeded();
+ // B3: уведомление о просрочках при входе (не чаще 1 раза в день)
+ try{ if(typeof checkOverdueNotification==='function')setTimeout(checkOverdueNotification,3000); }catch(e){}
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
 // гейт показывается ДО панели владельца и ДО тест-карточек ролей.

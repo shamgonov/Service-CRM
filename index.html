@@ -18,8 +18,8 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f5f5f5;max-widt
 .badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;margin:2px 4px 2px 0}
 .role-card{border:1px solid #e5e5e5;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer}
 .role-card:active{background:#f0f7ff}
-#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;display:flex;border-top:1px solid #e5e5e5;z-index:10}
-.nav-item{flex:1 1 0;min-width:0;position:relative;text-align:center;padding:8px 2px;cursor:pointer;color:#666;font-size:10px}
+#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #e5e5e5;z-index:10}
+.nav-item{min-width:0;position:relative;text-align:center;padding:8px 2px;cursor:pointer;color:#666;font-size:10px}
 .nav-item span{display:block;font-size:20px}
 .nav-item [data-ev-badge]{position:absolute;top:-4px;right:calc(50% - 22px);width:18px;height:18px;background:#dc2626;color:#fff;border-radius:50%;font:700 11px/18px sans-serif;text-align:center;pointer-events:none}
 .nav-item.active{color:var(--blue)}
@@ -144,6 +144,15 @@ function isInwork(o){return !!o&&(o.status==='inwork'||o.status==='in_progress')
 function canViewAllOrders(){if(typeof adminLike==='function'&&adminLike())return true;if(typeof can==='function')return can('orders_view_all');return false}
 // взятая другим работником заявка скрыта тем, у кого нет orders_view_all
 function hiddenTakeFromMe(o){return isInwork(o)&&!!o.worker&&o.worker!==state.user&&!canViewAllOrders()}
+// F2: сегодня, без исполнителя, до начала <=1 часа — срочная (жёлтая подсветка, вверх списка)
+function urgentSoon(o){
+ if(!o||o.worker||o.date!==d0)return false;
+ if(['completed','paid','canceled'].indexOf(o.status)>=0)return false;
+ if(!o.t1)return false;
+ const p=o.t1.split(':').map(Number);
+ const diff=(p[0]*60+(p[1]||0))-(new Date().getHours()*60+new Date().getMinutes());
+ return diff>=0&&diff<=60;
+}
 // кнопка «Взять в работу»: статус new/approved + право + (исполнитель пуст ИЛИ я создатель/owner/admin)
 function showTakeBtn(o){
  if(!o||['new','approved'].indexOf(o.status)<0)return false;
@@ -444,7 +453,7 @@ const NAVS_BASE={
 };
 function buildNav(role){const b=(NAVS_BASE[role]||[]).slice();if(typeof can==='function'&&can('profile_view'))b.push(['profile','👤','Профиль']);return b;}
 const NAVS=new Proxy({},{get:function(t,k){return buildNav(k);}});
-function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}else{state.calPrefill=null}render()}
+function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}else{state.calPrefill=null}if(s==='details'&&id!==undefined){try{markViewed(id)}catch(e){}}render()}
 function login(role,name){
  state.role=role;state.user=name;
  const active=DB.orders.find(o=>o.worker===name&&['inwork','paused'].includes(o.status));
@@ -488,16 +497,18 @@ function renderOrders(){
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
   if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','inwork','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
+ // F2: срочные (сегодня, без исполнителя, до начала <=1 ч) — первыми
+ list=list.slice().sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
  return `
 <div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="filters">
  ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
   `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
 </div>
-${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
+${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
- <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}</div>
+ <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро, нет исполнителя</b>':''}</div>
   <div style="margin-top:6px">${badges(o)}${isInwork(o)&&o.worker?`<span class="badge" style="background:#ffedd5;color:#9a3412">🚜 ${escapeHtml(o.worker)}</span>`:''}</div>
   <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
 </div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
@@ -620,6 +631,14 @@ function routeNext(id,i){const o=byId(id);if(!canDoRoute(o))return;o.route[i].st
 
 function renderDetails(id){
  const o=byId(id);if(!o)return '<div class="card">Не найдено</div>';
+ // C2: чужая взятая заявка недоступна без права orders_view_all
+ if(hiddenTakeFromMe(o))return `<div class="header"><button class="back" onclick="goBack()">←</button><h1>Заявка №${o.id}</h1></div>
+<div class="card" style="text-align:center;padding:28px 16px">
+ <div style="font-size:40px">🔒</div>
+ <b style="display:block;margin:10px 0 6px">Заявка в работе у ${escapeHtml(o.worker||'другого исполнителя')}</b>
+ <div class="muted">Карточка скрыта: заявка занята. Обратитесь к исполнителю или администратору.</div>
+ <button class="btn btn-outline" style="margin-top:14px" onclick="go('orders')">← К списку заявок</button>
+</div>`;
  const canManage=(typeof can==='function')?can('orders_status'):['admin','operator','manager'].includes(state.role);
  const isW=state.role==='worker'&&!(typeof can==='function'&&can('orders_view'));
  return `
@@ -689,9 +708,9 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+  ${o.status==='paused'&&o.worker===state.user?`<button class="btn btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
-${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
 ${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
  ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
@@ -706,7 +725,7 @@ function renderCreate(){
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
 <div class="card">
  <div class="field"><label class="label">Клиент *</label><input class="input" id="c-client" placeholder="ФИО"></div>
- <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..." onblur="checkClientDuplicate()" onblur="checkClientDuplicate()" onblur="checkClientDuplicate()"></div>
+ <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..." onblur="checkClientDuplicate()"></div>
  <div class="field"><label class="label">Адрес *</label><input class="input" id="c-address" placeholder="улица, дом, квартира"></div>
  <div class="field"><label class="label">Дата и интервал</label>
   <div class="row2"><input class="input" id="c-date" type="date" value="${state.calPrefill?state.calPrefill.date:d1}"><input class="input" id="c-t1" type="time" value="${state.calPrefill?state.calPrefill.t1:'14:00'}"><input class="input" id="c-t2" type="time" value="${state.calPrefill?state.calPrefill.t2:'16:00'}"></div>
@@ -744,7 +763,7 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled').sort((a,b)=>(a.t1||'').localeCompare(b.t1||''));
+ const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled'&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
  const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
@@ -760,7 +779,7 @@ function renderCalendar(){
     onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
     ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
     <b style="font-size:13px">${slot}</b>
-    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" style="font-size:13px;margin-top:4px;cursor:grab"
+    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:#fef9c3;border-left:3px solid #f59e0b;padding-left:4px':''}"
      onmousedown="calOrderDown(event,${o.id},${si})" ontouchstart="calOrderDown(event,${o.id},${si})"
      onclick="event.stopPropagation();go('details',${o.id})">
      ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
@@ -773,8 +792,8 @@ function renderTasks(){
  const tab=tabRaw==='mine'?'work':tabRaw; // старый ключ «Мои» → «В работе»
  const own=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
  // «Доступные»: new/approved, исполнитель пуст или я; чужие взятые (inwork) скрыты
- const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&(!o.worker||o.worker===state.user)&&!hiddenTakeFromMe(o));
- const work=own.filter(o=>isInwork(o)&&!hiddenTakeFromMe(o));
+ const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&(!o.worker||o.worker===state.user)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
+ const work=own.filter(o=>(isInwork(o)||o.status==='paused')&&!hiddenTakeFromMe(o));
  const doneT=own.filter(o=>['completed','paid'].includes(o.status));
  return `
 <div class="header green"><h1>🔍 Поиск заказов</h1><span style="margin-left:auto;font-size:13px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
@@ -784,8 +803,8 @@ function renderTasks(){
  <button class="fbtn ${tab==='done'?'active':''}" onclick="setTasksTab('done')">✅ Завершённые (${doneT.length})</button>
 </div>
 ${tab==='free'?`<div class="card">
-  ${free.map(o=>`<div class="mat"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
-   <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}<br>${escapeHtml(o.desc)}</div>
+  ${free.map(o=>`<div class="mat" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b':''}"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
+   <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро</b>':''}<br>${escapeHtml(o.desc)}</div>
    <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
    ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
    ${o.worker===state.user&&o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (я на адресе)</button>`:''}
@@ -801,7 +820,8 @@ ${tab==='free'?`<div class="card">
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+   ${o.status==='paused'&&o.worker===state.user?`<button class="btn-sm btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
 <div class="card"><div class="sec-title">✅ Завершённые (мои)</div>
@@ -1200,8 +1220,9 @@ function filterWorkerSelect(selId,q){
  });
 }
 function saveOrder(){
+ const g=x=>document.getElementById(x).value;
  const clientName=g('c-client');
- if(clientName)getOrCreateClient(clientName,g('c-phone'),g('c-address'));const g=x=>document.getElementById(x).value;
+ if(clientName)getOrCreateClient(clientName,g('c-phone'),g('c-address'));
  if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
  const worker=g('c-worker')||null,date=g('c-date'),t1=g('c-t1'),t2=g('c-t2');
  const conf=worker?findConflicts(worker,date,t1,t2,null):[];
@@ -1327,14 +1348,6 @@ function specDel(i){
 // обновление текущего экрана админки: staff (вкладка ролей) или admin
 function refreshAdminView(){
  if(state.screen==='staff'&&typeof loadStaff==='function'){loadStaff();return}
- render();
-}
-function restoreOrder(id){
- const o=byId(id);if(!o)return;
- if(!can('orders_restore'))return alert('Нет права orders_restore');
- o.status='new';
- logAction(o,'restore',{by:state.user});
- markOrder(o);orderSave(o);
  render();
 }
 function restoreOrder(id){
@@ -1576,6 +1589,16 @@ function pauseOrder(id){
  state.schemeTray=null;
  render();
 }
+// C5: пауза резервирует заявку за исполнителем (worker не сбрасывается),
+// возобновление возвращает статус inwork
+function resumeWork(id){
+ const o=byId(id);if(!o)return;
+ if(o.worker!==state.user)return alert('Заявка закреплена за другим исполнителем');
+ o.status='inwork';
+ logAction(o,'resume',{by:state.user});
+ markOrder(o);orderSave(o);
+ render();
+}
 function autoMarkPaymentDone(id){
  const o=byId(id);if(!o)return;
  const payStage=(o.stages||[]).find(x=>x.id==='st_pay');
@@ -1653,485 +1676,7 @@ function notifyCurrentStage(){
   n.onclick=function(){ window.focus(); go('details',active.id); state.schemeTray=active.id; render(); n.close(); };
  }catch(e){}
 }
-// === КОНТРАГЕНТЫ: клиентская база с историей ===
-function clientByName(name){
- if(!name)return null;
- const n=name.trim().toLowerCase();
- return (DB.clients||[]).find(c=>(c.name||'').trim().toLowerCase()===n);
-}
-
-// === КОНТРАГЕНТЫ v2: дедупликация, множественные адреса/телефоны, создание заказа из карточки ===
-
-// Поиск контрагента по телефону или адресу (для дедупликации)
-function findClientByPhoneOrAddress(phone, address){
-DB.clients = DB.clients || [];
-const p = (phone||'').trim().toLowerCase();
-const a = (address||'').trim().toLowerCase();
-if(!p && !a) return null;
-return DB.clients.find(c => {
-const phones = (c.phones||[]).concat(c.phone?[c.phone]:[]).map(x=>(x||'').trim().toLowerCase());
-const addrs = (c.addresses||[]).concat(c.address?[c.address]:[]).map(x=>(x||'').trim().toLowerCase());
-if(p && phones.includes(p)) return true;
-if(a && addrs.includes(a)) return true;
-return false;
-});
-}
-
-// Обновлённый getOrCreateClient с миграцией старых данных
-function getOrCreateClient(name, phone, address){
-if(!name) return null;
-DB.clients = DB.clients || [];
-let c = clientByName(name);
-if(!c){
-// Проверяем дедупликацию по телефону/адресу
-const existing = findClientByPhoneOrAddress(phone, address);
-if(existing){
-c = existing;
-// Добавляем новые телефон/адрес если их нет
-if(phone && !(c.phones||[]).includes(phone) && c.phone !== phone){
-c.phones = c.phones || [];
-if(c.phone && !c.phones.includes(c.phone)) c.phones.unshift(c.phone);
-c.phones.push(phone);
-}
-if(address && !(c.addresses||[]).includes(address) && c.address !== address){
-c.addresses = c.addresses || [];
-if(c.address && !c.addresses.includes(c.address)) c.addresses.unshift(c.address);
-c.addresses.push(address);
-}
-return c;
-}
-c = {id:'cl'+Date.now(), name:name.trim(), phone:phone||'', address:address||'', phones:phone?[phone]:[], addresses:address?[address]:[], notes:'', complaints:[]};
-DB.clients.push(c);
-} else {
-// Миграция: если у старого клиента нет массивов phones/addresses
-if(!c.phones && c.phone) c.phones = [c.phone];
-if(!c.addresses && c.address) c.addresses = [c.address];
-if(!c.phones) c.phones = [];
-if(!c.addresses) c.addresses = [];
-// Добавляем новые значения
-if(phone && !c.phones.includes(phone)){
-c.phones.push(phone);
-if(!c.phone) c.phone = phone;
-}
-if(address && !c.addresses.includes(address)){
-c.addresses.push(address);
-if(!c.address) c.address = address;
-}
-}
-return c;
-}
-
-// Обновлённая форма создания заявки с подсказкой дубликата
-function checkClientDuplicate(){
-const phone = g('c-phone');
-const address = g('c-address');
-const name = g('c-client');
-if(!phone && !address) return;
-const dup = findClientByPhoneOrAddress(phone, address);
-if(dup && dup.name.toLowerCase() !== (name||'').toLowerCase()){
-openModal(
-'<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-'<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
-'<b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b>'+
-'<div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div>'+
-'<div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div>'+
-'<div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div>'+
-'<div class="row2" style="margin-top:14px">'+
-'<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Создать нового</button>'+
-'<button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button>'+
-'</div></div></div>'
-);
-}
-}
-
-function useExistingClient(clientId){
-const c = (DB.clients||[]).find(x=>x.id===clientId);
-if(!c) return;
-document.getElementById('c-client').value = c.name;
-document.getElementById('c-phone').value = (c.phones&&c.phones[0]) || c.phone || '';
-document.getElementById('c-address').value = (c.addresses&&c.addresses[0]) || c.address || '';
-closeModal();
-}
-
-// Создание заказа из карточки контрагента
-function createOrderForClient(clientId){
-const c = (DB.clients||[]).find(x=>x.id===clientId);
-if(!c) return;
-state.calPrefill = {clientName:c.name, phone:(c.phones&&c.phones[0])||c.phone||'', address:(c.addresses&&c.addresses[0])||c.address||''};
-go('create');
-}
-
-// Обновлённый renderClientDetail с множественными адресами/телефонами и кнопкой создания заказа
-function renderClientDetail(id){
-DB.clients = DB.clients || [];
-const c = DB.clients.find(x=>x.id===id);
-if(!c) return '<div class="card">Контрагент не найден</div>';
-// Миграция
-if(!c.phones && c.phone) c.phones = [c.phone];
-if(!c.addresses && c.address) c.addresses = [c.address];
-if(!c.phones) c.phones = [];
-if(!c.addresses) c.addresses = [];
-const orders = (DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-const dateFilter = state.clientDateFilter || '';
-const filtered = dateFilter ? orders.filter(o=>o.date===dateFilter) : orders;
-const totalRev = orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
-return `
-<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
-<div class="card">
-<div class="info-row"><span class="muted">Телефоны</span><div style="text-align:right">${c.phones.length?c.phones.map(p=>'<a href="tel:'+encodeURIComponent(p)+'" style="color:var(--blue);font-weight:600;display:block">'+escapeHtml(p)+'</a>').join(''):'<span>—</span>'}</div></div>
-<div class="info-row"><span class="muted">Адреса</span><div style="text-align:right">${c.addresses.length?c.addresses.map(a=>'<div>'+escapeHtml(a)+'</div>').join(''):'<span>—</span>'}</div></div>
-<div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
-<div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
-${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted">'+escapeHtml(c.notes)+'</div></div>':''}
-<div class="row2" style="margin-top:10px">
-<button class="btn-sm btn-outline" onclick="editClientModal('${c.id}')">✏️ Редактировать</button>
-<button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button>
-</div>
-</div>
-<div class="card">
-<div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
-${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)">'+
-'<b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b>'+
-'<div class="muted">'+escapeHtml(comp.description||'')+'</div>'+
-'<div class="muted" style="font-size:11px">Добавлено: '+(comp.by||'—')+' • '+(comp.ts?new Date(comp.ts).toLocaleString():'')+'</div>'+
-'<button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')">🗑 Удалить</button>'+
-'</div>').join(''):'<div class="muted">Рекламаций нет</div>'}
-<button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button>
-</div>
-<div class="card">
-<div class="sec-title">📋 История заказов (${filtered.length})</div>
-<div style="margin-bottom:10px"><input class="input" type="date" value="${dateFilter}" onchange="state.clientDateFilter=this.value;render()" placeholder="Фильтр по дате"> <button class="btn-sm btn-outline" onclick="state.clientDateFilter='';render()">Сбросить</button></div>
-${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer">'+
-'<div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div>'+
-'<div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
-'<div class="muted">📍 '+escapeHtml(o.address||'—')+'</div>'+
-'<div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div>'+
-'</div>').join('')||'<div class="muted">Заказов не найдено</div>'}
-</div>`;
-}
-
-// Обновлённая форма редактирования с множественными телефонами/адресами
-function editClientModal(id){
-const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
-if(!c.phones && c.phone) c.phones = [c.phone];
-if(!c.addresses && c.address) c.addresses = [c.address];
-if(!c.phones) c.phones = [];
-if(!c.addresses) c.addresses = [];
-openModal(
-'<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-'<div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'+
-'<b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b>'+
-'<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="'+escapeHtml(c.name||'')+'"></div>'+
-'<div class="field"><label class="label">Телефоны (по одному на строку)</label><textarea class="input" id="cl-phones" rows="3">'+escapeHtml((c.phones||[]).join('\n'))+'</textarea></div>'+
-'<div class="field"><label class="label">Адреса (по одному на строку)</label><textarea class="input" id="cl-addresses" rows="3">'+escapeHtml((c.addresses||[]).join('\n'))+'</textarea></div>'+
-'<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">'+escapeHtml(c.notes||'')+'</textarea></div>'+
-'<div class="row2" style="margin-top:12px">'+
-'<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
-'<button class="btn btn-green" onclick="saveEditClientV2(\''+c.id+'\')">Сохранить</button>'+
-'</div></div></div>'
-);
-}
-
-function saveEditClientV2(id){
-const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
-const name = g('cl-name'); if(!name) return alert('Укажите имя');
-c.name = name.trim();
-const phonesRaw = g('cl-phones')||'';
-c.phones = phonesRaw.split('\n').map(s=>s.trim()).filter(Boolean);
-c.phone = c.phones[0]||'';
-const addrsRaw = g('cl-addresses')||'';
-c.addresses = addrsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
-c.address = c.addresses[0]||'';
-c.notes = g('cl-notes')||'';
-save(); closeModal(); render();
-}
-
-// Обновлённая форма создания контрагента с множественными полями
-function addClientModal(){
-openModal(
-'<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-'<div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'+
-'<b style="display:block;margin-bottom:10px">＋ Новый контрагент</b>'+
-'<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div>'+
-'<div class="field"><label class="label">Телефоны (по одному на строку)</label><textarea class="input" id="cl-phones" rows="2" placeholder="+7..."></textarea></div>'+
-'<div class="field"><label class="label">Адреса (по одному на строку)</label><textarea class="input" id="cl-addresses" rows="2" placeholder="улица, дом"></textarea></div>'+
-'<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div>'+
-'<div class="row2" style="margin-top:12px">'+
-'<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
-'<button class="btn btn-green" onclick="saveNewClientV2()">Сохранить</button>'+
-'</div></div></div>'
-);
-}
-
-function saveNewClientV2(){
-const name = g('cl-name'); if(!name) return alert('Укажите имя');
-const phonesRaw = g('cl-phones')||'';
-const phones = phonesRaw.split('\n').map(s=>s.trim()).filter(Boolean);
-const addrsRaw = g('cl-addresses')||'';
-const addresses = addrsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
-const notes = g('cl-notes')||'';
-if(clientByName(name)) return alert('Контрагент с таким именем уже существует');
-DB.clients = DB.clients || [];
-DB.clients.push({id:'cl'+Date.now(), name:name.trim(), phone:phones[0]||'', address:addresses[0]||'', phones:phones, addresses:addresses, notes:notes, complaints:[]});
-save(); closeModal(); render();
-}
-function editClientModal(id){
- const c=(DB.clients||[]).find(x=>x.id===id);if(!c)return;
- openModal(`
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
-    <b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b>
-    <div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="${escapeHtml(c.name||'')}"></div>
-    <div class="field"><label class="label">Телефон</label><input class="input" id="cl-phone" type="tel" value="${escapeHtml(c.phone||'')}"></div>
-    <div class="field"><label class="label">Адрес</label><input class="input" id="cl-address" value="${escapeHtml(c.address||'')}"></div>
-    <div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">${escapeHtml(c.notes||'')}</textarea></div>
-    <div class="row2" style="margin-top:12px">
-     <button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
-     <button class="btn btn-green" onclick="saveEditClient('${c.id}')">Сохранить</button>
-    </div>
-   </div>
-  </div>`);
-}
-
-function saveEditClient(id){
- const c=(DB.clients||[]).find(x=>x.id===id);if(!c)return;
- const name=g('cl-name');if(!name)return alert('Укажите имя');
- c.name=name.trim();
- c.phone=g('cl-phone')||'';
- c.address=g('cl-address')||'';
- c.notes=g('cl-notes')||'';
- save();
- closeModal();
- render();
-}
-
-function addComplaintModal(clientId){
- openModal(`
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
-    <b style="display:block;margin-bottom:10px">＋ Добавить рекламацию</b>
-    <div class="field"><label class="label">Дата</label><input class="input" id="comp-date" type="date" value="${d0}"></div>
-    <div class="field"><label class="label">Заголовок *</label><input class="input" id="comp-title" placeholder="Краткое описание"></div>
-    <div class="field"><label class="label">Описание *</label><textarea class="input" id="comp-desc" rows="5" placeholder="Подробности рекламации"></textarea></div>
-    <div class="row2" style="margin-top:12px">
-     <button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
-     <button class="btn btn-red" onclick="saveComplaint('${clientId}')">Сохранить</button>
-    </div>
-   </div>
-  </div>`);
-}
-
-function saveComplaint(clientId){
- const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
- const title=g('comp-title');if(!title)return alert('Укажите заголовок');
- const desc=g('comp-desc');if(!desc)return alert('Укажите описание');
- c.complaints=c.complaints||[];
- c.complaints.push({
-  date:g('comp-date')||d0,
-  title:title.trim(),
-  description:desc.trim(),
-  by:state.user||'system',
-  ts:Date.now()
- });
- save();
- closeModal();
- render();
-}
-
-function deleteComplaint(clientId,idx){
- const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
- if(!confirm('Удалить эту рекламацию?'))return;
- c.complaints.splice(idx,1);
- save();
- render();
-}
-// === КОНТРАГЕНТЫ v2: дедупликация, множественные адреса/телефоны, создание заказа из карточки ===
-function findClientByPhoneOrAddress(phone, address){
- DB.clients = DB.clients || [];
- const p = (phone||'').trim().toLowerCase();
- const a = (address||'').trim().toLowerCase();
- if(!p && !a) return null;
- return DB.clients.find(c => {
-  const phones = (c.phones||[]).concat(c.phone?[c.phone]:[]).map(x=>(x||'').trim().toLowerCase());
-  const addrs = (c.addresses||[]).concat(c.address?[c.address]:[]).map(x=>(x||'').trim().toLowerCase());
-  if(p && phones.includes(p)) return true;
-  if(a && addrs.includes(a)) return true;
-  return false;
- });
-}
-
-function getOrCreateClient(name, phone, address){
- if(!name) return null;
- DB.clients = DB.clients || [];
- let c = clientByName(name);
- if(!c){
-  const existing = findClientByPhoneOrAddress(phone, address);
-  if(existing){
-   c = existing;
-   if(phone && !(c.phones||[]).includes(phone) && c.phone !== phone){
-    c.phones = c.phones || [];
-    if(c.phone && !c.phones.includes(c.phone)) c.phones.unshift(c.phone);
-    c.phones.push(phone);
-   }
-   if(address && !(c.addresses||[]).includes(address) && c.address !== address){
-    c.addresses = c.addresses || [];
-    if(c.address && !c.addresses.includes(c.address)) c.addresses.unshift(c.address);
-    c.addresses.push(address);
-   }
-   return c;
-  }
-  c = {id:'cl'+Date.now(), name:name.trim(), phone:phone||'', address:address||'', phones:phone?[phone]:[], addresses:address?[address]:[], notes:'', complaints:[]};
-  DB.clients.push(c);
- } else {
-  if(!c.phones && c.phone) c.phones = [c.phone];
-  if(!c.addresses && c.address) c.addresses = [c.address];
-  if(!c.phones) c.phones = [];
-  if(!c.addresses) c.addresses = [];
-  if(phone && !c.phones.includes(phone)){ c.phones.push(phone); if(!c.phone) c.phone = phone; }
-  if(address && !c.addresses.includes(address)){ c.addresses.push(address); if(!c.address) c.address = address; }
- }
- return c;
-}
-
-function checkClientDuplicate(){
- const phone = g('c-phone'); const address = g('c-address'); const name = g('c-client');
- if(!phone && !address) return;
- const dup = findClientByPhoneOrAddress(phone, address);
- if(dup && dup.name.toLowerCase() !== (name||'').toLowerCase()){
-  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-   '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
-   '<b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b>'+
-   '<div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div>'+
-   '<div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div>'+
-   '<div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div>'+
-   '<div class="row2" style="margin-top:14px">'+
-   '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Создать нового</button>'+
-   '<button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button>'+
-   '</div></div></div>');
- }
-}
-function useExistingClient(clientId){
- const c = (DB.clients||[]).find(x=>x.id===clientId); if(!c) return;
- document.getElementById('c-client').value = c.name;
- document.getElementById('c-phone').value = (c.phones&&c.phones[0]) || c.phone || '';
- document.getElementById('c-address').value = (c.addresses&&c.addresses[0]) || c.address || '';
- closeModal();
-}
-
-function createOrderForClient(clientId){
- const c = (DB.clients||[]).find(x=>x.id===clientId); if(!c) return;
- state.calPrefill = {clientName:c.name, phone:(c.phones&&c.phones[0])||c.phone||'', address:(c.addresses&&c.addresses[0])||c.address||''};
- go('create');
-}
-
-function renderClientDetail(id){
- DB.clients = DB.clients || [];
- const c = DB.clients.find(x=>x.id===id);
- if(!c) return '<div class="card">Контрагент не найден</div>';
- if(!c.phones && c.phone) c.phones = [c.phone];
- if(!c.addresses && c.address) c.addresses = [c.address];
- if(!c.phones) c.phones = []; if(!c.addresses) c.addresses = [];
- const orders = (DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
- const dateFilter = state.clientDateFilter || '';
- const filtered = dateFilter ? orders.filter(o=>o.date===dateFilter) : orders;
- const totalRev = orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
- return `<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
-<div class="card">
-<div class="info-row"><span class="muted">Телефоны</span><div style="text-align:right">${c.phones.length?c.phones.map(p=>'<a href="tel:'+encodeURIComponent(p)+'" style="color:var(--blue);font-weight:600;display:block">'+escapeHtml(p)+'</a>').join(''):'<span>—</span>'}</div></div>
-<div class="info-row"><span class="muted">Адреса</span><div style="text-align:right">${c.addresses.length?c.addresses.map(a=>'<div>'+escapeHtml(a)+'</div>').join(''):'<span>—</span>'}</div></div>
-<div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
-<div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
-${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted">'+escapeHtml(c.notes)+'</div></div>':''}
-<div class="row2" style="margin-top:10px">
-<button class="btn-sm btn-outline" onclick="editClientModalV2('${c.id}')">✏️ Редактировать</button>
-<button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button>
-</div></div>
-<div class="card"><div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
-${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)"><b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b><div class="muted">'+escapeHtml(comp.description||'')+'</div><button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')">🗑 Удалить</button></div>').join(''):'<div class="muted">Рекламаций нет</div>'}
-<button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button></div>
-<div class="card"><div class="sec-title">📋 История заказов (${filtered.length})</div>
-<div style="margin-bottom:10px"><input class="input" type="date" value="${dateFilter}" onchange="state.clientDateFilter=this.value;render()" placeholder="Фильтр по дате"> <button class="btn-sm btn-outline" onclick="state.clientDateFilter='';render()">Сбросить</button></div>
-${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div><div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div><div class="muted">📍 '+escapeHtml(o.address||'—')+'</div><div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div></div>').join('')||'<div class="muted">Заказов не найдено</div>'}</div>`;
-}
-
-function editClientModalV2(id){
- const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
- if(!c.phones && c.phone) c.phones = [c.phone]; if(!c.addresses && c.address) c.addresses = [c.address];
- if(!c.phones) c.phones = []; if(!c.addresses) c.addresses = [];
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'+
-  '<b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b>'+
-  '<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="'+escapeHtml(c.name||'')+'"></div>'+
-  '<div class="field"><label class="label">Телефоны (по одному на строку)</label><textarea class="input" id="cl-phones" rows="3">'+escapeHtml((c.phones||[]).join('\n'))+'</textarea></div>'+
-  '<div class="field"><label class="label">Адреса (по одному на строку)</label><textarea class="input" id="cl-addresses" rows="3">'+escapeHtml((c.addresses||[]).join('\n'))+'</textarea></div>'+
-  '<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">'+escapeHtml(c.notes||'')+'</textarea></div>'+
-  '<div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveEditClientV2(\''+c.id+'\')">Сохранить</button></div></div></div>');
-}
-function saveEditClientV2(id){
- const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
- const name = g('cl-name'); if(!name) return alert('Укажите имя');
- c.name = name.trim();
- c.phones = (g('cl-phones')||'').split('\n').map(s=>s.trim()).filter(Boolean); c.phone = c.phones[0]||'';
- c.addresses = (g('cl-addresses')||'').split('\n').map(s=>s.trim()).filter(Boolean); c.address = c.addresses[0]||'';
- c.notes = g('cl-notes')||'';
- save(); closeModal(); render();
-}
-
-function addClientModal(){
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'+
-  '<b style="display:block;margin-bottom:10px">＋ Новый контрагент</b>'+
-  '<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div>'+
-  '<div class="field"><label class="label">Телефоны (по одному на строку)</label><textarea class="input" id="cl-phones" rows="2" placeholder="+7..."></textarea></div>'+
-  '<div class="field"><label class="label">Адреса (по одному на строку)</label><textarea class="input" id="cl-addresses" rows="2" placeholder="улица, дом"></textarea></div>'+
-  '<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div>'+
-  '<div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveNewClientV2()">Сохранить</button></div></div></div>');
-}
-function saveNewClientV2(){
- const name = g('cl-name'); if(!name) return alert('Укажите имя');
- const phones = (g('cl-phones')||'').split('\n').map(s=>s.trim()).filter(Boolean);
- const addresses = (g('cl-addresses')||'').split('\n').map(s=>s.trim()).filter(Boolean);
- if(clientByName(name)) return alert('Контрагент с таким именем уже существует');
- DB.clients = DB.clients || [];
- DB.clients.push({id:'cl'+Date.now(), name:name.trim(), phone:phones[0]||'', address:addresses[0]||'', phones:phones, addresses:addresses, notes:g('cl-notes')||'', complaints:[]});
- save(); closeModal(); render();
-}
-
-// === ПРОСРОЧЕННЫЕ ЗАКАЗЫ ===
-function renderOverdue(){
- const now = new Date(); const today = fmt(now);
- const overdue = (DB.orders||[]).filter(o => {
-  if(['completed','paid','canceled'].includes(o.status) || !o.date) return false;
-  if(o.date < today) return true;
-  if(o.date === today && o.t2){ const [h,m] = o.t2.split(':').map(Number); if(now.getHours() > h || (now.getHours() === h && now.getMinutes() > m)) return true; }
-  return false;
- }).sort((a,b)=>String(a.date).localeCompare(String(b.date)) || (a.t1||'').localeCompare(b.t1||''));
- return `<div class="header"><h1>⏰ Просроченные</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-<div class="card">${overdue.length?overdue.map(o=>`<div class="mat" style="border-left:4px solid var(--red)">
-<div style="display:flex;justify-content:space-between"><b>№${o.id} • ${escapeHtml(o.client)}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>
-<div class="muted">📍 ${escapeHtml(o.address)} • ⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
-<div class="row2" style="margin-top:8px">
-<button class="btn-sm btn-outline" onclick="go('details',${o.id})">Открыть</button>
-<button class="btn-sm btn-blue" onclick="rescheduleOrder(${o.id})">Перенести</button>
-<button class="btn-sm btn-red" onclick="cancelOrder(${o.id})">Отменить</button>
-</div></div>`).join(''):'<div class="muted">Просроченных заказов нет 🎉</div>'}</div>`;
-}
-function rescheduleOrder(id){
- const o=byId(id); if(!o) return;
- const nd=prompt('Новая дата (ГГГГ-ММ-ДД):', o.date); if(!nd) return;
- const nt1=prompt('Новое время начала (ЧЧ:ММ):', o.t1); if(!nt1) return;
- const nt2=prompt('Новое время окончания (ЧЧ:ММ):', o.t2); if(!nt2) return;
- o.date=nd; o.t1=nt1; o.t2=nt2; o.status='approved';
- logAction(o,'edit',{fields:['Перенос просроченного заказа на '+nd+' '+nt1+'-'+nt2]});
- markOrder(o); save(); render();
-}
-function cancelOrder(id){
- if(!confirm('Отменить этот заказ?')) return;
- const o=byId(id); if(!o) return;
- o.status='canceled'; o.cancelBy=state.user; o.cancelTs=Date.now();
- logAction(o,'cancel',{reason:'Отменён из просроченных'});
- markOrder(o); save(); render();
-}
+// === КОНТРАГЕНТЫ / ПРОСРОЧЕННЫЕ: единая реализация (см. блок ниже) ===
 // === КОНТРАГЕНТЫ v2: ЧИСТЫЙ БЛОК ===
 function clientByName(name){
  if(!name)return null;
@@ -2299,10 +1844,37 @@ function renderOverdue(){
  return `<div class="header"><h1>⏰ Просроченные</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="card">${overdue.length?overdue.map(o=>`<div class="mat" style="border-left:4px solid var(--red)"><div style="display:flex;justify-content:space-between"><b>№${o.id} • ${escapeHtml(o.client)}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div><div class="muted">📍 ${escapeHtml(o.address)} • ⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div><div class="row2" style="margin-top:8px"><button class="btn-sm btn-outline" onclick="go('details',${o.id})">Открыть</button><button class="btn-sm btn-blue" onclick="rescheduleOrder(${o.id})">Перенести</button><button class="btn-sm btn-red" onclick="cancelOrderFromOverdue(${o.id})">Отменить</button></div></div>`).join(''):'<div class="muted">Просроченных заказов нет 🎉</div>'}</div>`;
 }
+// B2: перенос просроченной заявки — модалка с датой и слотом (без prompt)
 function rescheduleOrder(id){
  const o=byId(id); if(!o) return;
- state.calDate=o.date;
- go('calendar');
+ const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
+ openModal(
+  '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+  '<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<b style="display:block;margin-bottom:10px">📅 Перенос заявки №'+o.id+'</b>'+
+  '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • было: '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
+  '<div class="field"><label class="label">Новая дата *</label><input class="input" id="rs-date" type="date" value="'+(o.date||d0)+'"></div>'+
+  '<div class="field"><label class="label">Слот времени *</label><select class="input" id="rs-slot">'+
+  slots.map(s=>'<option value="'+s+'"'+(o.t1&&o.t2&&s===(o.t1+'–'+o.t2)?' selected':'')+'>'+s+'</option>').join('')+
+  '</select></div>'+
+  '<div class="row2" style="margin-top:12px">'+
+  '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn btn-blue" onclick="rescheduleApply('+o.id+')">Перенести</button>'+
+  '</div></div></div>');
+}
+function rescheduleApply(id){
+ const o=byId(id); if(!o) return;
+ const nd=(document.getElementById('rs-date').value||'').trim();
+ const slot=document.getElementById('rs-slot').value||'';
+ if(!nd) return alert('Укажите новую дату');
+ const parts=slot.split('–');
+ const nt1=(parts[0]||'').trim(), nt2=(parts[1]||'').trim();
+ if(!nt1||!nt2) return alert('Укажите слот времени');
+ const conf=nt1&&nt2&&o.worker?findConflicts(o.worker,nd,nt1,nt2,o.id):[];
+ if(conf.length&&!confirm('Внимание: пересечение с заявкой №'+conf[0].id+' ('+conf[0].t1+'–'+conf[0].t2+'). Всё равно перенести?')) return;
+ o.date=nd; o.t1=nt1; o.t2=nt2; o.status='approved';
+ logAction(o,'edit',{fields:['Перенос просроченного заказа на '+nd+' '+nt1+'-'+nt2]});
+ markOrder(o); save(); closeModal(); render();
 }
 function cancelOrderFromOverdue(id){
  if(!confirm('Отменить этот заказ?')) return;
@@ -2312,11 +1884,22 @@ function cancelOrderFromOverdue(id){
  markOrder(o); save(); render();
 }
 function checkOverdueNotification(){
- const today=d0;
- const overdue=DB.orders.filter(o=>o.date<today&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user);
- if(overdue.length&&!sessionStorage.getItem('overdue_notified_'+today)){
+ const now=new Date(); const today=fmt(now);
+ const isOverdue=o=>{
+  if(['completed','paid','canceled'].includes(o.status)||!o.date) return false;
+  if(o.date<today) return true;
+  if(o.date===today&&o.t2){const p=o.t2.split(':').map(Number);if(now.getHours()>p[0]||(now.getHours()===p[0]&&now.getMinutes()>p[1]))return true;}
+  return false;
+ };
+ const overdue=(DB.orders||[]).filter(o=>o.worker===state.user&&isOverdue(o));
+ // B3: не чаще 1 раза в день (localStorage — переживает перезагрузку вкладки)
+ if(overdue.length&&localStorage.getItem('crm_overdue_notif')!==today){
+  localStorage.setItem('crm_overdue_notif',today);
   if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
-   new Notification('⚠️ Просроченные заказы',{body:`У вас ${overdue.length} невыполненных заказов. Проверьте календарь!`,icon:'icon.png'});
+   try{new Notification('⚠️ Просроченные заказы',{body:'У вас '+overdue.length+' просроченных заказов. Раздел «⏰ Просроченные».',icon:'icon.png'});}catch(e){}
+  }
+  if(!sessionStorage.getItem('overdue_notified_'+today)){
+   alert('⚠️ У вас просроченных заказов: '+overdue.length+'. Откройте «⏰ Просроченные».');
    sessionStorage.setItem('overdue_notified_'+today,'1');
   }
  }
@@ -2362,7 +1945,7 @@ function render(){
  var _ae=document.activeElement;
  var _fid=(_ae&&_ae.id)?_ae.id:null;
  var _fpos=(_ae&&typeof _ae.selectionStart==='number')?_ae.selectionStart:null;
- nav.style.display='flex';
+ nav.style.display='grid';
  nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
  const S={orders:renderOrders,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),overdue:renderOverdue,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
  let banner='';
