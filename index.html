@@ -769,7 +769,7 @@ function renderCreate(){
   <select class="input" id="c-worker"><option value="">— не назначен (исполнителем стану я) —</option>
   ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
-  <label class="switch"><input type="checkbox" id="c-photo" checked><span class="slider"></span></label></div>
+  <label class="switch"><input type="checkbox" id="c-photo"><span class="slider"></span></label></div>
  ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" id="c-test"><span class="slider"></span></label></div>`:''}
  ${(isOwner()||(typeof can==='function'&&can('orders_edit')))?`<div class="tgl"><span style="font-weight:500;font-size:14px">⏪ Внесение задним числом</span>
@@ -1000,6 +1000,7 @@ function exportCsv(){
  const blob=new Blob(['\uFEFF'+L.join('\r\n')],{type:'text/csv;charset=utf-8'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='otchet_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
+function realWorkers(){var demoIds=['u1','u2','u3','u4','u5'];var list=(DB.users||[]).filter(function(u){return u.role==='worker'&&demoIds.indexOf(u.id)<0;});if(typeof STAFF!=='undefined'&&STAFF&&STAFF.length){STAFF.forEach(function(s){var nm=s.name||s.deviceName||'';if(!nm)return;var isW=(s.roles&&s.roles.indexOf('worker')>=0)||s.role==='worker';if(!isW)return;if(!list.some(function(u){return u.name===nm;})){var nu={id:'w_'+(s.deviceId||nm),name:nm,role:'worker',share:0,deviceId:s.deviceId};DB.users.push(nu);list.push(nu);}});save();}return list;}
 function renderAdmin(){
  return `
 <div class="header dark"><h1>⚙️ Админ-панель</h1></div>
@@ -1029,7 +1030,7 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Спе�
  <button class="btn btn-outline" onclick="specAdd()">＋ Добавить</button></div>
 </div>`:''}
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
- ${DB.users.filter(u=>u.role==='worker').map(u=>`
+ ${realWorkers().map(u=>`
  <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
  <span style="display:flex;align-items:center;gap:4px"><input type="number" value="${u.share}" min="0" max="100" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px" onchange="setShare('${u.id}',this.value)"><b>%</b></span></div>`).join('')}
 </div>
@@ -1321,7 +1322,7 @@ const g=x=>document.getElementById(x).value;
  if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
  if(typeof saveSettings==='function')saveSettings();
  alert('Заявка №'+DB.seq+' создана');go('orders')}
-function setShare(id,v){DB.users.find(u=>u.id===id).share=+v;save()}
+function setShare(id,v){var u=DB.users.find(function(x){return x.id===id;});if(!u){u={id:id,name:id,role:'worker',share:0};DB.users.push(u);}u.share=+v;save()}
 // === этапы в форме создания ===
 function cStageAdd(){state.cStages.push({id:'st'+Date.now(),type:'custom',title:'Этап '+(state.cStages.length+1),plan_start:'',plan_ready:'',done:false,by:'',ts_done:null});cStageRender()}
 function cStageDel(i){state.cStages.splice(i,1);cStageRender()}
