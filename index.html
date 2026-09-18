@@ -437,9 +437,9 @@ function badges(o){
 }
 const byId=id=>DB.orders.find(o=>o.id==id);
 const NAVS_BASE={
- admin:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
+ admin:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
  operator:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['create','➕','Новая'],['reports','📊','Отчеты']],
- manager:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
+ manager:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','','Просроченные'],['calendar','','Календарь'],['shopping','','Закупки']],
  worker:[['tasks','🔍','Поиск заказов'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
 };
 function buildNav(role){const b=(NAVS_BASE[role]||[]).slice();if(typeof can==='function'&&can('profile_view'))b.push(['profile','👤','Профиль']);return b;}
