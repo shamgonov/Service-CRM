@@ -258,7 +258,7 @@ function defaultData(){return{
   {id:'t6',name:'Демонтаж старого блока',price:2000}],
  orders:[],
  regions:[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}]};}
-let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:d0,newMats:[]};
+let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:(typeof localToday==='function'?localToday():d0),newMats:[]};
 function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}
  // B1: миграция старых баз — справочник регионов
  if(!DB.regions||!DB.regions.length)DB.regions=[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}];
@@ -662,6 +662,7 @@ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index
 '</div></div>');
 render();
 }
+function goBack(){var scr=(typeof can==='function'&&can('tasks')&&!can('orders_view'))?'tasks':'orders';go(scr);}
 function renderDoneSummary(o){
 const pays=orderPayments(o);
 return `
