@@ -256,9 +256,13 @@ function defaultData(){return{
   {id:'t4',name:'Обслуживание вентиляции',price:6500},
   {id:'t5',name:'Штробление стены (м.п.)',price:1500},
   {id:'t6',name:'Демонтаж старого блока',price:2000}],
- orders:[]};}
+ orders:[],
+ regions:[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}]};}
 let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:d0,newMats:[]};
-function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}}
+function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}
+ // B1: миграция старых баз — справочник регионов
+ if(!DB.regions||!DB.regions.length)DB.regions=[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}];
+}
 function save(){localStorage.setItem('crm_db',JSON.stringify(DB));
  // облачная запись: window.save сам смотрит state.__mutOrder (заявка → её документ, иначе настройки)
  if(typeof window.save==='function')window.save();
@@ -443,6 +447,7 @@ setInterval(tickTimeLabels,1000);
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
  if(isTest(o))b+=`<span class="badge" style="background:#f3f4f6;color:#6b7280">🧪 тест</span>`;
+ if(o.backfill)b+=`<span class="badge" style="background:#fef3c7;color:#92400e">⏪ задним числом</span>`;
  if(o.status==='canceled')b+=`<span class="badge" style="background:#e5e7eb;color:#6b7280">отменена</span>`;
  if(orderType(o)!=='standard')b+=`<span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span>`;
  if(orderType(o)==='manufacture'&&orderStages(o).length){const d=orderStages(o).filter(s=>s.done).length;b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🔧 ${d}/${orderStages(o).length}</span>`;}
@@ -493,7 +498,7 @@ new Notification('⏰ Просроченные заказы',{body:'У вас '+
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.6</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.7</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
@@ -741,6 +746,7 @@ function renderCreate(){
 <div class="card">
  <div class="field"><label class="label">Клиент *</label><input class="input" id="c-client" placeholder="ФИО"></div>
  <div class="field"><label class="label">Телефон *</label><input class="input" id="c-phone" type="tel" placeholder="+7..." onblur="checkClientDuplicate()"></div>
+ ${regionSelects('c',null)}
  <div class="field"><label class="label">Адрес *</label><input class="input" id="c-address" placeholder="улица, дом, квартира"></div>
  <div class="field"><label class="label">Дата и интервал</label>
   <div class="row2"><input class="input" id="c-date" type="date" value="${state.calPrefill?state.calPrefill.date:d1}"><input class="input" id="c-t1" type="time" value="${state.calPrefill?state.calPrefill.t1:'14:00'}"><input class="input" id="c-t2" type="time" value="${state.calPrefill?state.calPrefill.t2:'16:00'}"></div>
@@ -766,6 +772,10 @@ function renderCreate(){
   <label class="switch"><input type="checkbox" id="c-photo" checked><span class="slider"></span></label></div>
  ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" id="c-test"><span class="slider"></span></label></div>`:''}
+ ${(isOwner()||(typeof can==='function'&&can('orders_edit')))?`<div class="tgl"><span style="font-weight:500;font-size:14px">⏪ Внесение задним числом</span>
+  <label class="switch"><input type="checkbox" id="c-bf" onchange="bfToggle()"><span class="slider"></span></label></div>
+ <div id="bf-row" style="display:none"><div class="field"><label class="label">Статус вносимой заявки</label>
+  <select class="input" id="c-bf-status"><option value="completed">Выполнена</option><option value="paid">Выполнена и оплачена</option></select></div></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🛒 Материалы <span class="muted" id="matcount"></span></div>
  <div id="newmats"></div>
@@ -795,9 +805,9 @@ const past=slotIsPast(state.calDate,sStart,sEnd);
     onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
     ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
     <b style="font-size:13px">${slot}</b>
-    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:#fef9c3;border-left:3px solid #f59e0b;padding-left:4px':''}"
+    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" draggable="true" ondragstart="CAL_DRAG=${o.id};event.stopPropagation()" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:#fef9c3;border-left:3px solid #f59e0b;padding-left:4px':''}"
      onmousedown="calOrderDown(event,${o.id},${si})" ontouchstart="calOrderDown(event,${o.id},${si})"
-     onclick="event.stopPropagation();go('details',${o.id})">
+     onclick="if(Date.now()-(CAL_HELD||0)<700)return;event.stopPropagation();go('details',${o.id})">
      ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
     :'<div class="muted" style="margin-top:2px">🟩 свободно — клик для новой заявки</div>'}
    </div>`}).join('')}
@@ -1244,10 +1254,10 @@ function filterWorkerSelect(selId,q){
 function saveOrder(){
  const g=x=>document.getElementById(x).value;
  const clientName=g('c-client');
- if(clientName)getOrCreateClient(clientName,g('c-phone'),g('c-address'));
+ if(clientName)getOrCreateClient(clientName,g('c-phone'),rcFullAddress('c',g('c-address')));
  if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
  const worker=g('c-worker')||null,date=g('c-date'),t1=g('c-t1'),t2=g('c-t2');
-if(slotIsPast(date,t1,t2))return alert('Выбранное время уже прошло. Включите тумблер задним числом или выберите будущее время.');
+ if(!isBF()&&slotIsPast(date,t1,t2))return alert('Выбранное время уже прошло. Включите тумблер задним числом или выберите будущее время.');
  const conf=worker?findConflicts(worker,date,t1,t2,null):[];
  if(conf.length){
   const c=conf[0];
@@ -1292,14 +1302,20 @@ state.calPrefill=null;
 const g=x=>document.getElementById(x).value;
  if(!force)closeConflictModal();
  const otype=document.getElementById('c-otype')?document.getElementById('c-otype').value:'standard';
-  const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:g('c-address'),desc:g('c-desc'),
+  const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:rcFullAddress('c',g('c-address')),desc:g('c-desc'),
    status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
    photoReport:document.getElementById('c-photo').checked,
    worker:g('c-worker')||state.user, // не выбран → исполнитель = создатель
    by:state.user,byDev:(typeof deviceId==='function')?deviceId():'',
    test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
    materials:state.newMats.slice(),photos:[],type:otype,payments:[],history:[]};
- logAction(o,'create',{type:otype,client:o.client,sum:total(o)});
+ // B2: внесение задним числом — статус из селекта + флаг backfill
+ if(isBF()){
+  o.backfill=true;
+  var bfs=document.getElementById('c-bf-status');
+  o.status=(bfs&&bfs.value==='paid')?'paid':'completed';
+ }
+ logAction(o,'create',{type:otype,client:o.client,sum:total(o),backfill:o.backfill?'задним числом':undefined});
  if(otype!=='standard')o.stages=(state.cStages||[]).slice();
  DB.orders.unshift(o);
  if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
@@ -1426,7 +1442,8 @@ function editOrderModal(id){
     <b style="display:block;margin-bottom:10px">✏️ Редактирование заявки №${o.id}</b>
     <input class="input" id="e-client" value="${escapeHtml(o.client)}" placeholder="Клиент *" style="margin-bottom:6px">
     <input class="input" id="e-phone" value="${escapeHtml(o.phone||'')}" placeholder="Телефон" style="margin-bottom:6px">
-    <input class="input" id="e-address" value="${escapeHtml(o.address||'')}" placeholder="Адрес" style="margin-bottom:6px">
+    ${regionSelects('e',rcParseOrder(o))}
+    <input class="input" id="e-address" value="${escapeHtml(rcStreetOf(o)||'')}" placeholder="Адрес" style="margin-bottom:6px">
     <div style="display:flex;gap:6px;margin-bottom:6px">
      <input class="input" id="e-date" type="date" value="${o.date}" style="flex:1.4">
      <input class="input" id="e-t1" type="time" value="${o.t1}" style="flex:1">
@@ -1467,7 +1484,7 @@ if(slotIsPast(g('e-date'),g('e-t1'),g('e-t2')))return alert('Выбранное 
  // конфликт исполнителя при смене
  const conf=newWorker?findConflicts(newWorker,g('e-date'),g('e-t1'),g('e-t2'),o.id):[];
  if(conf.length&&!confirm('Исполнитель занят в это время ('+conf.length+' пересечений). Всё равно сохранить?'))return;
- const after={client:g('e-client'),phone:g('e-phone'),address:g('e-address'),date:g('e-date'),t1:g('e-t1'),t2:g('e-t2'),price:+g('e-price')||0,desc:g('e-desc'),status:g('e-type'),type:g('e-otype'),worker:newWorker,photoReport:document.getElementById('e-photo').checked,test:(document.getElementById('e-test')&&document.getElementById('e-test').checked)||false};
+ const after={client:g('e-client'),phone:g('e-phone'),address:rcEditAddress('e',g('e-address')),date:g('e-date'),t1:g('e-t1'),t2:g('e-t2'),price:+g('e-price')||0,desc:g('e-desc'),status:g('e-type'),type:g('e-otype'),worker:newWorker,photoReport:document.getElementById('e-photo').checked,test:(document.getElementById('e-test')&&document.getElementById('e-test').checked)||false};
  const changed=[];
  Object.keys(after).forEach(function(k){
   if(String(before[k])!==String(after[k]))changed.push(k+': '+String(before[k]==null?'':before[k])+' → '+String(after[k]==null?'':after[k]));
@@ -1601,6 +1618,100 @@ if(oid){sessionStorage.setItem('crm_open_order',oid);history.replaceState(null,'
 }catch(e){}
 })();
 function slotIsPast(d,t1,t2){if(!d)return false;var t=fmt(new Date());if(d<t)return true;if(d>t)return false;var n=new Date(),m=n.getHours()*60+n.getMinutes(),s=toMin(t1);return s!=null&&s<=m;}
+// B2: тумблер «задним числом» — показывает селект статуса; isBF — активен ли он
+function bfToggle(){var r=document.getElementById('bf-row');var c=document.getElementById('c-bf');if(r)r.style.display=(c&&c.checked)?'block':'none';}
+function isBF(){try{var c=document.getElementById('c-bf');return !!(c&&c.checked);}catch(e){return false;}}
+// === B1: РЕГИОНЫ/ГОРОДА (справочник DB.regions, последний выбор в localStorage) ===
+function rcList(){DB.regions=DB.regions||[];return DB.regions;}
+function rcLast(){try{return{r:localStorage.getItem('crm_last_region')||'',c:localStorage.getItem('crm_last_city')||''};}catch(e){return{r:'',c:''};}}
+function rcSaveLast(r,c){try{if(r)localStorage.setItem('crm_last_region',r);if(c)localStorage.setItem('crm_last_city',c);}catch(e){}}
+// дефолт: последний использованный, иначе Свердловская/Екатеринбург
+function rcDefault(){var l=rcLast();var list=rcList();
+ var reg=list.find(function(x){return x.region===l.r;})||list.find(function(x){return x.region.indexOf('Свердловская')>=0;})||list[0];
+ var city=l.c&&reg&&reg.cities.indexOf(l.c)>=0?l.c:(reg&&reg.cities[0])||'';
+ return{region:reg?reg.region:'',city:city};}
+// HTML пары селектов «Область/Город»; prefix — 'c' (создание) или 'e' (редактирование)
+function regionSelects(prefix,o){
+ var list=rcList();
+ var cur={region:'',city:''};
+ if(o&&o.region){cur.region=o.region;cur.city=o.city||'';}
+ else if(!o||o.region===undefined){var d=rcDefault();cur.region=d.region;cur.city=d.city;}
+ // для старых заявок без o.region: первый пункт «— регион не добавлять —»
+ const legacy=(o&&!o.region&&o.address)?'<option value="">— регион не добавлять —</option>':'';
+ const ropts=legacy+list.map(function(x){return '<option'+(x.region===cur.region?' selected':'')+'>'+escapeHtml(x.region)+'</option>';}).join('');
+ const reg=list.find(function(x){return x.region===cur.region;})||list[0];
+ const copts=(reg?reg.cities:[]).map(function(c){return '<option'+(c===cur.city?' selected':'')+'>'+escapeHtml(c)+'</option>';}).join('')
+  +'<option value="__new__">＋ другой город…</option>';
+ return '<div class="row2" style="margin-bottom:6px">'+
+  '<div><label class="label">Область</label><select class="input" id="'+prefix+'-region" onchange="rcRegionChange(\''+prefix+'\')">'+ropts+'</select></div>'+
+  '<div><label class="label">Город</label><select class="input" id="'+prefix+'-city" onchange="rcCityPick(\''+prefix+'\',this)">'+copts+'</select></div></div>';
+}
+// смена области → перестроить города
+function rcRegionChange(prefix){
+ var rEl=document.getElementById(prefix+'-region'),cEl=document.getElementById(prefix+'-city');
+ if(!rEl||!cEl)return;
+ var reg=rcList().find(function(x){return x.region===rEl.value;});
+ cEl.innerHTML=(reg?reg.cities:[]).map(function(c){return '<option>'+escapeHtml(c)+'</option>';}).join('')+'<option value="__new__">＋ другой город…</option>';
+}
+// выбор «＋ другой город…» → prompt + дописать в справочник
+function rcCityPick(prefix,sel){
+ if(sel.value!=='__new__')return;
+ var rEl=document.getElementById(prefix+'-region');
+ var reg=rcList().find(function(x){return x.region===rEl.value;});
+ var v=prompt('Название города для «'+(reg?reg.region:'')+'»');
+ v=(v||'').trim();
+ if(!v){sel.value=reg&&reg.cities[0]?reg.cities[0]:'__new__';return;}
+ if(reg&&reg.cities.indexOf(v)<0){reg.cities.push(v);save();}
+ sel.innerHTML=reg.cities.map(function(c){return '<option'+(c===v?' selected':'')+'>'+escapeHtml(c)+'</option>';}).join('')+'<option value="__new__">＋ другой город…</option>';
+ sel.value=v;
+}
+// значения селектов ({region,city} или null, если «не добавлять»)
+function rcVals(prefix){
+ var rEl=document.getElementById(prefix+'-region'),cEl=document.getElementById(prefix+'-city');
+ if(!rEl||!cEl)return null;
+ if(rEl.value==='')return null;
+ var city=cEl.value==='__new__'?'':cEl.value;
+ return{region:rEl.value,city:city};
+}
+// сборка полного адреса «область, город, улица…»
+function rcFullAddress(prefix,street){
+ var rc=rcVals(prefix);
+ street=(street||'').trim();
+ if(!rc)return street;
+ rcSaveLast(rc.region,rc.city);
+ return rc.region+', '+(rc.city?rc.city+', ':'')+street;
+}
+// разбор полного адреса заявки «область, город, улица…» → {region,city} (или null)
+function rcParseOrder(o){
+ var a=(o&&o.address)||'';
+ var list=rcList();
+ for(var i=0;i<list.length;i++){
+  var reg=list[i];
+  if(a.indexOf(reg.region+', ')===0){
+   var rest=a.slice(reg.region.length+2);
+   var cm=rest.match(/^([^,]+),\s*/);
+   if(cm&&reg.cities.indexOf(cm[1].trim())>=0)return{region:reg.region,city:cm[1].trim(),address:a};
+   return{region:reg.region,city:'',address:a};
+  }
+ }
+ return{region:'',city:'',address:a}; // старый адрес без справочника — «не добавлять»
+}
+// улица/дом без регионного префикса — для поля ввода
+function rcStreetOf(o){
+ var rc=rcParseOrder(o),a=(o&&o.address)||'';
+ if(!rc.region)return a;
+ var rest=a.slice(rc.region.length).replace(/^,\s*/,'');
+ if(rc.city){var m=rest.match(/^([^,]+),\s*/);if(m&&m[1].trim()===rc.city)rest=rest.slice(m[0].length);}
+ return rest;
+}
+// для формы редактирования: поле содержит только улицу; регион/город берутся из селектов
+function rcEditAddress(prefix,street){
+ var rc=rcVals(prefix);
+ street=(street||'').trim();
+ if(!rc)return street; // «регион не добавлять» — сохранить как есть
+ rcSaveLast(rc.region,rc.city);
+ return rc.region+', '+(rc.city?rc.city+', ':'')+street;
+}
 function openSchemeTray(id){
  const o=byId(id);if(!o)return;
  state.schemeTray=id;state.trayCollapsed=null;
@@ -1683,12 +1794,19 @@ function allStagesReadyForComplete(o){
 }
 
 // === КАЛЕНДАРЬ: клик по свободному слоту → новая заявка с предзаполнением ===
-var CAL_HOLD=null,CAL_SRC=null,CAL_DRAG=null;
+var CAL_HOLD=null,CAL_SRC=null,CAL_DRAG=null,CAL_HELD=0;
 function calSlotClick(e,si,sStart,sEnd){
  if(e.target.closest('.cal-order'))return;
+ // A1: прошедший слот — не реагирует ни на клик, ни на удержание
+ if(slotIsPast(state.calDate,sStart,sEnd))return;
  CAL_HOLD=setTimeout(()=>{CAL_HOLD=null;if(can('orders_edit')){CAL_SRC=si;render();}},400);
 }
 function calSlotRelease(e,si,sStart,sEnd){
+ // A1: страховка на touchend — прошедший слот не открывает форму создания
+ if(slotIsPast(state.calDate,sStart,sEnd)){
+  if(CAL_HOLD){clearTimeout(CAL_HOLD);CAL_HOLD=null;}
+  return;
+ }
  if(CAL_HOLD){
   clearTimeout(CAL_HOLD);CAL_HOLD=null;
   if(!can('orders_create'))return;
@@ -1698,13 +1816,61 @@ function calSlotRelease(e,si,sStart,sEnd){
 }
 function calOrderDown(e,oid,si){
  e.stopPropagation();e.preventDefault();
- CAL_HOLD=setTimeout(()=>{CAL_HOLD=null;if(can('orders_edit')){CAL_SRC=si;CAL_DRAG=oid;render();}},400);
+ // A4: удержание заказа (ПК/тап 400 мс) — модалка переноса
+ CAL_HOLD=setTimeout(()=>{CAL_HOLD=null;CAL_HELD=Date.now();if(can('orders_edit'))calMoveModal(oid);},400);
+}
+// A4: модалка переноса — дата + слот (для сегодняшнего дня только будущие слоты)
+function calMoveModal(oid){
+ const o=byId(oid);if(!o)return;
+ const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
+ const selDate=o.date||state.calDate;
+ const opts=slots.map(s=>{
+  const p=s.split('–');
+  const past=slotIsPast(selDate,p[0],p[1]);
+  const cur=(o.date===selDate&&o.t1===p[0]&&o.t2===p[1]);
+  return '<option value="'+s+'"'+(past?' disabled':'')+(cur?' selected':'')+'>'+s+(past?' (прошло)':'')+'</option>';
+ }).join('');
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+  '<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<b style="display:block;margin-bottom:10px">📅 Перенос заявки №'+o.id+'</b>'+
+  '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • сейчас: '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+o.t1+'–'+o.t2+'</div>'+
+  '<div class="field"><label class="label">Новая дата</label><input class="input" id="mv-date" type="date" value="'+escapeHtml(selDate)+'" onchange="calMoveReslot()"></div>'+
+  '<div class="field"><label class="label">Слот времени</label><select class="input" id="mv-slot">'+opts+'</select></div>'+
+  '<div class="row2" style="margin-top:12px">'+
+  '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn btn-blue" onclick="calMoveApply('+o.id+')">Подтвердить</button>'+
+  '</div></div></div>');
+}
+// перестроить список слотов при смене даты в модалке переноса
+function calMoveReslot(){
+ const dEl=document.getElementById('mv-date'),sEl=document.getElementById('mv-slot');
+ if(!dEl||!sEl)return;
+ const prev=sEl.value;
+ const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
+ sEl.innerHTML=slots.map(s=>{const p=s.split('–');const past=slotIsPast(dEl.value,p[0],p[1]);return '<option value="'+s+'"'+(past?' disabled':'')+'>'+s+(past?' (прошло)':'')+'</option>';}).join('');
+ if(prev&&sEl.querySelector('option[value="'+prev+'"]:not([disabled])'))sEl.value=prev;
+}
+function calMoveApply(oid){
+ const o=byId(oid);if(!o){closeModal();return;}
+ const nd=(document.getElementById('mv-date').value||'').trim();
+ const slot=document.getElementById('mv-slot').value||'';
+ if(!nd||!slot)return alert('Выберите дату и слот');
+ const p=slot.split('–');
+ if(slotIsPast(nd,p[0],p[1]))return alert('Перенос в прошедший слот запрещён');
+ const old={date:o.date,t1:o.t1,t2:o.t2};
+ o.date=nd;o.t1=p[0];o.t2=p[1];
+ logAction(o,'calendar_move',{fields:['date: '+old.date+'→'+o.date,'t1: '+old.t1+'→'+o.t1,'t2: '+old.t2+'→'+o.t2]});
+ markOrder(o);save();orderSave(o);
+ CAL_SRC=null;CAL_DRAG=null;closeModal();render();
+ if(typeof pushEvent==='function')pushEvent('calendar','📅 Перенос заявки №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id);
 }
 function calDrop(e,ti,tStart,tEnd){
  e.preventDefault();
  if(slotIsPast(state.calDate,tStart,tEnd)){CAL_SRC=null;CAL_DRAG=null;render();return;}
-if(CAL_DRAG==null||CAL_SRC==null||CAL_SRC===ti){CAL_SRC=null;CAL_DRAG=null;render();return;}
+ // бонусный нативный dnd: источник берём из dragstart; в свой же слот — не переносим
+ if(CAL_DRAG==null){CAL_SRC=null;CAL_DRAG=null;return;}
  const src=byId(CAL_DRAG);if(!src){CAL_SRC=null;CAL_DRAG=null;render();return;}
+ if(src.date===state.calDate&&src.t1===tStart){CAL_SRC=null;CAL_DRAG=null;render();return;}
  const tgtOrders=DB.orders.filter(o=>o.date===state.calDate&&o.t1<tEnd&&o.t2>tStart&&o.id!==CAL_DRAG);
  const swap=tgtOrders.length?tgtOrders[0]:null;
  const srcDur=(toMin(src.t2)-toMin(src.t1));
@@ -1796,12 +1962,18 @@ function getOrCreateClient(name, phone, address){
  return c;
 }
 function checkClientDuplicate(){
- const phone = g('c-phone'); const address = g('c-address'); const name = g('c-client');
- if(!phone && !address) return;
- const dup = findClientByPhoneOrAddress(phone, address);
- if(dup && dup.name.toLowerCase() !== (name||'').toLowerCase()){
-  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b><div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div><div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div><div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div><div class="row2" style="margin-top:14px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Создать нового</button><button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button></div></div></div>');
- }
+ // A2: читаем поля напрямую — локальный g() здесь недоступен (onblur из HTML)
+ try{
+  const gp=document.getElementById('c-phone'),ga=document.getElementById('c-address'),gn=document.getElementById('c-client');
+  const phone=gp?String(gp.value||'').trim():'';
+  const address=ga?String(ga.value||'').trim():'';
+  const name=gn?String(gn.value||'').trim():'';
+  if(!phone&&!address)return;
+  const dup=findClientByPhoneOrAddress(phone,address);
+  if(dup&&dup.name.toLowerCase()!==(name||'').toLowerCase()){
+   openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b><div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div><div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div><div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div><div class="row2" style="margin-top:14px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Создать нового</button><button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button></div></div></div>');
+  }
+ }catch(e){/* молча: подсказка не должна ломать форму */}
 }
 function useExistingClient(clientId){
  const c = (DB.clients||[]).find(x=>x.id===clientId); if(!c) return;
@@ -2100,7 +2272,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.0.6';
+const APP_VERSION='2.0.7';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -2132,6 +2304,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
