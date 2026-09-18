@@ -461,7 +461,7 @@ function login(role,name){
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.8.9</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.9.0</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
@@ -2413,7 +2413,7 @@ function render(){
  var _fpos=(_ae&&typeof _ae.selectionStart==='number')?_ae.selectionStart:null;
  nav.style.display='flex';
  nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');
- const S={orders:renderOrders,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),overdue:renderOverdue,details:()=>renderDetails(state.orderId),create:renderCreate,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
+ const S={orders:renderOrders,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),overdue:renderOverdue,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
   app.innerHTML=banner+(S[state.screen]||renderOrders)();
@@ -2485,7 +2485,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.8.9';
+const APP_VERSION='1.9.0';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -2517,6 +2517,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
