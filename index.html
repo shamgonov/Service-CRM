@@ -461,7 +461,7 @@ function login(role,name){
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.8.4</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v1.8.5</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
@@ -615,7 +615,7 @@ function renderDetails(id){
  const canManage=(typeof can==='function')?can('orders_status'):['admin','operator','manager'].includes(state.role);
  const isW=state.role==='worker'&&!(typeof can==='function'&&can('orders_view'));
  return `
-<div class="header"><button class="back" onclick="go('${isW?'tasks':'orders'}')">←</button><h1>Заявка №${o.id}</h1>${(o.viewedBy&&Object.keys(o.viewedBy).length)?`<span class="badge" style="background:#d1fae5;color:#065f46">👁 ${Object.keys(o.viewedBy).length}</span>`:''}</div>
+<div class="header"><button class="back" onclick="goBack()">←</button><h1>Заявка №${o.id}</h1>${(o.viewedBy&&Object.keys(o.viewedBy).length)?`<span class="badge" style="background:#d1fae5;color:#065f46">👁 ${Object.keys(o.viewedBy).length}</span>`:''}</div>
 <div class="card">
  <div>${badges(o)}</div>
  <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
@@ -719,7 +719,7 @@ function renderCreate(){
  <div class="field"><label class="label">Назначить исполнителя</label>
   <input class="input" id="c-wsearch" placeholder="🔎 Поиск по имени..." oninput="filterWorkerSelect('c-worker',this.value)" style="margin-bottom:6px">
   <select class="input" id="c-worker"><option value="">— не назначен (исполнителем стану я) —</option>
-  ${activeWorkers().map(u=>`<option>${u.name}</option>`).join('')}</select></div>
+  ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo" checked><span class="slider"></span></label></div>
  ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
@@ -1391,7 +1391,7 @@ function editOrderModal(id){
      <option value="service" ${orderType(o)==='service'?'selected':''}>Сервисный</option></select>
     <input class="input" id="e-wsearch" placeholder="🔎 Поиск исполнителя..." oninput="filterWorkerSelect('e-worker',this.value)" style="margin-bottom:6px">
     <select class="input" id="e-worker" style="margin-bottom:6px"><option value="">— без исполнителя —</option>
-     ${workers.map(u=>`<option ${o.worker===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
+     ${activeWorkers().map(u=>`<option ${o.worker===getUserName(u)?'selected':''}>${escapeHtml(getUserName(u))}</option>`).join('')}</select>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px"><input type="checkbox" id="e-photo" ${o.photoReport?'checked':''}> 📸 Требовать фотоотчёт</label>
     ${(typeof isOwner==='function'&&isOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
     <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
@@ -2297,6 +2297,72 @@ c.complaints.splice(idx,1);
 save();
 render();
 }
+// === ФИЛЬТРАЦИЯ ИСПОЛНИТЕЛЕЙ ===
+function activeWorkers(){
+ return (DB.users||[]).filter(u=>{
+  if(u.status==='fired'||u.status==='quit')return false;
+  if(!u.role||u.role==='test')return false;
+  if(u.name&&u.name.toLowerCase().includes('тест'))return false;
+  return true;
+ });
+}
+function getUserName(u){
+ if(!u)return '—';
+ if(u.name&&u.name.trim())return u.name;
+ if(u.deviceName)return u.deviceName;
+ return 'Устройство #' + (u.id||'?').slice(-4);
+}
+
+// === КНОПКА НАЗАД И ИСТОРИЯ ===
+state.navHistory=[];
+function pushNav(screen,id){
+ state.navHistory.push({screen:screen,id:id});
+ if(state.navHistory.length>20)state.navHistory.shift();
+}
+function goBack(){
+ if(state.navHistory.length>1){
+  state.navHistory.pop();
+  const prev=state.navHistory[state.navHistory.length-1];
+  state.screen=prev.screen;
+  if(prev.id)state.orderId=prev.id;
+  render();
+ }else{
+  if(state.screen!=='orders'){
+   state.screen='orders';
+   state.orderId=null;
+   render();
+  }else{
+   if(confirm('Выйти из приложения?')){
+    if(typeof navigator!=='undefined'&&navigator.app){
+     navigator.app.exitApp();
+    }else{
+     window.close();
+    }
+   }
+  }
+ }
+}
+function login(role,name){
+ state.role=role;state.user=name;
+ const active=DB.orders.find(o=>o.worker===name&&['inwork','paused'].includes(o.status));
+ if(active){
+  state.orderId=active.id;
+  state.screen='details';
+  state.schemeTray=active.id;
+  state.navHistory=[{screen:'orders',id:null},{screen:'details',id:active.id}];
+ }else{
+  state.screen=role==='worker'?'tasks':'orders';
+  state.navHistory=[{screen:state.screen,id:null}];
+ }
+ render();
+ setTimeout(()=>notifyCurrentStage(),500);
+ if(typeof document!=='undefined'){
+  document.addEventListener('backbutton',function(e){
+   e.preventDefault();
+   goBack();
+  },false);
+ }
+}
 function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
 function renderHoldGate(){if(!RENDER_HOLD){RENDER_PENDING=false;return false}RENDER_PENDING=true;return true}
 // применить накопленный запрос, паузу не трогая
@@ -2350,7 +2416,7 @@ function render(){
    const trayHtml=`<div style="position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;overflow-y:auto;padding:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
      <b style="font-size:14px">Вы выполняете заказ №${so.id}</b>
-     <button class="btn-sm btn-outline" onclick="closeSchemeTray()">✕ Свернуть</button>
+     <button class="btn-sm btn-outline" onclick="closeSchemeTray()" ontouchend="closeSchemeTray();event.stopPropagation()">✕ Свернуть</button>
     </div>
     ${stageTimeline(so,true)}
    </div>`;
@@ -2412,7 +2478,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='1.8.4';
+const APP_VERSION='1.8.5';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -2444,6 +2510,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
