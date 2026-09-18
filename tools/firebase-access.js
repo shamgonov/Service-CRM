@@ -832,7 +832,7 @@ function toggleEmpRole(dev,roleId,on){
   if(on&&i<0)roles.push(roleId);
   if(!on&&i>=0)roles.splice(i,1);
   fs.collection('employees').doc(dev).update({roles:roles,role:roles[0]||''}).then(function(){
-   if(ME&&ME.deviceId===dev){ ME.roles=roles; ME.role=roles[0]||''; if(typeof render==='function')render(); }
+   if(ME&&ME.deviceId===dev){ ME.roles=roles; ME.role=roles[0]||''; if(typeof effectiveRole==='function')state.role=effectiveRole(); if(typeof render==='function')render(); }
    try{ var w=DB.users&&DB.users.find(function(u){return u.deviceId===dev;}); if(w)w.role=roles[0]||''; if(typeof saveSettings==='function')saveSettings(); }catch(e){}
    setTimeout(loadStaff,300);
   });
@@ -892,7 +892,7 @@ function deleteRole(id){
 // === СТАРТ ===
 function startMain(){
  if(ME){
-  state.role=ME.role; state.user=ME.name;
+  state.role=(typeof effectiveRole==='function')?effectiveRole():ME.role; state.user=ME.name;
   state.tasksTab='free'; // посадка в «Мои задачи» — «Доступные»
   // запоминаем профиль устройства (кроме владельца — он видит панель 👑)
   if(!isOwner()){

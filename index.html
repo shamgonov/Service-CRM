@@ -451,6 +451,12 @@ const NAVS_BASE={
  manager:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
  worker:[['tasks','🔍','Поиск заказов'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
 };
+function effectiveRole(){
+var order=['admin','manager','operator','worker'];
+var rs=(typeof rolesOf==='function'&&typeof ME!=='undefined'&&ME)?rolesOf(ME):(state.role?[state.role]:[]);
+for(var i=0;i<order.length;i++){ if(rs.indexOf(order[i])>=0) return order[i]; }
+return (typeof ME!=='undefined'&&ME&&ME.role)?ME.role:(state.role||'worker');
+}
 function buildNav(role){const b=(NAVS_BASE[role]||[]).slice();if(typeof can==='function'&&can('profile_view'))b.push(['profile','👤','Профиль']);return b;}
 const NAVS=new Proxy({},{get:function(t,k){return buildNav(k);}});
 function go(s,id){state.screen=s;if(id!==undefined)state.orderId=id;if(s==='create'){state.newMats=[];state.cStages=[]}else{state.calPrefill=null}if(s==='details'&&id!==undefined){try{markViewed(id)}catch(e){}}render()}
@@ -1203,6 +1209,12 @@ function findConflicts(worker,date,t1,t2,skipId){
 }
 function canOverrideConflict(){if(typeof can==='function')return isOwner()||can('orders_edit');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 // активные сотрудники для селектов исполнителя (из базы, без уволенных)
+function getUserName(u){
+if(!u)return '—';
+if(u.name&&u.name.trim())return u.name;
+if(u.deviceName)return u.deviceName;
+return 'Устройство #' + (u.id||'?').slice(-4);
+}
 function activeWorkers(){
  return (DB.users||[]).filter(u=>{
   if(u.status==='fired'||u.status==='quit') return false;
