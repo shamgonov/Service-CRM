@@ -806,7 +806,7 @@ function canShoppingCreate(){if(typeof can==='function')return isOwner()||can('s
 function canShoppingClose(){if(typeof can==='function')return isOwner()||can('shopping_close');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 function shoppingForm(){
  if(!canShoppingCreate())return alert('Нет прав');
- const today=dateStr(0);
+ const today=(typeof dateStr !== "undefined" ? dateStr : "")(0);
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
@@ -845,7 +845,7 @@ function shoppingBuy(id){
  if(!canShoppingClose())return alert('Нет прав');
  const fact=prompt('Фактическая цена (можно пусто):','');
  if(fact===null)return;
- r.status='bought';if(fact!=='')r.factPrice=+fact||0;r.dateBought=dateStr(0);r.closedBy=state.user;r.closedTs=Date.now();
+ r.status='bought';if(fact!=='')r.factPrice=+fact||0;r.dateBought=(typeof dateStr !== "undefined" ? dateStr : "")(0);r.closedBy=state.user;r.closedTs=Date.now();
  saveSettings();
  if(typeof pushEvent==='function')pushEvent('material','✅ Закуплено: '+r.name,'Запрос закрыл '+state.user+(r.factPrice?' • факт. '+money(r.factPrice):''),null,true);
  render();
@@ -1175,7 +1175,14 @@ function findConflicts(worker,date,t1,t2,skipId){
 }
 function canOverrideConflict(){if(typeof can==='function')return isOwner()||can('orders_edit');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 // активные сотрудники для селектов исполнителя (из базы, без уволенных)
-function activeWorkers(){return (DB.users||[]).filter(u=>u.status!=='fired'&&u.status!=='quit')}
+function activeWorkers(){
+ return (DB.users||[]).filter(u=>{
+  if(u.status==='fired'||u.status==='quit') return false;
+  if(!u.role || u.role==='test') return false;
+  if(u.name && u.name.toLowerCase().includes('тест')) return false;
+  return true;
+ });
+}
 function filterWorkerSelect(selId,q){
  const sel=document.getElementById(selId);if(!sel)return;
  const s=(q||'').trim().toLowerCase();
