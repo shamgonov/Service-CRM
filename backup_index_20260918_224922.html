@@ -493,7 +493,7 @@ new Notification('⏰ Просроченные заказы',{body:'У вас '+
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.6</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.5</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
@@ -788,9 +788,8 @@ function renderCalendar(){
    const [sStart,sEnd]=slot.split('–');
    const inSlot=list.filter(o=>o.t1<sEnd&&o.t2>sStart);
    const busy=inSlot.filter(o=>o.worker);
-const past=slotIsPast(state.calDate,sStart,sEnd);
    return `<div class="slot" data-slot="${si}" data-start="${sStart}" data-end="${sEnd}"
-    style="${past?'opacity:.45;filter:grayscale(1);':CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
+    style="${CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
     onmousedown="calSlotClick(event,${si},'${sStart}','${sEnd}')" ontouchstart="calSlotClick(event,${si},'${sStart}','${sEnd}')"
     onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
     ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
@@ -1247,7 +1246,6 @@ function saveOrder(){
  if(clientName)getOrCreateClient(clientName,g('c-phone'),g('c-address'));
  if(!g('c-client')||!g('c-phone')||!g('c-address'))return alert('Заполните клиента, телефон и адрес');
  const worker=g('c-worker')||null,date=g('c-date'),t1=g('c-t1'),t2=g('c-t2');
-if(slotIsPast(date,t1,t2))return alert('Выбранное время уже прошло. Включите тумблер задним числом или выберите будущее время.');
  const conf=worker?findConflicts(worker,date,t1,t2,null):[];
  if(conf.length){
   const c=conf[0];
@@ -1454,7 +1452,6 @@ function doEditOrder(id){
  if(!canEditOrder(o))return alert('Нет права orders_edit');
  const g=x=>(document.getElementById(x).value||'').trim();
  if(!g('e-client'))return alert('Укажите клиента');
-if(slotIsPast(g('e-date'),g('e-t1'),g('e-t2')))return alert('Выбранное время уже прошло.');
  const before={client:o.client,phone:o.phone,address:o.address,date:o.date,t1:o.t1,t2:o.t2,price:+o.price||0,desc:o.desc,status:o.status,type:orderType(o),worker:o.worker,photoReport:o.photoReport,test:!!o.test};
  const newWorker=g('e-worker')||null;
  if(newWorker&&newWorker!==o.worker){
@@ -1600,7 +1597,6 @@ var oid=q.get('order');
 if(oid){sessionStorage.setItem('crm_open_order',oid);history.replaceState(null,'',location.pathname+location.hash);}
 }catch(e){}
 })();
-function slotIsPast(d,t1,t2){if(!d)return false;var t=fmt(new Date());if(d<t)return true;if(d>t)return false;var n=new Date(),m=n.getHours()*60+n.getMinutes(),s=toMin(t1);return s!=null&&s<=m;}
 function openSchemeTray(id){
  const o=byId(id);if(!o)return;
  state.schemeTray=id;state.trayCollapsed=null;
@@ -1702,8 +1698,7 @@ function calOrderDown(e,oid,si){
 }
 function calDrop(e,ti,tStart,tEnd){
  e.preventDefault();
- if(slotIsPast(state.calDate,tStart,tEnd)){CAL_SRC=null;CAL_DRAG=null;render();return;}
-if(CAL_DRAG==null||CAL_SRC==null||CAL_SRC===ti){CAL_SRC=null;CAL_DRAG=null;render();return;}
+ if(CAL_DRAG==null||CAL_SRC==null||CAL_SRC===ti){CAL_SRC=null;CAL_DRAG=null;render();return;}
  const src=byId(CAL_DRAG);if(!src){CAL_SRC=null;CAL_DRAG=null;render();return;}
  const tgtOrders=DB.orders.filter(o=>o.date===state.calDate&&o.t1<tEnd&&o.t2>tStart&&o.id!==CAL_DRAG);
  const swap=tgtOrders.length?tgtOrders[0]:null;
@@ -2100,7 +2095,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.0.6';
+const APP_VERSION='2.0.5';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -2132,7 +2127,6 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
-
 
 
 
