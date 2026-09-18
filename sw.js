@@ -10,12 +10,3 @@ const offlineResp=new Response(OFFLINE,{headers:{'Content-Type':'text/html; char
 if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).then(resp=>{if(resp&&resp.ok){const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));}return resp;}).catch(()=>caches.match(e.request).then(m=>m||caches.match('./')).then(m=>m||offlineResp)));return;}
 const net=fetch(e.request).then(resp=>{if(resp&&resp.ok){const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));}return resp;});
 e.respondWith(net.catch(()=>caches.match(e.request)));});
-self.addEventListener('notificationclick', function(e){
-e.notification.close();
-var oid = e.notification && e.notification.data && e.notification.data.orderId;
-var url = './' + (oid ? '?order=' + oid : '');
-e.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(function(list){
-for(var i=0;i<list.length;i++){var c=list[i];if('focus' in c){return c.focus().then(function(){if('navigate' in c)return c.navigate(url);});}}
-return clients.openWindow(url);
-}));
-});
