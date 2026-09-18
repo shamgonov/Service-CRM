@@ -367,7 +367,8 @@ function paymentsBlock(o){
  var html='<div class="card"><div class="sec-title">💰 Платежи</div>'+
   '<div class="info-row"><span class="muted">Сумма заказа (с доп. работами)</span><b>'+money(total(o))+'</b></div>'+
   '<div class="info-row"><span class="muted">Аванс: '+money(totalPaid(o))+'</span><b style="color:var(--green)">Остаток: '+money(balance(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>';
+  '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">💵 Вознаграждение исполнителя</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>';
  if(pays.length){
   html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">';
   pays.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(function(p){
@@ -1350,7 +1351,7 @@ const g=x=>document.getElementById(x).value;
    worker:g('c-worker')||state.user, // не выбран → исполнитель = создатель
    by:state.user,byDev:(typeof deviceId==='function')?deviceId():'',
    test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
-   materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:(function(){var wn=g('c-worker');var u=(DB.users||[]).find(function(x){return x.name===wn;});return {type:'percent',value:(u&&u.share!=null)?+u.share:0};})(),photos:[],type:otype,payments:[],history:[]};
+   materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:readRewardFromForm(),photos:[],type:otype,payments:[],history:[]};
  // B2: внесение задним числом — статус из селекта + флаг backfill
  if(isBF()){
   o.backfill=true;
@@ -2216,6 +2217,42 @@ return w.map(function(x){return '<div class="info-row"><span style="'+(x.skipped
 }
 function matsSpent(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0));},0);}
 function profitOf(o){return total(o)-matsSpent(o);}
+function readRewardFromForm(){
+var t=(document.getElementById('c-rw-type')||{value:'percent'}).value;
+var v=(document.getElementById('c-rw-val')||{value:''}).value;
+if(v===''||v==null)return null;
+return {type:t,value:+v||0};
+}
+function rewardOf(o){
+var r=o.reward;
+if(!r||r.value==null||r.value===''){
+var u=(DB.users||[]).find(function(x){return x.name===o.worker;});
+var pct=(u&&u.share!=null)?+u.share:0;
+return {type:'percent',value:pct,sum:Math.round(profitOf(o)*pct/100)};
+}
+if(r.type==='fixed')return {type:'fixed',value:+r.value,sum:+r.value};
+return {type:'percent',value:+r.value,sum:Math.round(profitOf(o)*(+r.value)/100)};
+}
+function rewardLabel(o){var rw=rewardOf(o);return rw.type==='fixed'?money(rw.sum)+' (фикс)':rw.value+'% = '+money(rw.sum)+' от прибыли';}
+function takeGateModal(id,proceed){
+var o=byId(id);if(!o)return proceed(id);
+var wl=(o.works||[]).filter(function(x){return !x.skipped;}).map(function(x){return '• '+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+' — '+money((+x.price||0)*(+x.qty||1));}).join('<br>');
+var ml=(o.materials||[]).filter(function(m){return m.status!=='bought';}).map(function(m){return '• '+escapeHtml(m.name)+(m.buyer?' ('+(BUYER[m.buyer]||m.buyer)+')':'');}).join('<br>');
+window.__takeProceed=proceed;
+openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+'<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
+'<b style="display:block;margin-bottom:8px">📋 Заявка №'+id+' — '+escapeHtml(o.client||'')+'</b>'+
+'<div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+' • '+escapeHtml(o.address||'')+'</div>'+
+'<div style="margin:10px 0"><b>Работы:</b><div style="font-size:13px;margin-top:4px">'+(wl||'• состав не задан')+'</div></div>'+
+(ml?'<div style="margin:0 0 10px"><b>Закупить:</b><div style="font-size:13px;margin-top:4px">'+ml+'</div></div>':'')+
+'<div class="info-row"><span class="muted">Сумма заказа</span><b>'+money(total(o))+'</b></div>'+
+'<div class="info-row"><span class="muted">Аванс внесён</span><b style="color:var(--green)">'+money(totalPaid(o))+'</b></div>'+
+'<div class="info-row"><span class="muted">Остаток с заказчика после работ</span><b>'+money(balance(o))+'</b></div>'+
+'<div class="info-row" style="background:#eff6ff;border-radius:8px;padding:8px"><span>💵 Твоё вознаграждение</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>'+
+'<div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отклонить</button>'+
+'<button class="btn btn-green" onclick="closeModal();window.__takeProceed('+id+')">Взять в работу</button></div>'+
+'</div></div>');
+}
 function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
 function renderHoldGate(){if(!RENDER_HOLD){RENDER_PENDING=false;return false}RENDER_PENDING=true;return true}
 // применить накопленный запрос, паузу не трогая
