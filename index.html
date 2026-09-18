@@ -2253,6 +2253,7 @@ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index
 '<button class="btn btn-green" onclick="closeModal();window.__takeProceed('+id+')">Взять в работу</button></div>'+
 '</div></div>');
 }
+function renderNavActive(){var nav=document.getElementById('nav');if(!nav)return;nav.style.display='grid';nav.innerHTML=NAVS[state.role].map(n=>`<div class="nav-item ${state.screen===n[0]?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</div>`).join('');if(typeof applyPermsUI==='function')applyPermsUI();if(typeof applyEventBadges==='function')applyEventBadges();}
 function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
 function renderHoldGate(){if(!RENDER_HOLD){RENDER_PENDING=false;return false}RENDER_PENDING=true;return true}
 // применить накопленный запрос, паузу не трогая

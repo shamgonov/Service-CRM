@@ -986,8 +986,8 @@ window.render = function(){
   return;
  }
  if(state.screen==='profile'){
-  document.getElementById('nav').style.display='flex';
-  document.getElementById('app').innerHTML=renderProfile();
+  if(typeof renderNavActive==='function'){renderNavActive();}else{document.getElementById('nav').style.display='grid';}
+  document.getElementById('app').innerHTML=renderProfile(); if(typeof renderNavActive==='function')renderNavActive();
   //addProfileNavItem(); // дубль: профиль уже в NAVS через buildNav
   return;
  }
@@ -1177,9 +1177,9 @@ function addProfileNavItem(){
 }
 
 function avatarPick(inp){
- downscale(inp,160,0.8,true,function(dataUrl){ AVATAR_TMP=dataUrl; document.getElementById('app').innerHTML=renderProfile(); });
+ downscale(inp,160,0.8,true,function(dataUrl){ AVATAR_TMP=dataUrl; document.getElementById('app').innerHTML=renderProfile(); if(typeof renderNavActive==='function')renderNavActive(); });
 }
-function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); }
+function clearAvatar(){ AVATAR_TMP=''; if(MYDOC&&MYDOC.profile)MYDOC.profile.avatar=''; document.getElementById('app').innerHTML=renderProfile(); if(typeof renderNavActive==='function')renderNavActive(); }
 
 // === ФОТО ЗАЯВОК: коллекция photos (без Blaze) + миграционный путь в Storage ===
 // Документ: {orderId, data (base64 JPEG), ts, by}, id = {orderId}_{ts}.
