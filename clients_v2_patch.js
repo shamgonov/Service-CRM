@@ -132,7 +132,7 @@ ${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="
 '<b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b>'+
 '<div class="muted">'+escapeHtml(comp.description||'')+'</div>'+
 '<div class="muted" style="font-size:11px">Добавлено: '+(comp.by||'—')+' • '+(comp.ts?new Date(comp.ts).toLocaleString():'')+'</div>'+
-'<button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')">🗑 Удалить</button>'+
+'<button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')"> Удалить</button>'+
 '</div>').join(''):'<div class="muted">Рекламаций нет</div>'}
 <button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button>
 </div>
@@ -142,7 +142,7 @@ ${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="
 ${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer">'+
 '<div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div>'+
 '<div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
-'<div class="muted">📍 '+escapeHtml(o.address||'—')+'</div>'+
+'<div class="muted"> '+escapeHtml(o.address||'—')+'</div>'+
 '<div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div>'+
 '</div>').join('')||'<div class="muted">Заказов не найдено</div>'}
 </div>`;
