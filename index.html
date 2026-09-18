@@ -403,6 +403,7 @@ function payAdd(id,dir){
  if(dir==='materials'&&!confirm('Выдать на материалы '+money(sum)+'?'))return;
  o.payments=o.payments||[];
  o.payments.push({id:'p'+Date.now(),sum:sum,type:t,method:method,date:new Date().toISOString().slice(0,10),note:note});
+if(t!=='materials')autoMarkPaymentDone(id);
  logAction(o,t==='materials'?'payment_materials':'payment_received',t==='materials'?{sum:sum}:{sum:sum,type:t,method:method,note:note});
  markOrder(o);save();
  document.querySelector('#modal-root > div[style*="z-index:99"]').remove();
@@ -1100,10 +1101,10 @@ function takeGateModal(id){
 function takeOrder(id){takeGateModal(id)}
 function finishOrder(id){const o=byId(id);
  // завершение блокируется, пока в заявке есть неподтверждённые этапы (любой тип, если этапы есть)
- const und=(o.stages||[]).filter(s=>!s.done);
+ const und=(o.stages||[]).filter(s=>!s.done&&!s.autoOnly);
  if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
  // кассовое закрытие: при остатке > 0 — модалка
- if(balance(o)>0){closeOrderModal(id);return}
+ autoMarkPaymentDone(id);if(balance(o)>0){closeOrderModal(id);return}
  doCompleteOrder(id);
 }
 function closeOrderModal(id){
@@ -1151,7 +1152,7 @@ function closeOrderFull(id){
 }
 function closeOrderModalRemove(){closeModal()}
 // === модальный root ВНЕ области render(): снапшоты/таймеры не уничтожают открытые модалки ===
-function doCompleteOrder(id){const o=byId(id);closeActiveOrderNotification(id);
+function doCompleteOrder(id){const o=byId(id);var sd=(o.stages||[]).find(function(x){return x.id==='st_done';});if(sd&&!sd.done){sd.done=true;sd.ts_done=Date.now();sd.by=state.user;}closeActiveOrderNotification(id);
  if(o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет. Добавьте хотя бы одно фото.');go('details',id);return;}
    o.status='completed';markOrder(o);save();alert('Заказ №'+id+' выполнен! Ожидает оплаты.');render(); });
@@ -1790,7 +1791,7 @@ function autoMarkPaymentDone(id){
 function allStagesReadyForComplete(o){
  const st=o.stages||[];
  if(!st.length)return true;
- const allButLast=st.slice(0,-1);
+ const allButLast=st.slice(0,-1).filter(s=>!s.autoOnly);
  return allButLast.every(s=>s.done);
 }
 
