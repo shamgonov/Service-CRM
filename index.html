@@ -19,6 +19,13 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f5f5f5;max-widt
 .role-card{border:1px solid #e5e5e5;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer}
 .role-card:active{background:#f0f7ff}
 #nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #e5e5e5;z-index:10}
+/* === ТРЕЙ СХЕМЫ: единственный контейнер, ручка сворачивания (A1–A6) === */
+#scheme-tray{position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;padding:16px;display:none}
+#scheme-tray.open{display:block}
+#tray-body{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#tray-collapse{position:absolute;left:-20px;top:14px;width:44px;height:44px;min-width:44px;min-height:44px;border-radius:50%;background:#2563eb;color:#fff;border:none;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:22px;line-height:44px;text-align:center;cursor:pointer;padding:0}
+#tray-handle{position:fixed;right:0;top:45%;width:44px;height:100px;background:#2563eb;color:#fff;border:none;border-radius:12px 0 0 12px;box-shadow:-2px 2px 10px rgba(0,0,0,.3);z-index:96;font-size:24px;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0}
+@media (max-width:430px){#scheme-tray{width:85vw}}
 .nav-item{min-width:0;position:relative;text-align:center;padding:8px 2px;cursor:pointer;color:#666;font-size:10px}
 .nav-item span{display:block;font-size:20px}
 .nav-item [data-ev-badge]{position:absolute;top:-4px;right:calc(50% - 22px);width:18px;height:18px;background:#dc2626;color:#fff;border-radius:50%;font:700 11px/18px sans-serif;text-align:center;pointer-events:none}
@@ -70,6 +77,8 @@ h1,h2,h3{font-weight:600}
 
 <div id="app"></div>
 <div id="modal-root"></div>
+<div id="scheme-tray"><button id="tray-collapse" type="button" onclick="closeSchemeTray()">›</button><div id="tray-body"></div></div>
+<button id="tray-handle" type="button" onclick="reopenSchemeTray()">‹</button>
 <nav id="nav" style="display:none"></nav>
 <script>
 // === BOOT-GUARD: самовосстановление при битом кэше SW ===
@@ -484,7 +493,7 @@ new Notification('⏰ Просроченные заказы',{body:'У вас '+
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.4</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.0.5</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
@@ -714,7 +723,7 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
   ${o.status==='paused'&&o.worker===state.user?`<button class="btn btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
 ${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
@@ -826,7 +835,7 @@ ${tab==='free'?`<div class="card">
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">▶ Приступить</button>`;})()}`:''}
+   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
    ${o.status==='paused'&&o.worker===state.user?`<button class="btn-sm btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
@@ -1590,13 +1599,19 @@ if(oid){sessionStorage.setItem('crm_open_order',oid);history.replaceState(null,'
 })();
 function openSchemeTray(id){
  const o=byId(id);if(!o)return;
- state.schemeTray=id;
-if(!o.startedTs){o.startedTs=Date.now();logAction(o,'start',{by:state.user});markOrder(o);orderSave(o);}
-showActiveOrderNotification(o);
+ state.schemeTray=id;state.trayCollapsed=null;
+ if(!o.startedTs){o.startedTs=Date.now();logAction(o,'start',{by:state.user});markOrder(o);save();orderSave(o);}
+ showActiveOrderNotification(o);
  render();
 }
+// A1–A3: сворачивание/раскрытие — только флаг + render(); inline onclick, без ontouchend
 function closeSchemeTray(){
+ state.trayCollapsed=state.schemeTray;
  state.schemeTray=null;
+ render();
+}
+function reopenSchemeTray(){
+ if(state.trayCollapsed)state.schemeTray=state.trayCollapsed;
  render();
 }
 
@@ -1607,7 +1622,8 @@ function stageMarkDone(id,stageId){
  if(!s||s.autoOnly)return alert('Этот этап отмечается из карточки');
  s.done=true;s.ts_done=Date.now();s.by=state.user;
  logAction(o,'stage_complete',{stageTitle:s.title});
- markOrder(o);orderSave(o);
+ // B3: save() — обязательно, прогресс переживает перезаход и уходит в облако
+ markOrder(o);save();orderSave(o);
  if(state.schemeTray===id)render();
 }
 
@@ -1625,7 +1641,8 @@ function ensureStages(o){
  o.stages=genDefaultStages(o);
  markOrder(o);orderSave(o);
 }
-function refuseOrder(id){var o=byId(id);if(!o||o.worker!==state.user)return alert('Вы не исполнитель');if(!confirm('Отказаться? Этапы сохранятся.'))return;o.worker=null;o.takenBy=null;o.status='approved';logAction(o,'refuse',{by:state.user});markOrder(o);save();render();}
+// B4: при отказе startedTs и исполнитель сбрасываются, этапы (done/ts_done/by) сохраняются
+function refuseOrder(id){var o=byId(id);if(!o||o.worker!==state.user)return alert('Вы не исполнитель');if(!confirm('Отказаться? Этапы сохранятся.'))return;o.worker=null;o.takenBy=null;o.startedTs=null;o.status='approved';state.schemeTray=null;state.trayCollapsed=null;logAction(o,'refuse',{by:state.user});markOrder(o);save();render();}
 function pauseOrder(id){
  const o=byId(id);if(!o)return;
  o.status='paused';
@@ -1997,17 +2014,30 @@ if(state.role){var _oo=sessionStorage.getItem('crm_open_order');if(_oo){sessionS
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
   app.innerHTML=banner+(S[state.screen]||renderOrders)();
- if(state.schemeTray){
-  const so=byId(state.schemeTray);if(so)ensureStages(so);
-  if(so){
-   const trayHtml=`<div style="position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;overflow-y:auto;padding:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-     <b style="font-size:14px">Вы выполняете заказ №${so.id}</b>
-     <button class="btn-sm btn-outline" onclick="closeSchemeTray()" ontouchend="closeSchemeTray();event.stopPropagation()">✕ Свернуть</button>
-    </div>
-    ${stageTimeline(so,true)}
-   </div>`;
-   document.body.insertAdjacentHTML('beforeend',trayHtml);
+ // A4: трей — единственный контейнер #scheme-tray, очищается перед каждым рендером
+ var trayEl=document.getElementById('scheme-tray');
+ var trayHandle=document.getElementById('tray-handle');
+ if(trayEl&&trayHandle){
+  if(state.schemeTray){
+   const so=byId(state.schemeTray);if(so)ensureStages(so);
+   if(so){
+    document.getElementById('tray-body').innerHTML=
+     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-left:28px">'+
+     '<b style="font-size:14px">Вы выполняете заказ №'+so.id+'</b></div>'+
+     stageTimeline(so,true);
+    trayEl.classList.add('open');
+    trayHandle.style.display='none';
+   } else {
+    document.getElementById('tray-body').innerHTML='';
+    trayEl.classList.remove('open');
+    trayHandle.style.display='none';
+    state.schemeTray=null;
+   }
+  } else {
+   document.getElementById('tray-body').innerHTML='';
+   trayEl.classList.remove('open');
+   // A3: свёрнутый трей — узкая ручка «‹» у правого края
+   trayHandle.style.display=state.trayCollapsed?'flex':'none';
   }
  }
  // восстановление прокрутки и фокуса (без сброса на верх при снапшотах/таймерах)
@@ -2065,7 +2095,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.0.4';
+const APP_VERSION='2.0.5';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
@@ -2097,6 +2127,7 @@ function updCloseModal(){document.getElementById('updOverlay').style.display='no
  check();setInterval(check,30000);
 })();
 </script>
+
 
 
 
