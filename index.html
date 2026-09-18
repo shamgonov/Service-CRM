@@ -457,6 +457,14 @@ function login(role,name){
  }
  render();
  setTimeout(()=>notifyCurrentStage(),500);
+// проверка просроченных
+const overdue=DB.orders.filter(o=>{
+const od=o.date?new Date(o.date.replace(/-/g,'/')):null;
+return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user;
+});
+if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
+new Notification('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),icon:'icon.png'});
+}
 }
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
@@ -2363,6 +2371,14 @@ function login(role,name){
  }
  render();
  setTimeout(()=>notifyCurrentStage(),500);
+// проверка просроченных
+const overdue=DB.orders.filter(o=>{
+const od=o.date?new Date(o.date.replace(/-/g,'/')):null;
+return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user;
+});
+if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
+new Notification('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),icon:'icon.png'});
+}
  if(typeof document!=='undefined'){
   document.addEventListener('backbutton',function(e){
    e.preventDefault();
