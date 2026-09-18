@@ -439,7 +439,7 @@ const byId=id=>DB.orders.find(o=>o.id==id);
 const NAVS_BASE={
  admin:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['reports','📊','Отчеты'],['admin','⚙️','Админ']],
  operator:[['orders','📋','Заявки'],['calendar','📅','Календарь'],['shopping','🛒','Закупки'],['create','➕','Новая'],['reports','📊','Отчеты']],
- manager:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','','Просроченные'],['calendar','','Календарь'],['shopping','','Закупки']],
+ manager:[['orders','📋','Заявки'],['clients','📇','Контрагенты'],['overdue','⏰','Просроченные'],['calendar','📅','Календарь'],['shopping','🛒','Закупки']],
  worker:[['tasks','🔍','Поиск заказов'],['shopping','🛒','Закупки'],['calendar','📅','Календарь']]
 };
 function buildNav(role){const b=(NAVS_BASE[role]||[]).slice();if(typeof can==='function'&&can('profile_view'))b.push(['profile','👤','Профиль']);return b;}
@@ -814,7 +814,7 @@ function canShoppingCreate(){if(typeof can==='function')return isOwner()||can('s
 function canShoppingClose(){if(typeof can==='function')return isOwner()||can('shopping_close');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
 function shoppingForm(){
  if(!canShoppingCreate())return alert('Нет прав');
- const today=(typeof dateStr !== "undefined" ? dateStr : "")(0);
+ const today=fmt(new Date());
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
@@ -853,7 +853,7 @@ function shoppingBuy(id){
  if(!canShoppingClose())return alert('Нет прав');
  const fact=prompt('Фактическая цена (можно пусто):','');
  if(fact===null)return;
- r.status='bought';if(fact!=='')r.factPrice=+fact||0;r.dateBought=(typeof dateStr !== "undefined" ? dateStr : "")(0);r.closedBy=state.user;r.closedTs=Date.now();
+ r.status='bought';if(fact!=='')r.factPrice=+fact||0;r.dateBought=fmt(new Date());r.closedBy=state.user;r.closedTs=Date.now();
  saveSettings();
  if(typeof pushEvent==='function')pushEvent('material','✅ Закуплено: '+r.name,'Запрос закрыл '+state.user+(r.factPrice?' • факт. '+money(r.factPrice):''),null,true);
  render();
@@ -2131,262 +2131,12 @@ function cancelOrder(id){
  logAction(o,'cancel',{reason:'Отменён из просроченных'});
  markOrder(o); save(); render();
 }
-// === КОНТРАГЕНТЫ: клиентская база ===
+// === КОНТРАГЕНТЫ v2: ЧИСТЫЙ БЛОК ===
 function clientByName(name){
-if(!name)return null;
-const n=name.trim().toLowerCase();
-return (DB.clients||[]).find(c=>(c.name||'').trim().toLowerCase()===n);
+ if(!name)return null;
+ const n=name.trim().toLowerCase();
+ return (DB.clients||[]).find(c=>(c.name||'').trim().toLowerCase()===n);
 }
-function getOrCreateClient(name,phone,address){
-if(!name)return null;
-DB.clients=DB.clients||[];
-let c=clientByName(name);
-if(!c){
-c={id:'cl'+Date.now(),name:name.trim(),phones:[phone||''].filter(Boolean),addresses:[address||''].filter(Boolean),notes:'',complaints:[]};
-DB.clients.push(c);
-}else{
-if(phone&&!c.phones.includes(phone))c.phones.push(phone);
-if(address&&!c.addresses.includes(address))c.addresses.push(address);
-}
-return c;
-}
-function renderClients(){
-DB.clients=DB.clients||[];
-const q=(state.clientsQuery||'').toLowerCase();
-let list=DB.clients.slice();
-if(q)list=list.filter(c=>
-(c.name||'').toLowerCase().includes(q)||
-(c.addresses||[]).some(a=>a.toLowerCase().includes(q))||
-(c.phones||[]).some(p=>p.toLowerCase().includes(q))
-);
-list.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-return `
-<div class="header"><h1>📇 Контрагенты</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-<div class="card">
-<div style="margin-bottom:10px"><input class="input" placeholder="🔍 Поиск по имени, адресу, телефону..." value="${escapeHtml(state.clientsQuery||'')}" oninput="state.clientsQuery=this.value;render()"></div>
-<button class="btn btn-green" style="margin-bottom:10px" onclick="addClientModal()">＋ Новый контрагент</button>
-${list.map(c=>`<div class="mat" onclick="go('clientDetail','${c.id}')" style="cursor:pointer">
-<b>${escapeHtml(c.name)}</b>
-<div class="muted">📞 ${(c.phones||[]).join(', ')||'—'} • 📍 ${(c.addresses||[]).join(', ')||'—'}</div>
-<div class="muted" style="margin-top:4px">Заказов: ${(DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).length} • Рекламаций: ${(c.complaints||[]).length}</div>
-</div>`).join('')||'<div class="muted">Контрагентов пока нет</div>'}
-</div>`;
-}
-function renderClientDetail(id){
-DB.clients=DB.clients||[];
-const c=DB.clients.find(x=>x.id===id);
-if(!c)return '<div class="card">Контрагент не найден</div>';
-const orders=(DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-const dateFilter=state.clientDateFilter||'';
-const filtered=dateFilter?orders.filter(o=>o.date===dateFilter):orders;
-const totalRev=orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
-return `
-<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
-<div class="card">
-<div class="info-row"><span class="muted">Телефоны</span><b style="text-align:right">${(c.phones||[]).map(p=>`<a href="tel:${encodeURIComponent(p)}" style="color:var(--blue)">${escapeHtml(p)}</a>`).join(', ')||'—'}</b></div>
-<div class="info-row"><span class="muted">Адреса</span><b style="text-align:right">${(c.addresses||[]).map(escapeHtml).join(', ')||'—'}</b></div>
-<div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
-<div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
-${c.notes?`<div style="margin-top:10px"><b>Заметки:</b><div class="muted">${escapeHtml(c.notes)}</div></div>`:''}
-<button class="btn btn-blue" style="margin-top:10px;width:100%" onclick="newOrderFromClient('${c.id}')">＋ Новый заказ</button>
-<button class="btn-sm btn-outline" style="margin-top:8px" onclick="editClientModal('${c.id}')">✏️ Редактировать</button>
-</div>
-<div class="card">
-<div class="sec-title"> Рекламации (${(c.complaints||[]).length})</div>
-${(c.complaints||[]).length?c.complaints.map((comp,i)=>`<div class="mat" style="border-left:4px solid var(--red)">
-<b>${comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—'} • ${escapeHtml(comp.title||'Рекламация')}</b>
-<div class="muted">${escapeHtml(comp.description||'')}</div>
-<div class="muted" style="font-size:11px">Добавлено: ${comp.by||'—'} • ${comp.ts?new Date(comp.ts).toLocaleString():''}</div>
-<button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint('${c.id}',${i})"> Удалить</button>
-</div>`).join(''):'<div class="muted">Рекламаций нет</div>'}
-<button class="btn btn-red" style="margin-top:10px;width:100%" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button>
-</div>
-<div class="card">
-<div class="sec-title">📋 История заказов (${filtered.length})</div>
-<div style="margin-bottom:10px"><input class="input" type="date" value="${dateFilter}" onchange="state.clientDateFilter=this.value;render()" placeholder="Фильтр по дате"> <button class="btn-sm btn-outline" onclick="state.clientDateFilter='';render()">Сбросить</button></div>
-${filtered.map(o=>`<div class="mat" onclick="go('details',${o.id})" style="cursor:pointer">
-<div style="display:flex;justify-content:space-between"><b>№${o.id}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>
-<div class="muted">${o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—'} ${o.t1||''}–${o.t2||''}</div>
-<div class="muted">📍 ${escapeHtml(o.address||'—')}</div>
-<div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
-</div>`).join('')||'<div class="muted">Заказов не найдено</div>'}
-</div>`;
-}
-function newOrderFromClient(clientId){
-const c=(DB.clients||[]).find(x=>x.id===clientId);
-if(!c)return;
-state.calPrefill={client:c.name,phone:(c.phones||[])[0]||'',address:(c.addresses||[])[0]||''};
-go('create');
-}
-function addClientModal(){
-openModal(`
-<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
-<b style="display:block;margin-bottom:10px">＋ Новый контрагент</b>
-<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div>
-<div class="field"><label class="label">Телефон</label><input class="input" id="cl-phone" type="tel" placeholder="+7..."></div>
-<div class="field"><label class="label">Адрес</label><input class="input" id="cl-address" placeholder="улица, дом"></div>
-<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div>
-<div class="row2" style="margin-top:12px">
-<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
-<button class="btn btn-green" onclick="saveNewClient()">Сохранить</button>
-</div>
-</div>
-</div>`);
-}
-function saveNewClient(){
-const name=g('cl-name');if(!name)return alert('Укажите имя');
-const phone=g('cl-phone');
-const address=g('cl-address');
-const notes=g('cl-notes');
-if(clientByName(name))return alert('Контрагент с таким именем уже существует');
-DB.clients=DB.clients||[];
-DB.clients.push({id:'cl'+Date.now(),name:name.trim(),phones:phone?[phone]:[],addresses:address?[address]:[],notes:notes||'',complaints:[]});
-save();
-closeModal();
-render();
-}
-function editClientModal(id){
-const c=(DB.clients||[]).find(x=>x.id===id);if(!c)return;
-openModal(`
-<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
-<b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b>
-<div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="${escapeHtml(c.name||'')}"></div>
-<div class="field"><label class="label">Телефоны (через запятую)</label><input class="input" id="cl-phones" value="${escapeHtml((c.phones||[]).join(', '))}"></div>
-<div class="field"><label class="label">Адреса (через запятую)</label><input class="input" id="cl-addresses" value="${escapeHtml((c.addresses||[]).join(', '))}"></div>
-<div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">${escapeHtml(c.notes||'')}</textarea></div>
-<div class="row2" style="margin-top:12px">
-<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
-<button class="btn btn-green" onclick="saveEditClient('${c.id}')">Сохранить</button>
-</div>
-</div>
-</div>`);
-}
-function saveEditClient(id){
-const c=(DB.clients||[]).find(x=>x.id===id);if(!c)return;
-const name=g('cl-name');if(!name)return alert('Укажите имя');
-c.name=name.trim();
-c.phones=g('cl-phones').split(',').map(s=>s.trim()).filter(Boolean);
-c.addresses=g('cl-addresses').split(',').map(s=>s.trim()).filter(Boolean);
-c.notes=g('cl-notes')||'';
-save();
-closeModal();
-render();
-}
-function addComplaintModal(clientId){
-openModal(`
-<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
-<b style="display:block;margin-bottom:10px">＋ Добавить рекламацию</b>
-<div class="field"><label class="label">Дата</label><input class="input" id="comp-date" type="date" value="${d0}"></div>
-<div class="field"><label class="label">Заголовок *</label><input class="input" id="comp-title" placeholder="Краткое описание"></div>
-<div class="field"><label class="label">Описание *</label><textarea class="input" id="comp-desc" rows="5" placeholder="Подробности рекламации"></textarea></div>
-<div class="row2" style="margin-top:12px">
-<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
-<button class="btn btn-red" onclick="saveComplaint('${clientId}')">Сохранить</button>
-</div>
-</div>
-</div>`);
-}
-function saveComplaint(clientId){
-const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
-const title=g('comp-title');if(!title)return alert('Укажите заголовок');
-const desc=g('comp-desc');if(!desc)return alert('Укажите описание');
-c.complaints=c.complaints||[];
-c.complaints.push({
-date:g('comp-date')||d0,
-title:title.trim(),
-description:desc.trim(),
-by:state.user||'system',
-ts:Date.now()
-});
-save();
-closeModal();
-render();
-}
-function deleteComplaint(clientId,idx){
-const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
-if(!confirm('Удалить эту рекламацию?'))return;
-c.complaints.splice(idx,1);
-save();
-render();
-}
-// === ФИЛЬТРАЦИЯ ИСПОЛНИТЕЛЕЙ ===
-function activeWorkers(){
- return (DB.users||[]).filter(u=>{
-  if(u.status==='fired'||u.status==='quit')return false;
-  if(!u.role||u.role==='test')return false;
-  if(u.name&&u.name.toLowerCase().includes('тест'))return false;
-  return true;
- });
-}
-function getUserName(u){
- if(!u)return '—';
- if(u.name&&u.name.trim())return u.name;
- if(u.deviceName)return u.deviceName;
- return 'Устройство #' + (u.id||'?').slice(-4);
-}
-
-// === КНОПКА НАЗАД И ИСТОРИЯ ===
-state.navHistory=[];
-function pushNav(screen,id){
- state.navHistory.push({screen:screen,id:id});
- if(state.navHistory.length>20)state.navHistory.shift();
-}
-function goBack(){
- if(state.navHistory.length>1){
-  state.navHistory.pop();
-  const prev=state.navHistory[state.navHistory.length-1];
-  state.screen=prev.screen;
-  if(prev.id)state.orderId=prev.id;
-  render();
- }else{
-  if(state.screen!=='orders'){
-   state.screen='orders';
-   state.orderId=null;
-   render();
-  }else{
-   if(confirm('Выйти из приложения?')){
-    if(typeof navigator!=='undefined'&&navigator.app){
-     navigator.app.exitApp();
-    }else{
-     window.close();
-    }
-   }
-  }
- }
-}
-function login(role,name){
- state.role=role;state.user=name;
- const active=DB.orders.find(o=>o.worker===name&&['inwork','paused'].includes(o.status));
- if(active){
-  state.orderId=active.id;
-  state.screen='details';
-  state.schemeTray=active.id;
-  state.navHistory=[{screen:'orders',id:null},{screen:'details',id:active.id}];
- }else{
-  state.screen=role==='worker'?'tasks':'orders';
-  state.navHistory=[{screen:state.screen,id:null}];
- }
- render();
- setTimeout(()=>notifyCurrentStage(),500);
-// проверка просроченных
-const overdue=DB.orders.filter(o=>{
-const od=o.date?new Date(o.date.replace(/-/g,'/')):null;
-return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user;
-});
-if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
-new Notification('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),icon:'icon.png'});
-}
- if(typeof document!=='undefined'){
-  document.addEventListener('backbutton',function(e){
-   e.preventDefault();
-   goBack();
-  },false);
- }
-}
-// === КОНТРАГЕНТЫ v2 ===
 function findClientByPhoneOrAddress(phone, address){
  DB.clients = DB.clients || [];
  const p = (phone||'').trim().toLowerCase();
@@ -2400,7 +2150,6 @@ function findClientByPhoneOrAddress(phone, address){
   return false;
  });
 }
-
 function getOrCreateClient(name, phone, address){
  if(!name) return null;
  DB.clients = DB.clients || [];
@@ -2433,7 +2182,6 @@ function getOrCreateClient(name, phone, address){
  }
  return c;
 }
-
 function checkClientDuplicate(){
  const phone = g('c-phone'); const address = g('c-address'); const name = g('c-client');
  if(!phone && !address) return;
@@ -2449,13 +2197,11 @@ function useExistingClient(clientId){
  document.getElementById('c-address').value = (c.addresses&&c.addresses[0]) || c.address || '';
  closeModal();
 }
-
 function createOrderForClient(clientId){
  const c = (DB.clients||[]).find(x=>x.id===clientId); if(!c) return;
  state.calPrefill = {clientName:c.name, phone:(c.phones&&c.phones[0])||c.phone||'', address:(c.addresses&&c.addresses[0])||c.address||''};
  go('create');
 }
-
 function renderClients(){
  DB.clients = DB.clients || [];
  const q = (state.clientsQuery||'').toLowerCase();
@@ -2464,12 +2210,11 @@ function renderClients(){
  list.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
  return `<div class="header"><h1>📇 Контрагенты</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="card">
-<div style="margin-bottom:10px"><input class="input" placeholder=" Поиск..." value="${escapeHtml(state.clientsQuery||'')}" oninput="state.clientsQuery=this.value;render()"></div>
+<div style="margin-bottom:10px"><input class="input" placeholder="🔍 Поиск..." value="${escapeHtml(state.clientsQuery||'')}" oninput="state.clientsQuery=this.value;render()"></div>
 <button class="btn btn-green" style="margin-bottom:10px" onclick="addClientModal()">＋ Новый контрагент</button>
 ${list.map(c=>`<div class="mat" onclick="go('clientDetail','${c.id}')" style="cursor:pointer"><b>${escapeHtml(c.name)}</b><div class="muted"> ${(c.phones||[]).join(', ')||'—'} • 📍 ${(c.addresses||[]).join(', ')||'—'}</div><div class="muted" style="margin-top:4px">Заказов: ${(DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).length}</div></div>`).join('')||'<div class="muted">Контрагентов пока нет</div>'}
 </div>`;
 }
-
 function renderClientDetail(id){
  DB.clients = DB.clients || [];
  const c = DB.clients.find(x=>x.id===id);
@@ -2478,6 +2223,8 @@ function renderClientDetail(id){
  if(!c.addresses && c.address) c.addresses = [c.address];
  if(!c.phones) c.phones = []; if(!c.addresses) c.addresses = [];
  const orders = (DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+ const dateFilter = state.clientDateFilter || '';
+ const filtered = dateFilter ? orders.filter(o=>o.date===dateFilter) : orders;
  const totalRev = orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
  return `<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
 <div class="card">
@@ -2488,11 +2235,14 @@ function renderClientDetail(id){
 ${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted">'+escapeHtml(c.notes)+'</div></div>':''}
 <div class="row2" style="margin-top:10px"><button class="btn-sm btn-outline" onclick="editClientModal('${c.id}')">✏️ Редактировать</button><button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button></div>
 </div>
-<div class="card"><div class="sec-title">📋 История заказов (${orders.length})</div>
-${orders.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div><div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div><div class="muted">📍 '+escapeHtml(o.address||'—')+'</div><div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div></div>').join('')||'<div class="muted">Заказов не найдено</div>'}
+<div class="card"><div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
+${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)"><b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b><div class="muted">'+escapeHtml(comp.description||'')+'</div><button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')"> Удалить</button></div>').join(''):'<div class="muted">Рекламаций нет</div>'}
+<button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button></div>
+<div class="card"><div class="sec-title">📋 История заказов (${filtered.length})</div>
+<div style="margin-bottom:10px"><input class="input" type="date" value="${dateFilter}" onchange="state.clientDateFilter=this.value;render()" placeholder="Фильтр по дате"> <button class="btn-sm btn-outline" onclick="state.clientDateFilter='';render()">Сбросить</button></div>
+${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div><div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div><div class="muted">📍 '+escapeHtml(o.address||'—')+'</div><div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div></div>').join('')||'<div class="muted">Заказов не найдено</div>'}
 </div>`;
 }
-
 function editClientModal(id){
  const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
  if(!c.phones && c.phone) c.phones = [c.phone]; if(!c.addresses && c.address) c.addresses = [c.address];
@@ -2508,7 +2258,6 @@ function saveEditClientV2(id){
  c.notes = g('cl-notes')||'';
  save(); closeModal(); render();
 }
-
 function addClientModal(){
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Новый контрагент</b><div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div><div class="field"><label class="label">Телефоны (по одному на строку)</label><textarea class="input" id="cl-phones" rows="2" placeholder="+7..."></textarea></div><div class="field"><label class="label">Адреса (по одному на строку)</label><textarea class="input" id="cl-addresses" rows="2" placeholder="улица, дом"></textarea></div><div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveNewClientV2()">Сохранить</button></div></div></div>');
 }
@@ -2521,8 +2270,23 @@ function saveNewClientV2(){
  DB.clients.push({id:'cl'+Date.now(), name:name.trim(), phone:phones[0]||'', address:addresses[0]||'', phones:phones, addresses:addresses, notes:g('cl-notes')||'', complaints:[]});
  save(); closeModal(); render();
 }
-
-// === ПРОСРОЧЕННЫЕ ===
+function addComplaintModal(clientId){
+ openModal(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Добавить рекламацию</b><div class="field"><label class="label">Дата</label><input class="input" id="comp-date" type="date" value="${d0}"></div><div class="field"><label class="label">Заголовок *</label><input class="input" id="comp-title" placeholder="Краткое описание"></div><div class="field"><label class="label">Описание *</label><textarea class="input" id="comp-desc" rows="5" placeholder="Подробности рекламации"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-red" onclick="saveComplaint('${clientId}')">Сохранить</button></div></div></div>`);
+}
+function saveComplaint(clientId){
+ const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
+ const title=g('comp-title');if(!title)return alert('Укажите заголовок');
+ const desc=g('comp-desc');if(!desc)return alert('Укажите описание');
+ c.complaints=c.complaints||[];
+ c.complaints.push({date:g('comp-date')||d0,title:title.trim(),description:desc.trim(),by:state.user||'system',ts:Date.now()});
+ save(); closeModal(); render();
+}
+function deleteComplaint(clientId,idx){
+ const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
+ if(!confirm('Удалить эту рекламацию?'))return;
+ c.complaints.splice(idx,1);
+ save(); render();
+}
 function renderOverdue(){
  const now = new Date(); const today = fmt(now);
  const overdue = (DB.orders||[]).filter(o => {
@@ -2531,66 +2295,30 @@ function renderOverdue(){
   if(o.date === today && o.t2){ const [h,m] = o.t2.split(':').map(Number); if(now.getHours() > h || (now.getHours() === h && now.getMinutes() > m)) return true; }
   return false;
  }).sort((a,b)=>String(a.date).localeCompare(String(b.date)) || (a.t1||'').localeCompare(b.t1||''));
- return `<div class="header"><h1> Просроченные</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-<div class="card">${overdue.length?overdue.map(o=>`<div class="mat" style="border-left:4px solid var(--red)"><div style="display:flex;justify-content:space-between"><b>№${o.id} • ${escapeHtml(o.client)}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div><div class="muted">📍 ${escapeHtml(o.address)} • ⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div><div class="row2" style="margin-top:8px"><button class="btn-sm btn-outline" onclick="go('details',${o.id})">Открыть</button><button class="btn-sm btn-blue" onclick="rescheduleOrder(${o.id})">Перенести</button><button class="btn-sm btn-red" onclick="cancelOrder(${o.id})">Отменить</button></div></div>`).join(''):'<div class="muted">Просроченных заказов нет </div>'}</div>`;
+ return `<div class="header"><h1>⏰ Просроченные</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
+<div class="card">${overdue.length?overdue.map(o=>`<div class="mat" style="border-left:4px solid var(--red)"><div style="display:flex;justify-content:space-between"><b>№${o.id} • ${escapeHtml(o.client)}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div><div class="muted">📍 ${escapeHtml(o.address)} • ⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div><div class="row2" style="margin-top:8px"><button class="btn-sm btn-outline" onclick="go('details',${o.id})">Открыть</button><button class="btn-sm btn-blue" onclick="rescheduleOrder(${o.id})">Перенести</button><button class="btn-sm btn-red" onclick="cancelOrderFromOverdue(${o.id})">Отменить</button></div></div>`).join(''):'<div class="muted">Просроченных заказов нет 🎉</div>'}</div>`;
 }
 function rescheduleOrder(id){
- const o = byId(id); if(!o) return;
- state.rescheduleId = id;
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📅 Перенос заявки</b><div class="field"><label class="label">Дата</label><input class="input" id="resch-date" type="date"></div><div class="row2"><div class="field"><label class="label">Начало</label><input class="input" id="resch-t1" type="time" value="10:00"></div><div class="field"><label class="label">Конец</label><input class="input" id="resch-t2" type="time" value="12:00"></div></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-blue" onclick="doReschedule()">Перенести</button></div></div></div>');
- setTimeout(()=>{ const o=byId(state.rescheduleId); if(o){ document.getElementById('resch-date').value=o.date; document.getElementById('resch-t1').value=o.t1; document.getElementById('resch-t2').value=o.t2; }}, 50);
-}
-function doReschedule(){
- const id=state.rescheduleId; const nd=document.getElementById('resch-date').value; const nt1=document.getElementById('resch-t1').value; const nt2=document.getElementById('resch-t2').value;
- if(!nd||!nt1||!nt2) return alert('Заполните дату и время');
  const o=byId(id); if(!o) return;
- o.date=nd; o.t1=nt1; o.t2=nt2; o.status='approved';
- logAction(o,'edit',{fields:['Перенос просроченного на '+nd+' '+nt1+'-'+nt2]});
- markOrder(o); save(); closeModal(); render();
+ state.calDate=o.date;
+ go('calendar');
 }
-function renderOverdue(){
-const now=new Date();const today=fmt(now);
-const overdue=(DB.orders||[]).filter(o=>{
-if(['completed','paid','canceled'].includes(o.status)||!o.date)return false;
-if(o.date<today)return true;
-if(o.date===today&&o.t2){const[h,m]=o.t2.split(':').map(Number);if(now.getHours()>h||(now.getHours()===h&&now.getMinutes()>m))return true;}
-return false;
-}).sort((a,b)=>String(a.date).localeCompare(String(b.date))||(a.t1||'').localeCompare(b.t1||''));
-return `
-<div class="header"><h1>⏰ Просроченные</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
-<div class="card">
-${overdue.length?overdue.map(o=>`<div class="mat" style="border-left:4px solid var(--red)">
-<div style="display:flex;justify-content:space-between"><b>№${o.id} • ${escapeHtml(o.client)}</b><span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>
-<div class="muted">📍 ${escapeHtml(o.address)} • ⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
-<div class="row2" style="margin-top:8px">
-<button class="btn-sm btn-outline" onclick="go('details',${o.id})">Открыть</button>
-<button class="btn-sm btn-blue" onclick="rescheduleOrder(${o.id})">Перенести</button>
-<button class="btn-sm btn-red" onclick="cancelOrder(${o.id})">Отменить</button>
-</div></div>`).join(''):'<div class="muted">Просроченных заказов нет 🎉</div>'}
-</div>`;
+function cancelOrderFromOverdue(id){
+ if(!confirm('Отменить этот заказ?')) return;
+ const o=byId(id); if(!o) return;
+ o.status='canceled'; o.cancelBy=state.user; o.cancelTs=Date.now();
+ logAction(o,'cancel',{reason:'Отменён из просроченных'});
+ markOrder(o); save(); render();
 }
-function rescheduleOrder(id){
-const o=byId(id);if(!o)return;
-state.rescheduleId=id;
-openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📅 Перенос заявки</b><div class="field"><label class="label">Дата</label><input class="input" id="resch-date" type="date"></div><div class="row2"><div class="field"><label class="label">Начало</label><input class="input" id="resch-t1" type="time" value="10:00"></div><div class="field"><label class="label">Конец</label><input class="input" id="resch-t2" type="time" value="12:00"></div></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-blue" onclick="doReschedule()">Перенести</button></div></div></div>');
-setTimeout(()=>{const o=byId(state.rescheduleId);if(o){document.getElementById('resch-date').value=o.date;document.getElementById('resch-t1').value=o.t1;document.getElementById('resch-t2').value=o.t2;}},50);
-}
-function doReschedule(){
-const id=state.rescheduleId;const nd=document.getElementById('resch-date').value;const nt1=document.getElementById('resch-t1').value;const nt2=document.getElementById('resch-t2').value;
-if(!nd||!nt1||!nt2)return alert('Заполните дату и время');
-const o=byId(id);if(!o)return;
-o.date=nd;o.t1=nt1;o.t2=nt2;o.status='approved';
-logAction(o,'edit',{fields:['Перенос просроченного на '+nd+' '+nt1+'-'+nt2]});
-markOrder(o);orderSave(o);
-closeModal();render();
-}
-function cancelOrder(id){
-if(!confirm('Отменить этот заказ?'))return;
-const o=byId(id);if(!o)return;
-o.status='canceled';o.cancelBy=state.user;o.cancelTs=Date.now();
-logAction(o,'cancel',{reason:'Отменён из просроченных'});
-markOrder(o);orderSave(o);
-render();
+function checkOverdueNotification(){
+ const today=d0;
+ const overdue=DB.orders.filter(o=>o.date<today&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user);
+ if(overdue.length&&!sessionStorage.getItem('overdue_notified_'+today)){
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+   new Notification('⚠️ Просроченные заказы',{body:`У вас ${overdue.length} невыполненных заказов. Проверьте календарь!`,icon:'icon.png'});
+   sessionStorage.setItem('overdue_notified_'+today,'1');
+  }
+ }
 }
 function renderHoldEditable(t){return !!t&&(t.tagName==='SELECT'||t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable===true)}
 function renderHoldGate(){if(!RENDER_HOLD){RENDER_PENDING=false;return false}RENDER_PENDING=true;return true}
