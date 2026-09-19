@@ -1062,8 +1062,8 @@ function renderReports(){
  if(noDiag.length)html+='<div class="info-row"><span><b>без диагноста</b><br><span class="muted">заявок '+noDiag.length+' • выручка '+money(noDiag.reduce((s,o)=>s+total(o),0))+'</span></span><span style="text-align:right"><b>'+money(noDiag.reduce((s,o)=>s+profitOf(o),0))+'</b></span></div>';
  return html||'<div class="muted">Нет данных</div>';})()}
 </div>
-<div class="card"><div class="sec-title">Материалы (расходы)</div>
- <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.filter(bizOrder).reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
+<div class="card"><div class="sec-title">Материалы (расходы, период)</div>
+ <div class="info-row"><span class="muted">Закуплено</span><b>${money(done.reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
 </div>
 <div class="card"><div class="sec-title">Детализация (период)</div>
  ${done.length?done.slice().sort((a,b)=>profitOf(b)-profitOf(a)).map(o=>`
@@ -1381,14 +1381,14 @@ function modalIsOpen(){
  var root=document.getElementById('modal-root');
  return !!(root&&root.firstElementChild);
 }
-function doSaveOrder(force){
-// B2 (этап 2): вознаграждение из формы создания — объявление ниже по файлу (hoisting), читает c-rw-type/c-rw-val
+// B2 (этап 2): вознаграждение из формы создания (c-rw-type/c-rw-val); пусто → дефолт-доля работника
 function readRewardFromForm(){
 var t=(document.getElementById('c-rw-type')||{value:'percent'}).value;
 var v=(document.getElementById('c-rw-val')||{value:''}).value;
 if(v===''||v==null)return null;
 return {type:t,value:+v||0};
 }
+function doSaveOrder(force){
 // Предзаполнение из карточки контрагента
 if(state.calPrefill && state.calPrefill.clientName){
 const ce=document.getElementById('c-client');if(ce&&!ce.value)ce.value=state.calPrefill.clientName;

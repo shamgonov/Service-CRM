@@ -212,6 +212,7 @@ function watchNewOrders(prev, next){
   (next.orders||[]).forEach(function(o){
    var p=prevById[o.id];
    var byMe=lastByDeviceId(o)===dev;
+   if(o.test)return; // тестовые заявки — без событий/уведомлений
    if(!p){ // новая заявка
     if(o.worker&&(o.worker===dev||o.worker===myName())&&o.status==='approved'&&!byMe)
      pushEvent('assigned','📋 Назначена заявка №'+o.id,'Вас назначили исполнителем: '+esc(o.client||''),o.id);
@@ -248,7 +249,7 @@ function watchAddedOrders(prev, next){
  try{
   var prevIds={}, added=0;
   (prev.orders||[]).forEach(function(o){prevIds[o.id]=1;});
-  (next.orders||[]).forEach(function(o){ if(!prevIds[o.id])added++; });
+  (next.orders||[]).forEach(function(o){ if(o.test)return; if(!prevIds[o.id])added++; });
   if(added>0 && Date.now()-LAST_ORDER_TS>3000 && can('orders_view') && !isOwner()){
    for(var i=0;i<added;i++)pushEvent('order','🆕 Новая заявка','Появилась новая заявка в списке',null);
   }
