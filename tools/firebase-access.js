@@ -94,7 +94,8 @@ window.__canImpl = can;
 // системные Notification (свёрнутое приложение), Badging API, настройки profile.notify + DND.
 var LAST_ORDER_TS=0;       // момент последнего снапшота (отсечение своих правок/первого снапшота)
 var EVENTS=[];             // кэш событий текущего устройства
-function eventsLoad(){ EVENTS=lsGet('crm_events',[]); }
+var EVENTS_LOADED=false;   // eventsLoad выполнен (иначе сид миграции сеет пустоту)
+function eventsLoad(){ EVENTS=lsGet('crm_events',[]); EVENTS_LOADED=true; }
 function eventsSave(){ lsSet('crm_events',EVENTS.slice(-50)); }
 function myName(){ return (ME&&ME.name)||(state&&state.user)||''; }
 function lastByDeviceId(o){ return o&&o.lastBy?o.lastBy:null; }
@@ -111,14 +112,26 @@ function readEventsSave(ids,cb){
 function personalUnread(){
  var seen=readEventsGet();
  var cutoff=Date.now()-30*864e5;
+ var vis=null;
  return EVENTS.filter(function(e){
   if(e.mine||e.read)return false;
   if(e.ts<cutoff)return false;
   if(seen&&seen.indexOf(e.id)>=0)return false;
   if(e.orderId!=null){
    var o=(typeof byId==='function'&&byId(e.orderId))||null;
-   if(o&&(typeof isTest==='function'&&isTest(o)&&!(typeof showTest==='function'&&showTest()&&adminLike())))return false;
-   if(o&&(typeof hiddenTakeFromMe==='function'&&hiddenTakeFromMe(o)))return false;
+   // призраки: заявки нет в DB (удалена/ещё не загружена) — не кормят бейдж
+   if(!o)return false;
+   if(typeof isTest==='function'&&isTest(o)&&!(typeof showTest==='function'&&showTest()&&adminLike()))return false;
+   if(typeof hiddenTakeFromMe==='function'&&hiddenTakeFromMe(o))return false;
+   if(typeof can==='function'&&!can('orders_view')&&typeof visibleOrders==='function'){
+    if(vis===null)vis=visibleOrders();
+    if(!vis.some(function(v){return v.id===o.id;}))return false;
+   }
+  } else {
+   // события без orderId (новая заявка в списке, отдельные закупки) не привязаны к карточке —
+   // гасятся только просмотром списка (markEventsRead), но не кормят вечный бейдж: учитываем
+   // только свежие, а «просмотрел всё» фиксируем при открытии списка
+   if(seen===undefined)return false;
   }
   return true;
  });
@@ -257,6 +270,27 @@ function applyEventBadges(){
   if(n){ el.style.position='relative'; el.insertAdjacentHTML('beforeend',eventBadgeHtml(n)); }
  });
 }
+// отладка инцидентов бейджа: причина каждой единицы (консоль, без UI)
+window.__badgeDebug=function(){
+ var seen=readEventsGet();
+ var vis=(typeof can==='function'&&!can('orders_view')&&typeof visibleOrders==='function')?visibleOrders():null;
+ var rows=EVENTS.map(function(e){
+  var o=(e.orderId!=null&&typeof byId==='function')?byId(e.orderId):null;
+  return {
+   id:e.id, type:e.type, mine:!!e.mine, read:!!e.read,
+   inReadEvents:(seen&&seen.indexOf(e.id)>=0)||seen===undefined?'seed-all':!!(seen&&seen.indexOf(e.id)>=0),
+   ageDays:+(((Date.now()-e.ts)/864e5).toFixed(1)),
+   orderId:e.orderId,
+   orderExists:!!o,
+   visible:vis?!!(o&&vis.some(function(v){return v.id===o.id;})):'all',
+   counts:(!e.mine&&!e.read&&!(seen&&seen.indexOf(e.id)>=0))?1:0
+  };
+ });
+ var unread=personalUnread();
+ console.table(rows);
+ console.log('personalUnread:',unread.length,unread.map(function(e){return e.id+'('+e.type+')';}).join(', '));
+ return unread.length;
+};
 // движок: сравнение снапшотов orders
 function watchNewOrders(prev, next){
  if(!prev||!next)return;
@@ -393,6 +427,7 @@ function eventsCleanup(){
  }catch(e){}
 }
 // при просмотре списка заявок события заявок гасятся
+// F4 self-heal: открытие «Заявки»/«Поиск заказов» гасит ВСЕ события этих экранов (в т.ч. без orderId — «новая заявка»)
 (function(){
  var _go=window.go;
  window.go=function(scr){
@@ -980,8 +1015,9 @@ function startMain(){
  }catch(e){}
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  eventsLoad();
- // миграция персонального бейджа: readEvents ещё нет → считать все текущие события просмотренными (старт с 0)
- try{ if(readEventsGet()===undefined)readEventsSave(EVENTS.map(function(e){return e.id;})); }catch(e){}
+ // миграция персонального бейджа: сеять ТОЛЬКО после фактической загрузки кэша событий;
+ // иначе сид сеет пустоту, а пришедшие позже события становятся вечными «непрочитанными»
+ try{ if(EVENTS_LOADED&&readEventsGet()===undefined)readEventsSave(EVENTS.map(function(e){return e.id;})); }catch(e){}
  // чистка событий старше 30 дней — раз в сутки
  try{ var lastClean=lsGet('crm_events_cleaned',0); if(Date.now()-lastClean>864e5){ lsSet('crm_events_cleaned',Date.now()); eventsCleanup(); } }catch(e){}
  // проб Storage — один раз за сессию, ТОЛЬКО если владелец включил настройку

@@ -362,7 +362,7 @@ function stageDone(id,i){
  logAction(o,'stage_complete',{stageTitle:s.title});
  var nxt=st[i+1];
  markOrder(o);save();render();
- if(typeof pushEvent==='function'&&nxt&&nxt.by)pushEvent('stage','✅ Этап «'+escapeHtml(s.title)+'» готов — заявка №'+o.id,'Следующий этап: '+escapeHtml(nxt.title||'')+' — для '+escapeHtml(nxt.by),o.id);
+ if(typeof pushEvent==='function'&&nxt&&nxt.by)pushEvent('stage','✅ Этап «'+escapeHtml(s.title)+'» готов — заявка №'+o.id,'Следующий этап: '+escapeHtml(nxt.title||'')+' — для '+escapeHtml(nxt.by),o.id,true);
 }
 function stageMove(id,i,d){const o=byId(id);if(!canEditRoute(o))return;const st=o.stages;const j=i+d;if(j<0||j>=st.length)return;const t=st[i];st[i]=st[j];st[j]=t;markOrder(o);save();render()}
 function stageDel(id,i){const o=byId(id);if(!canEditRoute(o))return;if(!confirm('Удалить этап?'))return;o.stages.splice(i,1);markOrder(o);save();render()}
@@ -424,8 +424,8 @@ if(t!=='materials')autoMarkPaymentDone(id);
  document.querySelector('#modal-root > div[style*="z-index:99"]').remove();
  render();
  if(typeof pushEvent==='function'){
-  if(t==='materials')pushEvent('stage','📤 Аванс на материалы выдан — заявка №'+o.id,money(sum)+' для '+escapeHtml(o.worker||'исполнителя'),o.id);
-  else pushEvent('stage','📥 '+PAY_T[t]+' получен — заявка №'+o.id,money(sum)+' ('+(PAY_M[method]||method)+'), баланс '+money(balance(o)),o.id);
+  if(t==='materials')pushEvent('stage','📤 Аванс на материалы выдан — заявка №'+o.id,money(sum)+' для '+escapeHtml(o.worker||'исполнителя'),o.id,true);
+  else pushEvent('stage','📥 '+PAY_T[t]+' получен — заявка №'+o.id,money(sum)+' ('+(PAY_M[method]||method)+'), баланс '+money(balance(o)),o.id,true);
  }
 }
 function dur(ms){const h=Math.floor(ms/36e5),m=Math.floor(ms%36e5/6e4);return h>=24?Math.floor(h/24)+' д '+(h%24)+' ч':h+' ч '+m+' мин';}
@@ -520,9 +520,9 @@ function renderLogin(){return `
  <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.3.4</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
- const o=byId(id);if(!o)return;
- // персональный бейдж: открыл карточку → все события по заявке просмотрены
+ // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
  try{ if(typeof markOrderEventsRead==='function')markOrderEventsRead(id); }catch(e){}
+ const o=byId(id);if(!o)return;
  const devId=typeof deviceId==='function'?deviceId():'system';
  o.viewedBy=o.viewedBy||{};
  if(!o.viewedBy[devId]){
@@ -666,7 +666,7 @@ function routeDonePoint(id,i){
  var nxt=o.route[i+1];
  if(nxt&&nxt.status==='pending')nxt.status='way';
  markOrder(o);save();routeScreen(id);
- if(typeof pushEvent==='function')pushEvent('route','✅ '+escapeHtml(o.worker||'')+': '+escapeHtml(p.title)+' выполнено','Заявка №'+o.id+' — прогресс '+routeProgress(o),o.id);
+ if(typeof pushEvent==='function')pushEvent('route','✅ '+escapeHtml(o.worker||'')+': '+escapeHtml(p.title)+' выполнено','Заявка №'+o.id+' — прогресс '+routeProgress(o),o.id,true);
 }
 function routeNext(id,i){const o=byId(id);if(!canDoRoute(o))return;o.route[i].status='way';markOrder(o);save();routeScreen(id)}
 
@@ -1248,7 +1248,7 @@ function closeOrderPay(id){
  logAction(o,'payment_received',{sum:bal,type:'full',method:'cash',note:'при закрытии'});
  markOrder(o);save();
  closeOrderModalRemove(id);
- if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(bal)+' (остаток при закрытии), баланс '+money(balance(o)),o.id);
+ if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(bal)+' (остаток при закрытии), баланс '+money(balance(o)),o.id,true);
  doCompleteOrder(id);
 }
 function closeOrderFull(id){
@@ -1259,7 +1259,7 @@ function closeOrderFull(id){
  logAction(o,'payment_received',{sum:total(o),type:'full',method:'cash',note:'оплата полностью при закрытии'});
  markOrder(o);save();
  closeOrderModalRemove(id);
- if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(total(o))+' (полная оплата при закрытии)',o.id);
+ if(typeof pushEvent==='function')pushEvent('stage','📥 Платёж получен — заявка №'+o.id,money(total(o))+' (полная оплата при закрытии)',o.id,true);
  doCompleteOrder(id);
 }
 // === модальный root ВНЕ области render(): снапшоты/таймеры не уничтожают открытые модалки ===
@@ -1543,7 +1543,7 @@ function cancelOrderModal(id){
   render();
   if(typeof pushEvent==='function'){
    const txt='Заявка отменена: '+reason;
-   pushEvent('order','❌ '+txt+' — №'+o.id,'Клиент: '+escapeHtml(o.client||'')+' • отменил: '+escapeHtml(state.user||''),o.id);
+   pushEvent('order','❌ '+txt+' — №'+o.id,'Клиент: '+escapeHtml(o.client||'')+' • отменил: '+escapeHtml(state.user||''),o.id,true);
   }
  }
 // === ПОЛНОЕ РЕДАКТИРОВАНИЕ ЗАЯВКИ ===
@@ -2016,7 +2016,7 @@ function calMoveApply(oid){
  logAction(o,'calendar_move',{fields:['date: '+old.date+'→'+o.date,'t1: '+old.t1+'→'+o.t1,'t2: '+old.t2+'→'+o.t2]});
  markOrder(o);save();orderSave(o);
  CAL_SRC=null;CAL_DRAG=null;closeModal();render();
- if(typeof pushEvent==='function')pushEvent('calendar','📅 Перенос заявки №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id);
+ if(typeof pushEvent==='function')pushEvent('calendar','📅 Перенос заявки №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id,true);
 }
 function calDrop(e,ti,tStart,tEnd){
  e.preventDefault();
@@ -2041,7 +2041,7 @@ function calConfirmMove(oid,newT1,newT2,swapId){
  logAction(o,'edit',{fields:['date: '+old.date+'→'+o.date,'t1: '+old.t1+'→'+o.t1,'t2: '+old.t2+'→'+o.t2]});
  markOrder(o);orderSave(o);
  CAL_SRC=null;CAL_DRAG=null;closeModal();render();
- pushEvent('calendar','📅 Календарь изменён — №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id);
+ pushEvent('calendar','📅 Календарь изменён — №'+o.id,o.date+' '+o.t1+'–'+o.t2,o.id,true);
 }
 function notifyCurrentStage(){
  if(!state.user)return;
