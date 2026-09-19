@@ -1011,28 +1011,71 @@ ${closed.length?`<div class="card"><div class="sec-title">Закрытые за�
  <div class="muted">${r.status==='bought'?'факт. '+(r.factPrice?money(r.factPrice):'—')+(r.dateBought?' • '+r.dateBought.slice(8)+'.'+r.dateBought.slice(5,7):''):''}</div></div>`).join('')}
 </div>`:''}`}
 function renderReports(){
- const done=DB.orders.filter(o=>bizOrder(o)&&['completed','paid'].includes(o.status));
+ // R6: период отчётов (С/По + чипы), пусто — все заказы
+ const from=state.repFrom||'',to=state.repTo||'';
+ const inPeriod=o=>(!from||o.date>=from)&&(!to||o.date<=to);
+ const done=DB.orders.filter(o=>bizOrder(o)&&['completed','paid'].includes(o.status)&&inPeriod(o));
  const rev=done.reduce((s,o)=>s+total(o),0);
- const workers=DB.users.filter(u=>u.role==='worker');
+ // R2: исполнители — из заявок за период (не только из справочника)
+ const wnames=[...new Set(done.map(o=>o.worker).filter(Boolean))].sort((a,b)=>profitSum(b)-profitSum(a));
+ function profitSum(n){return done.filter(o=>o.worker===n).reduce((s,o)=>s+profitOf(o),0);}
+ const revSum=n=>done.filter(o=>o.worker===n).reduce((s,o)=>s+total(o),0);
+ const matSum=n=>done.filter(o=>o.worker===n).reduce((s,o)=>s+matsSpent(o),0);
+ const rwSum=n=>done.filter(o=>o.worker===n).reduce((s,o)=>s+rewardOf(o).sum,0);
+ const cnt=n=>done.filter(o=>o.worker===n).length;
+ // R3: срез по диагностам
+ const dnames=[...new Set(done.map(o=>o.diagnostician||'').filter(x=>x!==''))].sort((a,b)=>dProfit(b)-dProfit(a));
+ const dCnt=n=>done.filter(o=>(o.diagnostician||'')===n).length;
+ const dRev=n=>done.filter(o=>(o.diagnostician||'')===n).reduce((s,o)=>s+total(o),0);
+ const dMat=n=>done.filter(o=>(o.diagnostician||'')===n).reduce((s,o)=>s+matsSpent(o),0);
+ const dProfit=n=>done.filter(o=>(o.diagnostician||'')===n).reduce((s,o)=>s+profitOf(o),0);
+ const dRw=n=>done.filter(o=>(o.diagnostician||'')===n).reduce((s,o)=>s+rewardOf(o).sum,0);
+ const noDiag=done.filter(o=>!o.diagnostician);
  return `
 <div class="header dark"><h1>📊 Отчеты</h1></div>
+<div class="card"><div class="sec-title">Период</div>
+ <div class="row2"><div><label class="label">С</label><input class="input" type="date" value="${from}" onchange="state.repFrom=this.value;render()"></div><div><label class="label">По</label><input class="input" type="date" value="${to}" onchange="state.repTo=this.value;render()"></div></div>
+ <div class="chips" style="margin-top:6px"><span class="chip" onclick="repPeriod(7)">7 дней</span><span class="chip" onclick="repPeriod(30)">30 дней</span><span class="chip" onclick="repPeriod(0)">Всё</span></div>
+</div>
 <div class="card"><div class="sec-title">Сводка</div>
  <div class="info-row"><span class="muted">Всего заявок</span><b>${DB.orders.length}</b></div>
- <div class="info-row"><span class="muted">Выполнено / оплачено</span><b style="color:var(--green)">${done.length}</b></div>
+ <div class="info-row"><span class="muted">Выполнено / оплачено (период)</span><b style="color:var(--green)">${done.length}</b></div>
  <div class="info-row"><span class="muted">В работе</span><b>${DB.orders.filter(o=>isInwork(o)).length}</b></div>
- <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(rev)}</b></div>
+ <div class="info-row"><span class="muted">Выручка (период)</span><b style="color:var(--green)">${money(rev)}</b></div>
+ <div class="info-row"><span class="muted">Материалы (факт, период)</span><b style="color:var(--red)">${money(done.reduce((s,o)=>s+matsSpent(o),0))}</b></div>
+ <div class="info-row"><span class="muted">Прибыль (период)</span><b>${money(done.reduce((s,o)=>s+profitOf(o),0))}</b></div>
  <div class="info-row"><span class="muted">Средний чек</span><b>${money(done.length?Math.round(rev/done.length):0)}</b></div>
 </div>
 <div class="card"><div class="sec-title">По работникам (дележка)</div>
- ${workers.map(w=>{
-  const ws=done.filter(o=>o.worker===w.name).reduce((s,o)=>s+total(o),0);
-  return `<div class="info-row"><span>${w.name} (${w.share}%)<br><span class="muted">выполнено на ${money(ws)}</span></span>
-  <b style="color:var(--green)">${money(Math.round(ws*w.share/100))}</b></div>`}).join('')}
+ ${wnames.length?wnames.map(n=>`
+ <div class="info-row"><span><b>${escapeHtml(n)}</b><br><span class="muted">заказов ${cnt(n)} • выручка ${money(revSum(n))} • материалы ${money(matSum(n))}</span></span>
+ <span style="text-align:right"><b style="color:var(--green)">${money(rwSum(n))}</b><br><span class="muted">к выплате (прибыль ${money(profitSum(n))})</span></span></div>`).join('')
+ +`<div class="info-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:8px"><span><b>Итого</b></span><span style="text-align:right"><b>заказов ${done.length} • выручка ${money(rev)} • прибыль ${money(done.reduce((s,o)=>s+profitOf(o),0))} • к выплате ${money(done.reduce((s,o)=>s+rewardOf(o).sum,0))}</b></span></div>`
+ :'<div class="muted">Нет выполненных заявок за период</div>'}
+</div>
+<div class="card"><div class="sec-title">👤 По диагностам</div>
+ ${dnames.length||noDiag.length?[dnames.map(n=>`
+ <div class="info-row"><span><b>${escapeHtml(n)}</b><br><span class="muted">заявок ${dCnt(n)} • выручка ${money(dRev(n))} • материалы ${money(dMat(n))}</span></span>
+ <span style="text-align:right"><b>${money(dProfit(n))}</b><br><span class="muted">прибыль • вознагр. исполнителей ${money(dRw(n))}</span></span></div>`).join('')
+ +(noDiag.length?`<div class="info-row"><span><b>без диагноста</b><br><span class="muted">заявок ${noDiag.length} • выручка ${money(noDiag.reduce((s,o)=>s+total(o),0))}</span></span><span style="text-align:right"><b>${money(noDiag.reduce((s,o)=>s+profitOf(o),0))}</b></span></div>`:''):'<div class="muted">Нет данных</div>'}
 </div>
 <div class="card"><div class="sec-title">Материалы (расходы)</div>
  <div class="info-row"><span class="muted">Закуплено</span><b>${money(DB.orders.filter(bizOrder).reduce((s,o)=>s+o.materials.filter(m=>m.status==='bought').reduce((x,m)=>x+(+m.price||0),0),0))}</b></div>
 </div>
+<div class="card"><div class="sec-title">Детализация (период)</div>
+ ${done.length?done.slice().sort((a,b)=>profitOf(b)-profitOf(a)).map(o=>`
+ <div class="info-row" style="align-items:flex-start"><span><b>№${o.id}</b> ${escapeHtml(o.client)}<br><span class="muted">${o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—'} • ${escapeHtml(o.worker||'—')}${o.diagnostician?' • диагност: '+escapeHtml(o.diagnostician):''}</span></span>
+ <span style="text-align:right"><b>${money(total(o))}</b><br><span class="muted">выручка<br>материалы ${money(matsSpent(o))} • прибыль ${money(profitOf(o))}<br>вознаграждение ${money(rewardOf(o).sum)}</span></span></div>`).join(''):'<div class="muted">Нет заявок за период</div>'}
+</div>
 <div style="padding:0 16px 16px"><button class="btn btn-green" onclick="exportCsv()">⬇ CSV</button></div>`}
+// чипы периода отчётов
+function repPeriod(days){
+ if(!days){state.repFrom='';state.repTo='';}
+ else{var n=new Date();n.setDate(n.getDate()-days);
+  state.repFrom=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  state.repTo=localToday();}
+ render();
+}
 function csvCell(v){v=(v==null?'':String(v));return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function csvDate(s){if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
 function exportCsv(){
@@ -1046,8 +1089,8 @@ function exportCsv(){
  L.push(['Работник','Заявок','Сумма','Доля, %','К выплате'].map(csvCell).join(';'));
  ws.forEach(r=>L.push(r.map(csvCell).join(';')));
  L.push('');
- L.push(['Дата','Клиент','Телефон','Адрес','Статус','Сумма','Исполнитель'].map(csvCell).join(';'));
- DB.orders.filter(bizOrder).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||''].map(csvCell).join(';')));
+ L.push(['Дата','Клиент','Телефон','Адрес','Статус','Сумма','Исполнитель','Диагност','Выручка','Материалы','Прибыль','Вознаграждение','База дележки'].map(csvCell).join(';'));
+ DB.orders.filter(bizOrder).slice().sort((a,b)=>String(b.date).localeCompare(String(b.date))).forEach(o=>L.push([csvDate(o.date),o.client,o.phone,o.address,st(o.status),total(o),o.worker||'',o.diagnostician||'',total(o),matsSpent(o),profitOf(o),rewardOf(o).sum,DB.shareBase==='revenue'?'revenue':'profit'].map(csvCell).join(';')));
  L.push('');
  L.push(['ПЛАТЕЖИ'].map(csvCell).join(';'));
  L.push(['Дата','Заявка','Клиент','Тип','Метод','Сумма','Примечание'].map(csvCell).join(';'));
@@ -1060,6 +1103,8 @@ function exportCsv(){
  const blob=new Blob(['\uFEFF'+L.join('\r\n')],{type:'text/csv;charset=utf-8'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='otchet_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
+// R1: переключатель базы дележки (profit|revenue), отсутствие поля = profit
+function setShareBase(v){DB.shareBase=(v==='revenue')?'revenue':'profit';save();render();}
 function realWorkers(){var demoIds=['u1','u2','u3','u4','u5'];var list=(DB.users||[]).filter(function(u){return u.role==='worker'&&demoIds.indexOf(u.id)<0;});if(typeof STAFF!=='undefined'&&STAFF&&STAFF.length){STAFF.forEach(function(s){var nm=s.name||s.deviceName||'';if(!nm)return;var isW=(s.roles&&s.roles.indexOf('worker')>=0)||s.role==='worker';if(!isW)return;if(!list.some(function(u){return u.name===nm;})){var nu={id:'w_'+(s.deviceId||nm),name:nm,role:'worker',share:0,deviceId:s.deviceId};DB.users.push(nu);list.push(nu);}});save();}return list;}
 function renderAdmin(){
  return `
@@ -1090,6 +1135,7 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Спе�
  <button class="btn btn-outline" onclick="specAdd()">＋ Добавить</button></div>
 </div>`:''}
 <div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
+ <div class="field"><label class="label">База дележки</label><select class="input" onchange="setShareBase(this.value)"><option value="profit" ${DB.shareBase!=='revenue'?'selected':''}>Прибыль (выручка − материалы)</option><option value="revenue" ${DB.shareBase==='revenue'?'selected':''}>Выручка</option></select></div>
  ${realWorkers().map(u=>`
  <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
  <span style="display:flex;align-items:center;gap:4px"><input type="number" value="${u.share}" min="0" max="100" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px" onchange="setShare('${u.id}',this.value)"><b>%</b></span></div>`).join('')}
@@ -2285,23 +2331,19 @@ return w.map(function(x){return '<div class="info-row"><span style="'+(x.skipped
 }
 function matsSpent(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0));},0);}
 function profitOf(o){return total(o)-matsSpent(o);}
-function readRewardFromForm(){
-var t=(document.getElementById('c-rw-type')||{value:'percent'}).value;
-var v=(document.getElementById('c-rw-val')||{value:''}).value;
-if(v===''||v==null)return null;
-return {type:t,value:+v||0};
-}
+// R1: база дележки — прибыль (по умолчанию) или выручка (DB.shareBase)
+function baseOf(o){return DB.shareBase==='revenue'?total(o):profitOf(o);}
 function rewardOf(o){
 var r=o.reward;
 if(!r||r.value==null||r.value===''){
 var u=(DB.users||[]).find(function(x){return x.name===o.worker;});
 var pct=(u&&u.share!=null)?+u.share:0;
-return {type:'percent',value:pct,sum:Math.round(profitOf(o)*pct/100)};
+return {type:'percent',value:pct,sum:Math.round(baseOf(o)*pct/100)};
 }
 if(r.type==='fixed')return {type:'fixed',value:+r.value,sum:+r.value};
-return {type:'percent',value:+r.value,sum:Math.round(profitOf(o)*(+r.value)/100)};
+return {type:'percent',value:+r.value,sum:Math.round(baseOf(o)*(+r.value)/100)};
 }
-function rewardLabel(o){var rw=rewardOf(o);return rw.type==='fixed'?money(rw.sum)+' (фикс)':rw.value+'% = '+money(rw.sum)+' от прибыли';}
+function rewardLabel(o){var rw=rewardOf(o);if(rw.type==='fixed')return money(rw.sum)+' (фикс)';return rw.value+'% = '+money(rw.sum)+' от '+(DB.shareBase==='revenue'?'выручки':'прибыли');}
 function takeGateModal(id,proceed){
 var o=byId(id);if(!o)return proceed(id);
 var wl=(o.works||[]).filter(function(x){return !x.skipped;}).map(function(x){return '• '+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+' — '+money((+x.price||0)*(+x.qty||1));}).join('<br>');
