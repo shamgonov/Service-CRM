@@ -522,7 +522,7 @@ new Notification('⏰ Просроченные заказы',{body:'У вас '+
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.3.5</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.3.6</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -2462,7 +2462,7 @@ function secSpy(force){
  window.addEventListener('scroll',function(){
   if(tick)return; tick=true;
   requestAnimationFrame(function(){ tick=false; secSpy(); });
- },{passive:true}));
+ },{passive:true});
 })();
 // свайп: |dx|>60 && |dx|>1.5|dy|, не с input/textarea/select/button/[draggable], модалка закрыта → листать секции
 (function(){
@@ -2475,7 +2475,7 @@ function secSpy(force){
   var bar=e.target.closest?e.target.closest('.secbar'):null;
   if(bar)return; // горизонтальный скролл самой полосы чипов
   sx=e.touches[0].clientX; sy=e.touches[0].clientY; ok=true;
- },{passive:true}));
+ },{passive:true});
  document.addEventListener('touchend',function(e){
   if(!ok)return; ok=false;
   var t=e.changedTouches[0];
@@ -2491,7 +2491,7 @@ function secSpy(force){
   var ni=idx+(dx<0?1:-1); // влево — следующая, вправо — предыдущая
   if(ni<0||ni>=chips.length)return;
   secGo(chips[ni].getAttribute('data-sec'));
- },{passive:true}));
+ },{passive:true});
 })();
 function render(){
  if(renderHoldGate())return;
@@ -2593,7 +2593,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.3.5';
+const APP_VERSION='2.3.6';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
