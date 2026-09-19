@@ -772,7 +772,7 @@ ${worksCard(o)}<div class="card"><div class="sec-title">🛒 Материалы 
 </div>
 ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
-  ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
+  ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
   ${(isOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
@@ -866,7 +866,7 @@ function renderTasks(){
  const tab=tabRaw==='mine'?'work':tabRaw; // старый ключ «Мои» → «В работе»
  const own=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
  // «Доступные»: new/approved, исполнитель пуст или я; чужие взятые (inwork) скрыты
- const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&(!o.worker||o.worker===state.user)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
+ const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&!o.worker&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
  // E3: назначенные лично мне (new/approved, worker=я, ещё не в работе)
  const assigned=DB.orders.filter(o=>o.worker===state.user&&['new','approved'].includes(o.status)&&!isInwork(o)&&visOrder(o));
  const work=own.filter(o=>(isInwork(o)||o.status==='paused')&&!hiddenTakeFromMe(o));
@@ -884,14 +884,14 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    return '<div class="mat" style="border-left:4px solid var(--blue)"><b>№'+o.id+' • '+escapeHtml(o.client)+'</b><div class="muted">📍 '+escapeHtml(o.address||'—')+'<br>⏰ '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
    (ws.length?'<div class="muted" style="margin-top:4px">📋 Смета: '+ws.length+' работ на '+money(wsum)+'</div>':'')+
    '<div class="info-row" style="background:#eff6ff;border-radius:8px;padding:8px;margin-top:6px"><span>💵 Твоё вознаграждение</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>'+
-   '<div class="row2" style="margin-top:8px"><button class="btn btn-green" onclick="takeGateModal('+o.id+')">🚜 Взять в работу</button>'+
+   '<div class="row2" style="margin-top:8px"><button class="btn btn-green" onclick="takeOrder('+o.id+')">🚜 Взять в работу</button>'+
    '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="declineAssignment('+o.id+')">Отклонить назначение</button></div></div>';}).join('')}
  </div>`:''}
 <div class="card">
   ${free.map(o=>`<div class="mat" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b':''}"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
    <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро</b>':''}<br>${escapeHtml(o.desc)}</div>
    <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
-   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeGateModal(${o.id})">🚜 Взять в работу</button>`:''}
+   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
    ${(isOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
    ${o.worker===state.user&&o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (я на адресе)</button>`:''}
    <button class="btn-sm btn-outline" style="margin-top:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button></div>`).join('')||'<div class="muted">Свободных заявок нет</div>'}
@@ -2410,7 +2410,7 @@ if(state.screen==='create'&&typeof worksRenderCreate==='function')worksRenderCre
 }
 render();
 </script>
-<script>/*takeGateWrap*/(function(){if(typeof window.takeOrder==="function"){var _origTake=window.takeOrder;window.takeOrder=function(id){takeGateModal(id,_origTake);};}else{console.warn("takeOrder not found - gate off");}})();</script>
+<script>/*takeGateWrap*/(function(){if(typeof window.takeOrder==="function"&&typeof window.takeConfirm==="function"){window.takeOrder=function(id){takeGateModal(id,window.takeConfirm);};}else{console.warn("takeOrder/takeConfirm not found - gate off");}})();</script>
 <!-- CRM-INSTALL -->
 <button id="crmInstallBtn" style="display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:60;background:#2563eb;color:#fff;border:none;border-radius:24px;padding:12px 22px;font:700 14px sans-serif;box-shadow:0 4px 14px rgba(37,99,235,.4);cursor:pointer">📲 Установить приложение</button>
 <div id="crmIosHint" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
