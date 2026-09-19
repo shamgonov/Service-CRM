@@ -2052,6 +2052,14 @@ function renderClients(){
 ${list.map(c=>`<div class="mat" onclick="go('clientDetail','${c.id}')" style="cursor:pointer"><b>${escapeHtml(c.name)}</b><div class="muted"> ${(c.phones||[]).join(', ')||'—'} • 📍 ${(c.addresses||[]).join(', ')||'—'}</div><div class="muted" style="margin-top:4px">Заказов: ${(DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).length}</div></div>`).join('')||'<div class="muted">Контрагентов пока нет</div>'}
 </div>`;
 }
+// чипы периода истории контрагента: 0 = всё, иначе N дней назад по местной дате
+function clientPeriod(days){
+ if(!days){state.clientDateFrom='';state.clientDateTo='';}
+ else{var n=new Date();n.setDate(n.getDate()-days);
+  state.clientDateFrom=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  state.clientDateTo=localToday();}
+ render();
+}
 function renderClientDetail(id){
  DB.clients = DB.clients || [];
  const c = DB.clients.find(x=>x.id===id);
@@ -2060,8 +2068,10 @@ function renderClientDetail(id){
  if(!c.addresses && c.address) c.addresses = [c.address];
  if(!c.phones) c.phones = []; if(!c.addresses) c.addresses = [];
  const orders = (DB.orders||[]).filter(o=>(o.client||'').toLowerCase()===c.name.toLowerCase()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
- const dateFilter = state.clientDateFilter || '';
- const filtered = dateFilter ? orders.filter(o=>o.date===dateFilter) : orders;
+ // миграция: старый одиночный фильтр → период (одноразово)
+ if(state.clientDateFilter){ if(!state.clientDateFrom)state.clientDateFrom=state.clientDateFilter; state.clientDateFilter=''; }
+ const from=state.clientDateFrom||'',to=state.clientDateTo||'';
+ const filtered = orders.filter(o=>(!from||o.date>=from)&&(!to||o.date<=to));
  const totalRev = orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
  return `<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
 <div class="card">
@@ -2076,7 +2086,9 @@ ${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted"
 ${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)"><b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b><div class="muted">'+escapeHtml(comp.description||'')+'</div><button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')"> Удалить</button></div>').join(''):'<div class="muted">Рекламаций нет</div>'}
 <button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button></div>
 <div class="card"><div class="sec-title">📋 История заказов (${filtered.length})</div>
-<div style="margin-bottom:10px"><input class="input" type="date" value="${dateFilter}" onchange="state.clientDateFilter=this.value;render()" placeholder="Фильтр по дате"> <button class="btn-sm btn-outline" onclick="state.clientDateFilter='';render()">Сбросить</button></div>
+<div style="margin-bottom:10px"><div class="row2"><div><label class="label">С</label><input class="input" type="date" value="${from}" onchange="state.clientDateFrom=this.value;render()"></div><div><label class="label">По</label><input class="input" type="date" value="${to}" onchange="state.clientDateTo=this.value;render()"></div></div>
+<div class="chips" style="margin-top:6px"><span class="chip" onclick="clientPeriod(7)">7 дней</span><span class="chip" onclick="clientPeriod(30)">30 дней</span><span class="chip" onclick="clientPeriod(0)">Всё</span> <button class="btn-sm btn-outline" onclick="state.clientDateFrom='';state.clientDateTo='';render()">Сбросить</button></div>
+<div class="muted" style="margin-top:4px">Период: любые границы, пусто — все заказы</div></div>
 ${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div><div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div><div class="muted">📍 '+escapeHtml(o.address||'—')+'</div><div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div></div>').join('')||'<div class="muted">Заказов не найдено</div>'}
 </div>`;
 }
