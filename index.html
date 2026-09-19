@@ -816,7 +816,7 @@ function renderCreate(){
 <div class="field"><label class="label">Цена ₽ (если без сметы)</label><input class="input" id="c-price" type="number" placeholder="0"></div>
  <div class="field"><label class="label">Назначить исполнителя</label>
   <input class="input" id="c-wsearch" placeholder="🔎 Поиск по имени..." oninput="filterWorkerSelect('c-worker',this.value)" style="margin-bottom:6px">
-  <select class="input" id="c-worker"><option value="">— не назначен (исполнителем стану я) —</option>
+  <select class="input" id="c-worker"><option value="">— не назначен (заявка в пуле) —</option>
   ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo"><span class="slider"></span></label></div>
@@ -1402,18 +1402,18 @@ const g=x=>document.getElementById(x).value;
   const o={id:++DB.seq,client:g('c-client'),phone:g('c-phone'),address:rcFullAddress('c',g('c-address')),desc:g('c-desc'),
    status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
    photoReport:document.getElementById('c-photo').checked,
-   worker:g('c-worker')||state.user, // не выбран → исполнитель = создатель
+   worker:g('c-worker')||null, // не выбран → заявка в пуле (назначение/взятие через гейт)
    by:state.user,byDev:(typeof deviceId==='function')?deviceId():'',
    test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
-   materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:readRewardFromForm(),photos:[],type:otype,payments:[],history:[]};
+   materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:readRewardFromForm()||null,photos:[],type:otype,payments:[],history:[],
+   stages:(otype!=='standard')?(state.cStages||[]).slice():[],diagnostician:state.user||null};
  // B2: внесение задним числом — статус из селекта + флаг backfill
  if(isBF()){
   o.backfill=true;
   var bfs=document.getElementById('c-backfill-status');
   o.status=(bfs&&bfs.value==='paid')?'paid':'completed';
  }
- logAction(o,'create',{type:otype,client:o.client,sum:total(o),backfill:o.backfill?'задним числом':undefined});
- if(otype!=='standard')o.stages=(state.cStages||[]).slice();
+ logAction(o,'create',{type:otype,client:o.client,sum:total(o),backfill:o.backfill?'задним числом':null});
  DB.orders.unshift(o);
  if(typeof orderSave==='function')orderSave(o);else{markOrder(o);save();}
  if(typeof saveSettings==='function')saveSettings();

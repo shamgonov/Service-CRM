@@ -500,6 +500,8 @@ function orderSave(order){
  var copy={};
  for(var k in order){ if(k!=='id')copy[k]=order[k]; }
  copy.lastBy=deviceId(); // подавление событий о собственных правках
+ // Firestore не принимает undefined: рекурсивно удаляем undefined на любом уровне (null/[]/Date не трогаем)
+ (function sanitize(o){for(var k in o){if(o[k]===undefined)delete o[k];else if(o[k]&&typeof o[k]==='object'&&!Array.isArray(o[k])&&!(o[k] instanceof Date))sanitize(o[k]);}return o;})(copy);
  if(OFFLINE||ORDERS_ERR&&!ORDERS_SUB){
   queuePush({kind:'order',order:copy,id:order.id});
   // локально применяем сразу (серверный снапшот потом победит, патчи применяются поверх)
