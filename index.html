@@ -509,6 +509,8 @@ function renderLogin(){return `
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  const o=byId(id);if(!o)return;
+ // персональный бейдж: открыл карточку → все события по заявке просмотрены
+ try{ if(typeof markOrderEventsRead==='function')markOrderEventsRead(id); }catch(e){}
  const devId=typeof deviceId==='function'?deviceId():'system';
  o.viewedBy=o.viewedBy||{};
  if(!o.viewedBy[devId]){

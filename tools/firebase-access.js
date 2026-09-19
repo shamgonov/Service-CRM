@@ -96,9 +96,65 @@ var LAST_ORDER_TS=0;       // момент последнего снапшота
 var EVENTS=[];             // кэш событий текущего устройства
 function eventsLoad(){ EVENTS=lsGet('crm_events',[]); }
 function eventsSave(){ lsSet('crm_events',EVENTS.slice(-50)); }
-function unreadCount(){ return EVENTS.filter(function(e){return !e.read;}).length; }
 function myName(){ return (ME&&ME.name)||(state&&state.user)||''; }
 function lastByDeviceId(o){ return o&&o.lastBy?o.lastBy:null; }
+// персональные непросмотренные: readEvents (id событий) в профиле ME; кап 300
+function readEventsGet(){ var p=(ME&&ME.profile)||{}; return Array.isArray(p.readEvents)?p.readEvents:undefined; }
+function readEventsSave(ids,cb){
+ ids=(ids||[]).slice(-300);
+ if(!ME)return;
+ ME.profile=ME.profile||{};
+ ME.profile.readEvents=ids;
+ try{ myDocWriteProfile(ME.profile,cb); }catch(e){ if(cb)cb(e); }
+}
+// непросмотренные ТЕКУЩИМ пользователем: не mine, не просмотрено (readEvents), по видимой заявке, свежее 30 дней
+function personalUnread(){
+ var seen=readEventsGet();
+ var cutoff=Date.now()-30*864e5;
+ return EVENTS.filter(function(e){
+  if(e.mine||e.read)return false;
+  if(e.ts<cutoff)return false;
+  if(seen&&seen.indexOf(e.id)>=0)return false;
+  if(e.orderId!=null){
+   var o=(typeof byId==='function'&&byId(e.orderId))||null;
+   if(o&&(typeof isTest==='function'&&isTest(o)&&!(typeof showTest==='function'&&showTest()&&adminLike())))return false;
+   if(o&&(typeof hiddenTakeFromMe==='function'&&hiddenTakeFromMe(o)))return false;
+  }
+  return true;
+ });
+}
+function unreadCount(){ return personalUnread().length; }
+function markEventsRead(screen){
+ var orderTypes=['order','assigned','completed','overdue','route','stage'];
+ var t={orders:orderTypes,details:orderTypes,tasks:orderTypes,calendar:['calendar'],shopping:['material'],staff:['request']}[screen]||null;
+ if(!t)return;
+ var fresh=personalUnread().filter(function(e){ return t.indexOf(e.type)>=0; });
+ if(!fresh.length)return;
+ fresh.forEach(function(e){ e.read=true; });
+ eventsSave();
+ // персональная отметка — в профиль (переживает перезагрузку и переустановку localStorage)
+ var p=(ME&&ME.profile)||{};
+ var ids=Array.isArray(p.readEvents)?p.readEvents.slice():[];
+ if(readEventsGet()===undefined){ // миграция: первого запуска ещё не было — считать всё просмотренным
+  ids=EVENTS.map(function(e){return e.id;});
+ } else fresh.forEach(function(e){ if(ids.indexOf(e.id)<0)ids.push(e.id); });
+ readEventsSave(ids);
+ updateAppBadge();
+ if(typeof render==='function')render();
+}
+function markOrderEventsRead(oid){
+ // просмотр карточки заявки: все события по этому orderId → просмотренные
+ var fresh=personalUnread().filter(function(e){ return e.orderId===oid; });
+ if(!fresh.length)return;
+ fresh.forEach(function(e){ e.read=true; });
+ eventsSave();
+ var p=(ME&&ME.profile)||{};
+ var ids=Array.isArray(p.readEvents)?p.readEvents.slice():[];
+ if(readEventsGet()===undefined){ ids=EVENTS.map(function(e){return e.id;}); }
+ else fresh.forEach(function(e){ if(ids.indexOf(e.id)<0)ids.push(e.id); });
+ readEventsSave(ids);
+ updateAppBadge();
+}
 // настройки profile.notify: {sys:true, sound:true, vibra:true, dndFrom:'', dndTo:''}
 function notifyCfg(){
  var p=(MYDOC&&MYDOC.profile)||{};
@@ -147,8 +203,8 @@ function pushEvent(type,title,body,orderId,silent){
  // CAN-права: событие адресовано экрану; без права — не показываем
  var need={order:'orders_view',assigned:'orders_view',completed:'orders_view',request:'staff_manage',material:'shopping',calendar:'calendar',overdue:'orders_view',route:'orders_view'}[type];
  if(need&&!can(need))return;
- // подавление автора: свои правки не уведомляют
- var ev={type:type,title:title,body:body,orderId:orderId==null?null:orderId,ts:Date.now(),read:false};
+ // подавление автора: свои правки не уведомляют; silent=true → помечаем mine (не создаёт персональный бейдж)
+ var ev={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:type,title:title,body:body,orderId:orderId==null?null:orderId,ts:Date.now(),read:false,mine:!!silent};
  EVENTS.push(ev); EVENTS=EVENTS.slice(-50); eventsSave();
  if(Date.now()-LAST_ORDER_TS<3000)return; // первые 3с после своих правок/входа — тихо
  if(!silent){ beepNotify(); showSystemNotification(ev); }
@@ -165,7 +221,7 @@ function markEventsRead(screen){
 function clearOrdersBadge(){ markEventsRead('orders'); }
 // экран соответствия события → пункт меню для красного бейджа
 function screenForEvent(type){
- return {order:'orders',assigned:'orders',completed:'orders',overdue:'orders',route:'orders',request:'staff',material:'shopping',calendar:'calendar'}[type]||'orders';
+ return {order:'orders',assigned:'orders',completed:'orders',overdue:'orders',route:'orders',stage:'orders',request:'staff',material:'shopping',calendar:'calendar'}[type]||'orders';
 }
 // события → пункты нижнего меню (с учётом роли): заявки идут в «Заявки» или «Мои задачи»,
 // найм (request) — в панель владельца («Админ»), остальное по экрану
@@ -177,8 +233,7 @@ function navKeysForRole(role){
 }
 function badgeCountsByNav(){
  var counts={};
- EVENTS.forEach(function(e){
-  if(e.read)return;
+ personalUnread().forEach(function(e){
   var key=screenForEvent(e.type);
   if(key==='staff')key='admin';
   if(key==='orders'&&state&&state.role==='worker')key='tasks';
@@ -327,6 +382,15 @@ function pluralRu(n){ var m=n%10,h=n%100; if(h>=11&&h<=14)return 'заявок';
 function notifyNewOrders(count){
  // совместимость: старые вызовы → события «новая заявка»
  for(var i=0;i<(count||0);i++)pushEvent('order','🆕 Новая заявка','Появилась новая заявка в списке',null);
+}
+// очистка: события старше 30 дней не считаются (personalUnread); локальный кэш чистим раз в сутки
+function eventsCleanup(){
+ try{
+  var cutoff=Date.now()-30*864e5;
+  var before=EVENTS.length;
+  EVENTS=EVENTS.filter(function(e){ return e.ts>=cutoff; });
+  if(EVENTS.length!==before)eventsSave();
+ }catch(e){}
 }
 // при просмотре списка заявок события заявок гасятся
 (function(){
@@ -916,6 +980,10 @@ function startMain(){
  }catch(e){}
  LAST_ORDER_TS=Date.now(); // первый снапшот — не считать «новыми»
  eventsLoad();
+ // миграция персонального бейджа: readEvents ещё нет → считать все текущие события просмотренными (старт с 0)
+ try{ if(readEventsGet()===undefined)readEventsSave(EVENTS.map(function(e){return e.id;})); }catch(e){}
+ // чистка событий старше 30 дней — раз в сутки
+ try{ var lastClean=lsGet('crm_events_cleaned',0); if(Date.now()-lastClean>864e5){ lsSet('crm_events_cleaned',Date.now()); eventsCleanup(); } }catch(e){}
  // проб Storage — один раз за сессию, ТОЛЬКО если владелец включил настройку
  if(storageEnabled())checkStorage(function(ok){
   if(!ok)window.__storWarn=true; // жёлтое предупреждение в админке
