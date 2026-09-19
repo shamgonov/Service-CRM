@@ -50,6 +50,21 @@ textarea.input{min-height:60px;resize:vertical}
 .secbar .chip{white-space:nowrap;flex:0 0 auto}
 .secbar .chip.on{background:var(--blue);color:#fff}
 .chip.sel{background:var(--blue);color:#fff}
+/* === ПАКЕТ C: документы Смета/Акт — белый лист, печать, шаринг === */
+.doc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;overflow-y:auto;padding:16px}
+.doc-sheet{background:#fff;max-width:794px;margin:0 auto;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.18);color:#111;font-size:13px;line-height:1.5}
+.doc-sheet h2{font-size:18px;text-align:center;margin:0 0 4px}
+.doc-org{text-align:center;font-size:12px;color:#444;margin-bottom:14px}
+.doc-tbl{width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:12px}
+.doc-tbl th,.doc-tbl td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}
+.doc-tbl th{background:#f3f3f3}
+.doc-tbl .r{text-align:right;white-space:nowrap}
+.doc-sub{font-weight:700;margin:10px 0 2px}
+.doc-total{display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #333;padding-top:6px;margin-top:6px}
+.doc-sign{display:flex;justify-content:space-between;gap:24px;margin-top:28px;font-size:12px}
+.doc-sign div{flex:1;border-top:1px solid #999;padding-top:4px}
+.doc-actions{max-width:794px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+@media print{body.printing>*:not(#modal-root){display:none!important}body.printing #modal-root{position:static!important}body.printing .doc-overlay{display:block!important;position:static;overflow:visible;padding:0;background:#fff}body.printing .doc-overlay .doc-actions{display:none!important}body.printing .doc-sheet{box-shadow:none;max-width:100%;margin:0;padding:0}}
 .mat{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px}
 .mat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .mat-name{font-weight:600;font-size:13px}
@@ -708,6 +723,7 @@ ${(o.materials||[]).length?`<div class="muted" style="margin-top:6px">Матер
 ${balance(o)>0?`<div class="info-row"><span class="muted">Остаток к оплате</span><b style="color:var(--red)">${money(balance(o))}</b></div>`:(balance(o)<0?`<div class="info-row"><span class="muted">Переплата</span><b style="color:var(--blue)">${money(Math.abs(balance(o)))}</b></div>`:`<div class="info-row"><span class="muted">Остаток</span><b>0 ₽</b></div>`)}
 ${pays.length?'<div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px">'+pays.map(p=>'<div class="muted">'+(p.date||'')+' • '+(PAY_T[p.type]||p.type)+' • '+(PAY_M[p.method]||p.method)+' • '+money(p.sum)+'</div>').join('')+'</div>':''}
 ${(typeof canFinance==='function'&&canFinance()&&o.status==='completed')?`<button class="btn btn-green" onclick="setStatus(${o.id},'paid')">💰 Отметить оплаченным</button>`:''}
+${docPerm(o)?`<button class="btn btn-outline" style="margin-top:8px" onclick="docAct(${o.id})">📄 Акт выполненных работ</button>`:''}
 </div>
 <div class="card"><div class="sec-title">📸 Фотоотчёт</div>
 <div class="photos">${(function(){var docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[o.id]?PHOTOS_CACHE[o.id]:[]).concat(o.photos||[]);var h='';docs.forEach(function(p,i){var src=(p&&p.data)?p.data:p;var real=typeof src==='string'&&(src.indexOf('data:image/')===0||src.indexOf('http')===0);if(real)h+='<div class="photo" style="padding:0;overflow:hidden"><img src="'+src+'" style="width:100%;height:100%;object-fit:cover" onclick="viewPhoto('+o.id+','+i+')"></div>';});return h||'<div class="muted">Фото нет</div>';})()}</div>
@@ -789,8 +805,9 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
   <input class="input" id="mf-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
   <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-dl" type="number" value="3" min="1"><select class="input" id="mf-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
   <div class="row2"><button class="btn-sm btn-outline" onclick="document.getElementById('matform').style.display='none'">Отмена</button>
-  <button class="btn-sm btn-blue" onclick="addMat(${o.id})">＋ Добавить</button></div>
+ <button class="btn-sm btn-blue" onclick="addMat(${o.id})">＋ Добавить</button></div>
  </div>
+ ${docPerm(o)?`<button class="btn btn-outline" style="margin-top:10px" onclick="docEstimate(${o.id})">📄 Смета</button>`:''}
 </div></div>
 <div class="sec" id="sec-money"><div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  ${worksSummary(o)}
@@ -1151,6 +1168,14 @@ ${secBarHtml([['service','Служебное'],['people','Люди'],['templates
 <div class="sec" id="sec-service"><div class="card"><div class="sec-title">🏠 База (адрес для схемы маршрута)</div>
  <input class="input" id="base-addr" value="${escapeHtml(DB.baseAddress||'')}" placeholder="Адрес базы / склада">
  <button class="btn btn-outline" style="margin-top:8px" onclick="DB.baseAddress=document.getElementById('base-addr').value.trim();save();alert('Адрес базы сохранён')">💾 Сохранить</button>
+</div>
+<div class="card"><div class="sec-title">🏢 Организация (для документов)</div>
+ <div class="field"><label class="label">Название</label><input class="input" id="org-name" value="${escapeHtml((docOrg().name)||'')}" placeholder="ИП Иванов А. А."></div>
+ <div class="field"><label class="label">ИНН</label><input class="input" id="org-inn" value="${escapeHtml((docOrg().inn)||'')}" placeholder="1234567890"></div>
+ <div class="field"><label class="label">Телефон</label><input class="input" id="org-phone" value="${escapeHtml((docOrg().phone)||'')}" placeholder="+7 900 000-00-00"></div>
+ <div class="field"><label class="label">Подписант (Исполнитель в документах)</label><input class="input" id="org-signer" value="${escapeHtml((docOrg().signer)||'')}" placeholder="Иванов А. А."></div>
+ <div class="muted" style="margin-top:6px">Пусто — шапка документа без реквизитов (только «Смета №…»). Подписант по умолчанию: диагност или исполнитель заявки.</div>
+ <button class="btn btn-outline" style="margin-top:8px" onclick="saveOrg()">💾 Сохранить реквизиты</button>
 </div>
 ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">☁️ Firebase Storage</div>
  ${window.__storWarn?`<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 10px;font-size:13px;color:#854d0e;margin-bottom:8px">⚠️ Storage включён, но бакет недоступен — фото идут в базу</div>`:''}
@@ -2495,6 +2520,106 @@ function secSpy(force){
   secGo(chips[ni].getAttribute('data-sec'));
  },{passive:true});
 })();
+// === ПАКЕТ C: документы «Смета» и «Акт выполненных работ» (печать/шаринг/скачивание) ===
+function docPerm(o){return isOwner()||o.diagnostician===state.user||o.worker===state.user||o.by===state.user;}
+function docOrg(){var s=(DB.settings||{}).org||{};var has=(s.name&&String(s.name).trim())||(s.inn&&String(s.inn).trim())||(s.phone&&String(s.phone).trim());return has?s:{}}
+function docHeadHtml(title,o){
+ var org=docOrg();
+ return (Object.keys(org).length?'<div class="doc-org">'+escapeHtml(org.name||'')+(org.inn?' • ИНН '+escapeHtml(org.inn):'')+(org.phone?' • '+escapeHtml(org.phone):'')+'</div>':'')+
+  '<h2>'+title+' №'+o.id+' от '+new Date(docCreatedTs(o)).toLocaleDateString('ru-RU')+'</h2>'+
+  '<div style="font-size:12px;margin-bottom:10px">Заказчик: <b>'+escapeHtml(o.client||'—')+'</b>'+(o.phone?' • тел. '+escapeHtml(o.phone):'')+(o.address?'<br>Адрес: '+escapeHtml(o.address):'')+'</div>';
+}
+function docCreatedTs(o){var h=(o.history||[]).slice().sort(function(a,b){return String(a.ts).localeCompare(String(b.ts));});var c=h.find(function(x){return x.action==='create';});return c?new Date(c.ts).getTime():((o.history&&o.history.length)?new Date(h[0].ts).getTime():Date.now());}
+function docCompletedTs(o){var h=(o.history||[]).slice().sort(function(a,b){return String(a.ts).localeCompare(String(b.ts));});var c=h.slice().reverse().find(function(x){return x.action==='status_change'&&(x.details||{}).to==='completed';});return c?new Date(c.ts).getTime():null;}
+function docWorksRows(w){return w.map(function(x,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(x.title)+'</td><td class="r">'+(+x.qty||1)+' '+unitLabel(x.unit)+'</td><td class="r">'+money(+x.price||0)+'</td><td class="r">'+money((+x.price||0)*(+x.qty||1))+'</td></tr>';}).join('');}
+function docWorksRowsDone(o){return (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).map(function(x,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(x.title)+'</td><td class="r">'+(+x.qty||1)+' '+unitLabel(x.unit)+'</td><td class="r">'+money(+x.price||0)+'</td><td class="r">'+money((+x.price||0)*(+x.qty||1))+'</td></tr>';}).join('');}
+function docMatsRowsPlan(o){return (o.materials||[]).map(function(m,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(m.name)+'</td><td class="r">'+(+m.qty||0)+' '+unitLabel(m.munit)+'</td><td class="r">'+money(+m.price||0)+'</td><td class="r">'+money((+m.price||0)*(+m.qty||0))+'</td></tr>';}).join('');}
+function docMatsRowsFact(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).map(function(m,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(m.name)+'</td><td class="r">'+(+m.qty||0)+' '+unitLabel(m.munit)+'</td><td class="r">'+money(m.factPrice!=null?+m.factPrice:+m.price||0)+'</td><td class="r">'+money((m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0))+'</td></tr>';}).join('');}
+function docActTotal(o){return (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0)+(o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0);},0);}
+function docSignHtml(o,extra){
+ var org=docOrg(), signer=(org.signer&&String(org.signer).trim())||o.diagnostician||o.worker||'';
+ return '<div class="doc-sign"><div>Исполнитель: '+escapeHtml(signer)+'</div><div>Заказчик: ____________</div>'+(extra||'')+'</div>';
+}
+function docActionsHtml(){return '<div class="doc-actions">'+
+ '<button class="btn-sm btn-outline" onclick="docPrint()">🖨 Печать / PDF</button>'+
+ '<button class="btn-sm btn-outline" onclick="docShare()">📤 Поделиться</button>'+
+ '<button class="btn-sm btn-outline" onclick="docDownload()">⬇ Скачать</button>'+
+ '<button class="btn-sm btn-outline" onclick="closeModal()">✕ Закрыть</button></div>';}
+function docShell(o,inner){openModal('<div class="doc-overlay" onclick="if(event.target===this)closeModal()"><div class="doc-sheet" onclick="event.stopPropagation()">'+docHeadHtml(state.docKind==='act'?'Акт выполненных работ':'Смета',o)+inner+'</div>'+docActionsHtml()+'</div>');}
+function docEstimate(id){const o=byId(id);if(!o)return;state.docKind='estimate';state.docId=o.id;
+ const w=(o.works||[]).filter(function(x){return !x.skipped;});
+ var inner='<div class="doc-sub">Работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docWorksRows(w)+'</table>'+
+ ((o.materials||[]).length?'<div class="doc-sub">Материалы (предварительно)</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docMatsRowsPlan(o)+'</table>':'')+
+ '<div class="doc-total"><span>ИТОГО</span><span>'+money(total(o))+'</span></div>'+
+ docSignHtml(o);
+ docShell(o,inner);}
+function docAct(id){const o=byId(id);if(!o)return;if(o.status!=='completed'&&o.status!=='paid')return;state.docKind='act';state.docId=o.id;
+ var inner='<div class="doc-sub">Выполненные работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docWorksRowsDone(o)+'</table>'+
+ ((o.materials||[]).filter(function(m){return m.status==='bought';}).length?'<div class="doc-sub">Материалы (факт)</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docMatsRowsFact(o)+'</table>':'')+
+ '<div class="doc-total"><span>ИТОГО</span><span>'+money(docActTotal(o))+'</span></div>'+
+ (docCompletedTs(o)?'<div style="font-size:12px;margin-top:8px">Дата выполнения: '+new Date(docCompletedTs(o)).toLocaleDateString('ru-RU')+'</div>':'')+
+ docSignHtml(o,'<div>Работы принял: ____________</div>');
+ docShell(o,inner);}
+function docText(){
+ var o=byId(state.docId);if(!o)return '';
+ var org=docOrg();
+ var L=[];
+ L.push((state.docKind==='act'?'Акт выполненных работ':'Смета')+' №'+o.id+' от '+new Date(docCreatedTs(o)).toLocaleDateString('ru-RU'));
+ if(Object.keys(org).length)L.push((org.name||'')+(org.inn?' • ИНН '+org.inn:'')+(org.phone?' • '+org.phone:''));
+ L.push('Заказчик: '+(o.client||'—')+(o.phone?' • тел. '+o.phone:'')+(o.address?' • '+o.address:''));
+ if(state.docKind==='act'){
+  L.push('Выполненные работы:');
+  (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).forEach(function(x){L.push(x.title+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});
+  var fb=(o.materials||[]).filter(function(m){return m.status==='bought';});
+  if(fb.length){L.push('Материалы (факт):');fb.forEach(function(m){L.push(m.name+' — '+(+m.qty||0)+' '+unitLabel(m.munit)+' × '+money(m.factPrice!=null?+m.factPrice:+m.price||0)+' = '+money((m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0)));});}
+  L.push('ИТОГО: '+money(docActTotal(o)));
+  var ct=docCompletedTs(o);if(ct)L.push('Дата выполнения: '+new Date(ct).toLocaleDateString('ru-RU'));
+ }else{
+  L.push('Работы:');
+  (o.works||[]).filter(function(x){return !x.skipped;}).forEach(function(x){L.push(x.title+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});
+  var pm=o.materials||[];
+  if(pm.length){L.push('Материалы (предварительно):');pm.forEach(function(m){L.push(m.name+' — '+(+m.qty||0)+' '+unitLabel(m.munit)+' × '+money(+m.price||0)+' = '+money((+m.price||0)*(+m.qty||0)));});}
+  L.push('ИТОГО: '+money(total(o)));
+ }
+ return L.join('\n');
+}
+function docPrint(){document.body.classList.add('printing');var done=function(){document.body.classList.remove('printing');};window.print();setTimeout(done,400);}
+function docShare(){
+ var o=byId(state.docId);if(!o)return;
+ var t=docText();
+ if(navigator.share){navigator.share({title:(state.docKind==='act'?'Акт №':'Смета №')+o.id,text:t}).catch(function(){});return;}
+ openModal('<div class="doc-overlay" onclick="if(event.target===this)closeModal()"><div class="doc-sheet" style="max-width:420px;padding:16px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📤 Поделиться</b>'+
+ '<div class="doc-actions" style="margin:0 0 8px"><a class="btn-sm btn-green" style="text-decoration:none" href="https://wa.me/?text='+encodeURIComponent(t)+'" target="_blank" rel="noopener">WhatsApp</a>'+
+ '<a class="btn-sm btn-blue" style="text-decoration:none" href="https://t.me/share/url?url='+encodeURIComponent('https://wa.me/'+o.id)+'&text='+encodeURIComponent(t)+'" target="_blank" rel="noopener">Telegram</a>'+
+ '<button class="btn-sm btn-outline" onclick="docCopy()">Копировать текст</button></div>'+
+ '<button class="btn-sm btn-outline" style="width:100%" onclick="docReopen()">↩ Назад к документу</button></div></div>');
+}
+function docReopen(){if(state.docKind==='act')docAct(state.docId);else docEstimate(state.docId);}
+function docCopy(){
+ var t=docText();
+ (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).then(function(){alert('Текст документа скопирован');},function(){
+  var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');alert('Текст документа скопирован');}catch(e){alert('Не удалось скопировать');}document.body.removeChild(ta);
+ });
+}
+function docDownload(){
+ var o=byId(state.docId);if(!o)return;
+ var sheet=document.querySelector('.doc-overlay .doc-sheet');
+ if(!sheet)return;
+ var title=(state.docKind==='act'?'Акт':'Смета')+' №'+o.id;
+ var html='<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escapeHtml(title)+'</title><style>'+
+ 'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff;color:#111;font-size:13px;line-height:1.5;margin:0;padding:24px}'+
+ '.doc-sheet{max-width:794px;margin:0 auto}h2{font-size:18px;text-align:center;margin:0 0 4px}.doc-org{text-align:center;font-size:12px;color:#444;margin-bottom:14px}'+
+ '.doc-tbl{width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:12px}.doc-tbl th,.doc-tbl td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}.doc-tbl th{background:#f3f3f3}.doc-tbl .r{text-align:right;white-space:nowrap}'+
+ '.doc-sub{font-weight:700;margin:10px 0 2px}.doc-total{display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #333;padding-top:6px;margin-top:6px}'+
+ '.doc-sign{display:flex;justify-content:space-between;gap:24px;margin-top:28px;font-size:12px}.doc-sign div{flex:1;border-top:1px solid #999;padding-top:4px}'+
+ '</style></head><body><div class="doc-sheet">'+sheet.innerHTML+'</div></body></html>';
+ var blob=new Blob([html],{type:'text/html;charset=utf-8'});
+ var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(state.docKind==='act'?'Акт_№':'Смета_№')+o.id+'.html';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+}
+function saveOrg(){
+ DB.settings=DB.settings||{};DB.settings.org={name:(document.getElementById('org-name')||{value:''}).value.trim(),inn:(document.getElementById('org-inn')||{value:''}).value.trim(),phone:(document.getElementById('org-phone')||{value:''}).value.trim(),signer:(document.getElementById('org-signer')||{value:''}).value.trim()};
+ save();if(typeof saveSettings==='function')saveSettings();alert('Реквизиты организации сохранены');render();
+}
 function render(){
  if(renderHoldGate())return;
  const app=document.getElementById('app'),nav=document.getElementById('nav');

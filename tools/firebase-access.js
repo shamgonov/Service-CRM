@@ -447,11 +447,11 @@ var SYNC_OK_TS=0;               // момент показа «Синхрони�
 function lsGet(k,d){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):d; }catch(e){ return d; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ console.warn('ls err',e); } }
 function cacheOrders(arr){ lsSet('crm_cache_orders',arr); }
-function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[]}); }
+function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[],settings:DB.settings||{}}); }
 function loadCachedData(){
  var co=lsGet('crm_cache_orders',null), cs=lsGet('crm_cache_state',null);
  if(co&&co.length&&(!DB.orders||!DB.orders.length))DB.orders=co;
- if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; if(DB.shopping===undefined)DB.shopping=cs.shopping||[]; if(cs.clients&&cs.clients.length&&(!DB.clients||!DB.clients.length))DB.clients=cs.clients; }
+ if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; if(DB.shopping===undefined)DB.shopping=cs.shopping||[]; if(cs.clients&&cs.clients.length&&(!DB.clients||!DB.clients.length))DB.clients=cs.clients; if(cs.settings&&DB.settings===undefined)DB.settings=cs.settings; }
  return !!(co&&co.length);
 }
 function queueGet(){ return lsGet('crm_queue',[]); }
@@ -558,10 +558,11 @@ function loadCloud(cb){
   var st=(snap.exists&&snap.data())||null;
   var changed=false;
   if(st && st.db){
-   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[],shopping:st.db.shopping||[],clients:(Array.isArray(st.db.clients)?st.db.clients:undefined)};
-   changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[]});
-   LAST_STATE_JSON=JSON.stringify(ns);
-   DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations; DB.shopping=ns.shopping;
+   var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[],shopping:st.db.shopping||[],clients:(Array.isArray(st.db.clients)?st.db.clients:undefined),settings:(st.db.settings&&typeof st.db.settings==='object'&&!Array.isArray(st.db.settings)?st.db.settings:undefined)};
+    changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[],settings:DB.settings||{}});
+    LAST_STATE_JSON=JSON.stringify(ns);
+    DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations; DB.shopping=ns.shopping;
+    if(ns.settings)DB.settings=ns.settings;
    if(ns.clients)DB.clients=ns.clients; // массив пришёл из облака — берём; иначе не трогаем локальный
    // миграция (одноразово, владелец): облако без clients, локально непусто → залить
    if(!ns.clients&&isOwner()&&(DB.clients||[]).length&&!lsGet('crm_clients_migrated',false)){ lsSet('crm_clients_migrated',true); saveSettings(); }
@@ -586,7 +587,7 @@ function loadCloud(cb){
 // запись настроек (users/templates/seq) — app/state БЕЗ orders
 function saveSettings(){
  if(!DB)return;
- var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[]};
+ var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[],settings:DB.settings||{}};
  cacheState();
  if(OFFLINE||ORDERS_ERR&&!STATE_SUB){ queuePush({kind:'settings'}); return; }
  fs.collection('app').doc('state').set({db:copy,ordersMigrated:true}).catch(function(e){
