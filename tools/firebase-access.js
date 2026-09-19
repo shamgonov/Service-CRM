@@ -212,16 +212,62 @@ function showSystemNotification(ev){
   n.onclick=function(){ try{ window.focus(); if(ev.orderId!=null)go('details',ev.orderId); n.close(); }catch(e){} };
  }catch(e){}
 }
-// D3: тест уведомлений — БЕЗ записи в crm_events (бейдж не растёт)
-function testNotif(){
+// D3: тест уведомлений — БЕЗ записи в crm_events (бейдж не растёт).
+// Permission-путь: default → сразу запрос (клик = user gesture); denied → модалка-инструкция по платформе.
+function askNotifPerm(cb){
+ try{
+  if(typeof Notification==='undefined'){if(cb)cb('unsupported');return;}
+  var once=false,done=function(p){if(once)return;once=true;if(cb)cb(p);};
+  var pr=Notification.requestPermission(function(p){done(p);});
+  if(pr&&typeof pr.then==='function')pr.then(function(p){done(p);},function(){done('denied');});
+ }catch(e){if(cb)cb('unsupported');}
+}
+function notifTestPlay(){
  var c=notifyCfg();
  try{ if(c.vibra&&navigator.vibrate)navigator.vibrate(200); }catch(e){}
  if(c.sound&&!inDND())beepNotify();
+ try{ new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'}); }catch(e){}
+}
+function notifPermLabel(){
+ try{ if(typeof Notification==='undefined')return 'недоступны';
+  return Notification.permission==='granted'?'разрешено':(Notification.permission==='denied'?'заблокировано':'не запрошено');
+ }catch(e){return 'неизвестно';}
+}
+function notifPermRefresh(){
  try{
-  if(typeof Notification==='undefined')return alert('Уведомления не поддерживаются этим браузером. Разреши уведомления: настройки браузера → сайт → разрешить');
-  if(Notification.permission!=='granted'){ alert('Разреши уведомления: настройки браузера → сайт → разрешить'); if(Notification.permission==='default'){try{Notification.requestPermission().then(function(p){if(p==='granted')try{new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'});}catch(e){}});}catch(e){}} return; }
-  new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'});
- }catch(e){ alert('Разреши уведомления: настройки браузера → сайт → разрешить'); }
+  var el=document.getElementById('pf-nt-perm');if(el)el.textContent='Разрешение: '+notifPermLabel();
+  var b=document.getElementById('pf-nt-req');if(b)b.style.display=(typeof Notification!=='undefined'&&Notification.permission==='default')?'':'none';
+ }catch(e){}
+}
+function notifInfoModal(title,text,retry){
+ openModal(
+  '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+  '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<b style="display:block;margin-bottom:10px">🔕 '+title+'</b>'+
+  '<div style="font-size:14px;color:#374151;line-height:1.45">'+text+'</div>'+
+  (retry?'<button class="btn btn-blue" style="width:100%;margin-top:12px" onclick="closeModal();testNotif()">🔁 Повторить тест</button>':'')+
+  '<button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="closeModal()">Закрыть</button>'+
+  '</div></div>');
+}
+function notifPermDenied(){
+ var iOS=/iphone|ipad|ipod/i.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&(navigator.maxTouchPoints||0)>1);
+ notifInfoModal('Уведомления заблокированы системой',
+  iOS?'Настройки → Уведомления → Chrome/Safari → Разрешить; в PWA уведомления поддерживаются с iOS 16.4+ через установленный ярлык.':'Настройки телефона → Приложения → ServiceCRM → Уведомления → Разрешить. Затем вернись и нажми «Повторить тест».',true);
+}
+function testNotif(){
+ if(typeof Notification==='undefined'){notifInfoModal('Уведомления недоступны','На этом устройстве уведомления приложения недоступны; события будут видны в самом приложении (бейджи).',false);return;}
+ var perm=Notification.permission;
+ if(perm==='granted'){notifTestPlay();notifPermRefresh();return;}
+ if(perm==='default'){
+  askNotifPerm(function(p){
+   notifPermRefresh();
+   if(p==='granted')notifTestPlay();
+   else if(p!=='unsupported')notifPermDenied();
+  });
+  return;
+ }
+ notifPermRefresh();
+ notifPermDenied(); // denied
 }
 function pushEvent(type,title,body,orderId,silent){
  // CAN-права: событие адресовано экрану; без права — не показываем
@@ -1274,6 +1320,8 @@ function renderProfile(){
   '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-vibra" '+(nt.vibra?'checked':'')+'> Вибрация</label>'+
   '<div class="muted" style="margin:8px 0 4px">Не беспокоить (в это время — только бейдж, без звука и системных):</div>'+
  '<div class="row2"><input class="input" id="pf-nt-from" type="number" min="0" max="23" step="0.5" value="'+esc(nt.dndFrom)+'" placeholder="с (ч)"><input class="input" id="pf-nt-to" type="number" min="0" max="24" step="0.5" value="'+esc(nt.dndTo)+'" placeholder="по (ч)"></div>'+
+ '<div class="info-row" style="margin-top:10px"><span class="muted" id="pf-nt-perm">Разрешение: '+notifPermLabel()+'</span>'+
+  ((typeof Notification!=='undefined'&&Notification.permission==='default')?'<button class="btn-sm btn-blue" id="pf-nt-req" onclick="askNotifPerm(function(){notifPermRefresh()})">Запросить</button>':'<span id="pf-nt-req" style="display:none"></span>')+'</div>'+
  '<div class="row2" style="margin-top:10px"><button class="btn-sm btn-outline" onclick="testNotif()">🔔 Тест уведомления</button></div>'+
  '<div class="muted" style="margin-top:8px">Уведомления на телефоне:<br>1. Установи приложение на главный экран (меню браузера → «Установить» / «Добавить на гл. экран»)<br>2. Разреши уведомления: настройки браузера → сайт → разрешить<br>3. Проверь кнопкой «🔔 Тест»</div>'+
  '</div>'+
@@ -1458,9 +1506,9 @@ function saveProfile(){
    vibra:document.getElementById('pf-nt-vibra')?document.getElementById('pf-nt-vibra').checked:(old.notify&&old.notify.vibra!==false),
    dndFrom:g('pf-nt-from'),dndTo:g('pf-nt-to')},
   hints:document.getElementById('pf-hints')?document.getElementById('pf-hints').checked:(old.hints!==false)};
- // включение системных уведомлений — запрос разрешения сразу
+ // включение системных уведомлений — запрос разрешения сразу (user gesture = клик «Сохранить»)
  if(p.notify.sys&&typeof Notification!=='undefined'&&Notification.permission==='default'){
-  try{ Notification.requestPermission(); }catch(e){}
+  askNotifPerm(function(){ notifPermRefresh(); });
  }
  var doSave=function(){ MYDOC.profile=p; AVATAR_TMP=null;
    myDocWriteProfile(p,function(err){ if(err)return alert('Ошибка сохранения: '+err.message); alert('Профиль сохранён'); render(); }); };
