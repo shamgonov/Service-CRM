@@ -140,6 +140,18 @@ function isTest(o){return !!o.test}
 // тестовые скрыты при showTest=false (списки/календарь/задачи/схема/уведомления);
 // из отчётов/финансов/CSV/долей исключены ВСЕГДА
 function visOrder(o){return !isTest(o)||(showTest()&&adminLike())}
+// единая матрица видимости заявок: без права orders_view чужие видны ТОЛЬКО в пуле
+// (new/approved без исполнителя); свои (worker=я) и созданные мной (by=я) — любых статусов
+function visibleOrders(){
+ if(typeof can==='function'&&can('orders_view'))return DB.orders.slice().filter(function(o){return visOrder(o);});
+ var me=state.user;
+ return DB.orders.filter(function(o){
+  if(!visOrder(o))return false;
+  if(o.worker===me||o.by===me)return true;           // свои любые + созданные мной
+  if(['new','approved'].includes(o.status)&&!o.worker)return true; // пул
+  return false;                                       // чужие inwork/completed/paid/canceled — скрыты
+ });
+}
 // тестовые видимы только владельцу/админу и только при включённом тумблере
 function adminLike(){if(typeof isOwner==='function'&&isOwner())return true;return state.role==='admin'||state.user==='Владелец';}
 function bizOrder(o){return !isTest(o)}
@@ -521,8 +533,8 @@ function markViewed(id){
 }
 
 function renderOrders(){
- // чужие взятые (inwork) скрыты без права orders_view_all
- let list=DB.orders.slice().filter(o=>visOrder(o)&&!hiddenTakeFromMe(o));
+ // матрица видимости: без orders_view — только пул + свои + созданные мной (единая точка visibleOrders)
+ let list=visibleOrders().slice();
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
   if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','inwork','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
@@ -708,6 +720,15 @@ if(o.status==='completed'||o.status==='paid')return renderDoneSummary(o);
  <div class="muted">Карточка скрыта: заявка занята. Обратитесь к исполнителю или администратору.</div>
  <button class="btn btn-outline" style="margin-top:14px" onclick="go('orders')">← К списку заявок</button>
 </div>`;
+ // матрица видимости: без orders_view чужая заявка (не пул, не моя, не созданная мной) недоступна и в карточке
+ if(typeof can==='function'&&!can('orders_view')&&o.worker!==state.user&&o.by!==state.user&&!(['new','approved'].includes(o.status)&&!o.worker))
+  return `<div class="header"><button class="back" onclick="goBack()">←</button><h1>Заявка №${o.id}</h1></div>
+<div class="card" style="text-align:center;padding:28px 16px">
+ <div style="font-size:40px">🔒</div>
+ <b style="display:block;margin:10px 0 6px">Заявка недоступна</b>
+ <div class="muted">Эта заявка не входит в ваш список: исполнитель — ${escapeHtml(o.worker||'другой')}. Обратитесь к администратору.</div>
+ <button class="btn btn-outline" style="margin-top:14px" onclick="goBack()">← Назад</button>
+</div>`;
  const canManage=(typeof can==='function')?can('orders_status'):['admin','operator','manager'].includes(state.role);
  const isW=state.role==='worker'&&!(typeof can==='function'&&can('orders_view'));
  return `
@@ -840,7 +861,7 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled'&&!['completed','paid'].includes(o.status)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
+ const list=visibleOrders().filter(o=>o.date===state.calDate&&o.status!=='canceled'&&!['completed','paid'].includes(o.status)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
  const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
@@ -868,11 +889,12 @@ function renderTasks(){
  // вкладки: Доступные / В работе / Завершённые (выбор в localStorage, посадка — «Доступные»)
  const tabRaw=state.tasksTab||(function(){try{return localStorage.getItem('crm_tasks_tab')||'free'}catch(e){return 'free'}})();
  const tab=tabRaw==='mine'?'work':tabRaw; // старый ключ «Мои» → «В работе»
- const own=DB.orders.filter(o=>o.worker===state.user&&visOrder(o)&&o.status!=='canceled');
+ const vis=visibleOrders();
+ const own=vis.filter(o=>o.worker===state.user&&o.status!=='canceled');
  // «Доступные»: new/approved, исполнитель пуст или я; чужие взятые (inwork) скрыты
- const free=DB.orders.filter(o=>['new','approved'].includes(o.status)&&visOrder(o)&&!o.worker&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
+ const free=vis.filter(o=>['new','approved'].includes(o.status)&&!o.worker&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
  // E3: назначенные лично мне (new/approved, worker=я, ещё не в работе)
- const assigned=DB.orders.filter(o=>o.worker===state.user&&['new','approved'].includes(o.status)&&!isInwork(o)&&visOrder(o));
+ const assigned=vis.filter(o=>o.worker===state.user&&['new','approved'].includes(o.status)&&!isInwork(o));
  const work=own.filter(o=>(isInwork(o)||o.status==='paused')&&!hiddenTakeFromMe(o));
  const doneT=own.filter(o=>['completed','paid'].includes(o.status));
  return `
@@ -980,7 +1002,7 @@ function shoppingCancel(id){
 function renderShopping(){
  // источники строго два: (а) материалы реальных заявок (не тестовых), (б) отдельные запросы (DB.shopping)
  const rows=[];
- DB.orders.filter(o=>visOrder(o)).forEach(o=>o.materials.forEach((m,i)=>{const s=matState(o,m);if(s.k!=='bought')rows.push({o,m,i,s})}));
+ visibleOrders().forEach(o=>o.materials.forEach((m,i)=>{const s=matState(o,m);if(s.k!=='bought')rows.push({o,m,i,s})}));
  const order={critical:0,issue:1,urgent:2,delivery:3,todo:4};
  rows.sort((a,b)=>order[a.s.k]-order[b.s.k]);
  const reqs=(DB.shopping||[]).filter(r=>r.status==='new');
@@ -2221,8 +2243,7 @@ function deleteComplaint(clientId,idx){
 }
 function renderOverdue(){
  const now = new Date(); const today = fmt(now);
- const overdue = (DB.orders||[]).filter(o => {
-  if(!visOrder(o))return false;
+ const overdue = visibleOrders().filter(o => {
   if(['completed','paid','canceled'].includes(o.status) || !o.date) return false;
   if(o.date < today) return true;
   if(o.date === today && o.t2){ const [h,m] = o.t2.split(':').map(Number); if(now.getHours() > h || (now.getHours() === h && now.getMinutes() > m)) return true; }
@@ -2273,7 +2294,8 @@ function cancelOrderFromOverdue(id){
 function checkOverdueNotification(){
  const now=new Date(); const today=fmt(now);
  const isOverdue=o=>{
-  if(!visOrder(o)||o.test)return false;
+  if(o.test)return false;
+  if(typeof can==='function'&&!can('orders_view')&&o.worker!==state.user&&o.by!==state.user&&!(['new','approved'].includes(o.status)&&!o.worker))return false;
   if(['completed','paid','canceled'].includes(o.status)||!o.date) return false;
   if(o.date<today) return true;
   if(o.date===today&&o.t2){const p=o.t2.split(':').map(Number);if(now.getHours()>p[0]||(now.getHours()===p[0]&&now.getMinutes()>p[1]))return true;}
