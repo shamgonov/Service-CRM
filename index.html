@@ -65,6 +65,10 @@ textarea.input{min-height:60px;resize:vertical}
 .doc-sign div{flex:1;border-top:1px solid #999;padding-top:4px}
 .doc-actions{max-width:794px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 @media print{body.printing>*:not(#modal-root){display:none!important}body.printing #modal-root{position:static!important}body.printing .doc-overlay{display:block!important;position:static;overflow:visible;padding:0;background:#fff}body.printing .doc-overlay .doc-actions{display:none!important}body.printing .doc-sheet{box-shadow:none;max-width:100%;margin:0;padding:0}}
+/* === ПАКЕТ D: подсказка следующего действия === */
+.hint-bar{background:#eef6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:10px}
+.hint-pulse{animation:hintPulse 2s infinite}
+@keyframes hintPulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.35)}50%{box-shadow:0 0 0 8px rgba(37,99,235,0)}}
 .mat{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px}
 .mat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .mat-name{font-weight:600;font-size:13px}
@@ -353,7 +357,7 @@ function stageTimeline(o,editable){
    (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
    (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
     ${!s.plan_start&&s.by?`<button class="btn-sm btn-blue" onclick="stageStart(${o.id},${i})">▶ Приступить</button>`:''}
-    ${typeof stageMarkDone==='function'&&s.id?`<button class="btn-sm btn-green" onclick="stageMarkDone(${o.id},'${s.id}')">✅ Готово</button>`:`<button class="btn-sm btn-green" onclick="stageDone(${o.id},${i})">✅ Этап готов</button>`}</div>`:'')+
+    ${typeof stageMarkDone==='function'&&s.id?`<button class="btn-sm btn-green${hintCls(o,'stage',i)}"${hintData(o,'stage',i)} onclick="stageMarkDone(${o.id},'${s.id}')">✅ Готово</button>`:`<button class="btn-sm btn-green${hintCls(o,'stage',i)}"${hintData(o,'stage',i)} onclick="stageDone(${o.id},${i})">✅ Этап готов</button>`}</div>`:'')+
   '</div>';
  });
  if(editable)html+='<button class="btn-sm btn-outline" style="margin-top:8px" onclick="stageAdd('+o.id+')">＋ Этап</button>';
@@ -408,7 +412,7 @@ function paymentsBlock(o){
   });
   html+='</div>';
  }
- if(canW)html+='<div class="row2" style="margin-top:10px"><button class="btn-sm btn-green" onclick="payModal('+o.id+',\'in\')">＋ Приход</button><button class="btn-sm btn-red" onclick="payModal('+o.id+',\'materials\')">＋ Выдать на материалы</button></div>';
+ if(canW)html+='<div class="row2" style="margin-top:10px"><button class="btn-sm btn-green'+hintCls(o,'pay',0)+'"'+hintData(o,'pay',0)+' onclick="payModal('+o.id+',\'in\')">＋ Приход</button><button class="btn-sm btn-red" onclick="payModal('+o.id+',\'materials\')">＋ Выдать на материалы</button></div>';
  return html+'</div>';
 }
 function payModal(id,dir){
@@ -791,7 +795,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
   ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f8faff;border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
   ${['todo'].includes(m.status)||['urgent','critical'].includes(s.k)?`
   <div style="display:flex;gap:6px;margin-top:8px">
-   <button class="btn-sm btn-green" onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
+   <button class="btn-sm btn-green${hintCls(o,'mat',i)}"${hintData(o,'mat',i)} onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
    <button class="btn-sm btn-red" onclick="matAct(${o.id},${i},'issue')">❌ Не найти</button>
   </div>`:''}
   ${m.status==='issue'?`<div style="background:#fef3c7;border-radius:6px;padding:8px;margin-top:8px;font-size:12px">
@@ -819,11 +823,12 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  </div>
 </div>
 ${isW||canManage||showTakeBtn(o)?`<div class="card">
+  ${hintBarHtml(o)}
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
   ${(isOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
   ${o.status==='paused'&&o.worker===state.user?`<button class="btn btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
  ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
 ${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
@@ -959,7 +964,7 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple" onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
    ${o.status==='paused'&&o.worker===state.user?`<button class="btn-sm btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
@@ -1248,10 +1253,52 @@ function setStatus(id,s){const o=byId(id);
 // Гейт-модалка — единая реализация в конце файла: takeGateModal(id,proceed);
 // takeOrder обёрнут в скрипте /*takeGateWrap*/: window.takeOrder → takeGateModal(id, takeConfirm).
 function takeOrder(id){takeGateModal(id)}
-function finishOrder(id){const o=byId(id);
- // завершение блокируется, пока в заявке есть неподтверждённые этапы (любой тип, если этапы есть)
- const und=(o.stages||[]).filter(s=>!s.done&&!s.autoOnly);
- if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
+// === D1: чек-лист перед завершением (только inwork; не блокирует, информирует) ===
+function finishOrder(id){
+ const o=byId(id);if(!o)return;
+ if(o.status!=='inwork')return finishOrderGo(id);
+ const rows=finishChecklistRows(o);
+ if(rows.warn.length===0)return finishOrderGo(id); // всё готово — без модалки
+ openModal(
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+   <div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">🧾 Завершить заявку №${o.id}?</b>
+    ${rows.warn.map(w=>`<div class="info-row" style="align-items:flex-start"><span>⚠️ ${w.t}</span><span class="muted" style="text-align:right;max-width:55%">${w.d}</span></div>`).join('')}
+    ${rows.ok.map(t=>`<div class="info-row"><span>✅ ${t}</span></div>`).join('')}
+    <div class="muted" style="margin-top:6px">Можно завершить позже — список останется в карточке.</div>
+    <button class="btn btn-purple" style="width:100%;margin-top:12px" onclick="finishOrderForce(${o.id})">✅ Завершить всё равно</button>
+    <button class="btn" style="width:100%;margin-top:8px;background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+   </div></div>`);
+}
+function finishChecklistRows(o){
+ const st=(o.stages||[]).filter(s=>!s.autoOnly);
+ const undSt=st.filter(s=>!s.done&&!s.skipped);
+ const undMat=(o.materials||[]).filter(m=>m.status!=='bought');
+ const bal=Math.round((total(o)-totalPaid(o))*100)/100;
+ const rw=(typeof rewardOf==='function')?rewardOf(o):null;
+ return {
+  warn:[
+   (undSt.length?{t:'Этапы схемы',d:'не закрыты: '+undSt.map(s=>escapeHtml(s.title||'этап')).join(', ')}:null),
+   (undMat.length?{t:'Материалы',d:'не закуплены: '+undMat.map(m=>escapeHtml(m.name)).join(', ')}:null),
+   (bal>0?{t:'Оплата',d:'остаток '+money(bal)}:null),
+   (!rw||!(rw.sum>0)?{t:'Вознаграждение',d:'не рассчитано'}:null)
+  ].filter(Boolean),
+  ok:[
+   (!undSt.length?'Этапы схемы — все закрыты':null),
+   (!undMat.length?'Материалы — все закуплены':null),
+   (bal<=0?'Оплата — полностью':null),
+   (rw&&rw.sum>0?'Вознаграждение — '+money(rw.sum):null)
+  ].filter(Boolean)
+ };
+}
+function finishOrderForce(id){closeModal();finishOrderGo(id,true)}
+function finishOrderGo(id,force){
+ const o=byId(id);
+ // исходная блокировка незакрытых этапов — только без чек-листа (force = «всё равно»)
+ if(!force){
+  const und=(o.stages||[]).filter(s=>!s.done&&!s.autoOnly);
+  if(und.length)return alert('⚠ Не все этапы готовы: осталось '+und.length+' ('+und.map(s=>s.title).join(', ')+')');
+ }
  // кассовое закрытие: при остатке > 0 — модалка
  autoMarkPaymentDone(id);if(balance(o)>0){closeOrderModal(id);return}
  doCompleteOrder(id);
@@ -2619,6 +2666,27 @@ function docDownload(){
 function saveOrg(){
  DB.settings=DB.settings||{};DB.settings.org={name:(document.getElementById('org-name')||{value:''}).value.trim(),inn:(document.getElementById('org-inn')||{value:''}).value.trim(),phone:(document.getElementById('org-phone')||{value:''}).value.trim(),signer:(document.getElementById('org-signer')||{value:''}).value.trim()};
  save();if(typeof saveSettings==='function')saveSettings();alert('Реквизиты организации сохранены');render();
+}
+// === ПАКЕТ D: подсветка следующего действия (только inwork, одна цель) ===
+function hintsOn(){var p=(typeof ME!=='undefined'&&ME&&ME.profile)||{};return p.hints!==false;}
+function nextActionHint(o){
+ const st=(o.stages||[]).filter(s=>!s.autoOnly);
+ const s0=st.find(s=>!s.done&&!s.skipped);
+ if(s0)return {k:'stage',id:(o.stages||[]).indexOf(s0),txt:'отметь этап «'+(s0.title||'этап')+'»'};
+ const m0=(o.materials||[]).find(m=>m.status!=='bought');
+ if(m0)return {k:'mat',id:(o.materials||[]).indexOf(m0),txt:'закупи «'+m0.name+'»'};
+ const bal=Math.round((total(o)-totalPaid(o))*100)/100;
+ if(bal>0)return {k:'pay',id:0,txt:'возьми оплату (остаток '+money(bal)+')'};
+ return {k:'done',id:0,txt:'всё готово — завершай'};
+}
+function hintCls(o,kind,id){try{if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' hint-pulse':'';}catch(e){return '';}}
+function hintData(o,kind,id){try{if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' data-hint="'+kind+'-'+id+'"':'';}catch(e){return '';}}
+function hintBarHtml(o){
+ try{
+  if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';
+  const h=nextActionHint(o);
+  return '<div class="hint-bar">Следующий шаг: '+escapeHtml(h.txt)+'</div>';
+ }catch(e){return '';}
 }
 function render(){
  if(renderHoldGate())return;

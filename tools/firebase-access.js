@@ -212,6 +212,17 @@ function showSystemNotification(ev){
   n.onclick=function(){ try{ window.focus(); if(ev.orderId!=null)go('details',ev.orderId); n.close(); }catch(e){} };
  }catch(e){}
 }
+// D3: тест уведомлений — БЕЗ записи в crm_events (бейдж не растёт)
+function testNotif(){
+ var c=notifyCfg();
+ try{ if(c.vibra&&navigator.vibrate)navigator.vibrate(200); }catch(e){}
+ if(c.sound&&!inDND())beepNotify();
+ try{
+  if(typeof Notification==='undefined')return alert('Уведомления не поддерживаются этим браузером. Разреши уведомления: настройки браузера → сайт → разрешить');
+  if(Notification.permission!=='granted'){ alert('Разреши уведомления: настройки браузера → сайт → разрешить'); if(Notification.permission==='default'){try{Notification.requestPermission().then(function(p){if(p==='granted')try{new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'});}catch(e){}});}catch(e){}} return; }
+  new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'});
+ }catch(e){ alert('Разреши уведомления: настройки браузера → сайт → разрешить'); }
+}
 function pushEvent(type,title,body,orderId,silent){
  // CAN-права: событие адресовано экрану; без права — не показываем
  var need={order:'orders_view',assigned:'orders_view',completed:'orders_view',request:'staff_manage',material:'shopping',calendar:'calendar',overdue:'orders_view',route:'orders_view'}[type];
@@ -1262,7 +1273,12 @@ function renderProfile(){
   '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-sound" '+(nt.sound?'checked':'')+'> Звук</label>'+
   '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-nt-vibra" '+(nt.vibra?'checked':'')+'> Вибрация</label>'+
   '<div class="muted" style="margin:8px 0 4px">Не беспокоить (в это время — только бейдж, без звука и системных):</div>'+
-  '<div class="row2"><input class="input" id="pf-nt-from" type="number" min="0" max="23" step="0.5" value="'+esc(nt.dndFrom)+'" placeholder="с (ч)"><input class="input" id="pf-nt-to" type="number" min="0" max="24" step="0.5" value="'+esc(nt.dndTo)+'" placeholder="по (ч)"></div>'+
+ '<div class="row2"><input class="input" id="pf-nt-from" type="number" min="0" max="23" step="0.5" value="'+esc(nt.dndFrom)+'" placeholder="с (ч)"><input class="input" id="pf-nt-to" type="number" min="0" max="24" step="0.5" value="'+esc(nt.dndTo)+'" placeholder="по (ч)"></div>'+
+ '<div class="row2" style="margin-top:10px"><button class="btn-sm btn-outline" onclick="testNotif()">🔔 Тест уведомления</button></div>'+
+ '<div class="muted" style="margin-top:8px">Уведомления на телефоне:<br>1. Установи приложение на главный экран (меню браузера → «Установить» / «Добавить на гл. экран»)<br>2. Разреши уведомления: настройки браузера → сайт → разрешить<br>3. Проверь кнопкой «🔔 Тест»</div>'+
+ '</div>'+
+ '<div class="card"><div class="sec-title">🧭 Подсказки</div>'+
+  '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px"><input type="checkbox" id="pf-hints" '+((p.hints!==false)?'checked':'')+'> Подсказки действий («Следующий шаг» и подсветка кнопки в заявке)</label>'+
  '</div>'+
  '<div class="card"><div class="sec-title">🔑 PIN-код устройства</div>'+
   (pinSet(p)?'<div class="muted" style="margin-bottom:6px">PIN установлен (4 цифры). Введите новый, чтобы изменить.</div>':'<div class="muted" style="margin-bottom:6px">PIN не установлен. 4 цифры — защита устройства при открытии.</div>')+
@@ -1440,7 +1456,8 @@ function saveProfile(){
   notify:{sys:document.getElementById('pf-nt-sys')?document.getElementById('pf-nt-sys').checked:(old.notify&&old.notify.sys!==false),
    sound:document.getElementById('pf-nt-sound')?document.getElementById('pf-nt-sound').checked:(old.notify&&old.notify.sound!==false),
    vibra:document.getElementById('pf-nt-vibra')?document.getElementById('pf-nt-vibra').checked:(old.notify&&old.notify.vibra!==false),
-   dndFrom:g('pf-nt-from'),dndTo:g('pf-nt-to')}};
+   dndFrom:g('pf-nt-from'),dndTo:g('pf-nt-to')},
+  hints:document.getElementById('pf-hints')?document.getElementById('pf-hints').checked:(old.hints!==false)};
  // включение системных уведомлений — запрос разрешения сразу
  if(p.notify.sys&&typeof Notification!=='undefined'&&Notification.permission==='default'){
   try{ Notification.requestPermission(); }catch(e){}
