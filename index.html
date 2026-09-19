@@ -366,7 +366,7 @@ function paymentsBlock(o){
  var canW=canFinance();
  var html='<div class="card"><div class="sec-title">💰 Платежи</div>'+
   '<div class="info-row"><span class="muted">Сумма заказа (с доп. работами)</span><b>'+money(total(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Аванс: '+money(totalPaid(o))+'</span><b style="color:var(--green)">Остаток: '+money(balance(o))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Оплачено: '+money(totalPaid(o))+'</span><b>'+(balance(o)>0?'<span style="color:var(--red)">Остаток: '+money(balance(o))+'</span>':(balance(o)<0?'<span style="color:var(--blue)">Переплата: '+money(Math.abs(balance(o)))+'</span>':'Остаток: 0 ₽'))+'</b></div>'+
   '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>'+
   '<div class="info-row"><span class="muted">💵 Вознаграждение исполнителя</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>';
  if(pays.length){
@@ -399,6 +399,8 @@ function payAdd(id,dir){
  const t=document.getElementById('pay-type').value;
  const sum=+document.getElementById('pay-sum').value||0;
  if(sum<=0)return alert('Введите сумму');
+ // B3: предупреждение о переплате при обычном платеже
+ if(dir!=='materials'){var over=totalPaid(o)+sum-total(o);if(over>0&&!confirm('Сумма превышает остаток на '+money(over)+' (переплата). Принять?'))return;}
  const method=document.getElementById('pay-method').value;
  const note=document.getElementById('pay-note').value.trim();
  if(dir==='materials'&&!confirm('Выдать на материалы '+money(sum)+'?'))return;
@@ -681,7 +683,7 @@ ${(o.extras||[]).map(e=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}</
 ${(o.materials||[]).length?`<div class="muted" style="margin-top:6px">Материалы: ${o.materials.map(m=>escapeHtml(m.name)).join(', ')}</div>`:''}
 <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
 <div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">${money(totalPaid(o))}</b></div>
-<div class="info-row"><span class="muted">Остаток</span><b style="color:${balance(o)>0?'var(--red)':'var(--green)'}">${money(balance(o))}</b></div>
+${balance(o)>0?`<div class="info-row"><span class="muted">Остаток к оплате</span><b style="color:var(--red)">${money(balance(o))}</b></div>`:(balance(o)<0?`<div class="info-row"><span class="muted">Переплата</span><b style="color:var(--blue)">${money(Math.abs(balance(o)))}</b></div>`:`<div class="info-row"><span class="muted">Остаток</span><b>0 ₽</b></div>`)}
 ${pays.length?'<div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px">'+pays.map(p=>'<div class="muted">'+(p.date||'')+' • '+(PAY_T[p.type]||p.type)+' • '+(PAY_M[p.method]||p.method)+' • '+money(p.sum)+'</div>').join('')+'</div>':''}
 ${(typeof canFinance==='function'&&canFinance()&&o.status==='completed')?`<button class="btn btn-green" onclick="setStatus(${o.id},'paid')">💰 Отметить оплаченным</button>`:''}
 </div>
@@ -805,7 +807,8 @@ function renderCreate(){
  <div class="field"><label class="label">Быстрые шаблоны работ</label>
   <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${escapeHtml(t.name)}</span>`).join('')}</div>
   <textarea class="input" id="c-desc" placeholder="Описание работ..."></textarea></div>
- <div class="card"><div class="sec-title">🔧 Работы (смета)</div><div class="chips">${DB.templates.map((t,i)=>`<span class="chip" onclick="worksAddTpl(${i})">${t.name}</span>`).join(' ')}</div><div id="newworks"></div><div class="row2" style="margin-bottom:6px"><input class="input" id="nw-title" placeholder="Наименование работы *"><input class="input" id="nw-qty" value="1" style="max-width:70px"><input class="input" id="nw-price" type="number" placeholder="Цена ₽"></div><button class="btn btn-outline" onclick="worksAddManual()">＋ Добавить строку</button><div class="muted" style="margin-top:6px">Сумма заказа считается автоматически по строкам сметы.</div></div><div class="field"><label class="label">Цена ₽ (если без сметы)</label><input class="input" id="c-price" type="number" placeholder="0"></div>
+ <div class="card"><div class="sec-title">🔧 Работы (смета)</div><div class="chips">${DB.templates.map((t,i)=>`<span class="chip" onclick="worksAddTpl(${i})">${t.name}</span>`).join(' ')}</div><div id="newworks"></div><div class="row2" style="margin-bottom:6px"><input class="input" id="nw-title" placeholder="Наименование работы *"><input class="input" id="nw-qty" value="1" style="max-width:70px"><input class="input" id="nw-price" type="number" placeholder="Цена ₽"></div><button class="btn btn-outline" onclick="worksAddManual()">＋ Добавить строку</button><div class="muted" style="margin-top:6px">Сумма заказа считается автоматически по строкам сметы.</div></div><div class="field"><label class="label">💵 Вознаграждение исполнителю</label><div class="row2"><select class="input" id="c-rw-type"><option value="percent">% от прибыли</option><option value="fixed">фикс ₽</option></select><input class="input" id="c-rw-val" type="number" placeholder="пусто = доля работника"></div><div class="muted" style="margin-top:4px">Пусто — берётся доля работника из карточки «Работники и дележка».</div></div>
+<div class="field"><label class="label">Цена ₽ (если без сметы)</label><input class="input" id="c-price" type="number" placeholder="0"></div>
  <div class="field"><label class="label">Назначить исполнителя</label>
   <input class="input" id="c-wsearch" placeholder="🔎 Поиск по имени..." oninput="filterWorkerSelect('c-worker',this.value)" style="margin-bottom:6px">
   <select class="input" id="c-worker"><option value="">— не назначен (исполнителем стану я) —</option>
@@ -830,7 +833,7 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
- const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled'&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
+ const list=DB.orders.filter(o=>o.date===state.calDate&&visOrder(o)&&o.status!=='canceled'&&!['completed','paid'].includes(o.status)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
  const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  return `
 <div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
@@ -1356,7 +1359,7 @@ const g=x=>document.getElementById(x).value;
  // B2: внесение задним числом — статус из селекта + флаг backfill
  if(isBF()){
   o.backfill=true;
-  var bfs=document.getElementById('c-bf-status');
+  var bfs=document.getElementById('c-backfill-status');
   o.status=(bfs&&bfs.value==='paid')?'paid':'completed';
  }
  logAction(o,'create',{type:otype,client:o.client,sum:total(o),backfill:o.backfill?'задним числом':undefined});
@@ -1661,10 +1664,12 @@ var oid=q.get('order');
 if(oid){sessionStorage.setItem('crm_open_order',oid);history.replaceState(null,'',location.pathname+location.hash);}
 }catch(e){}
 })();
-function slotIsPast(d,t1,t2){if(!d)return false;var t=fmt(new Date());if(d<t)return true;if(d>t)return false;var n=new Date(),m=n.getHours()*60+n.getMinutes(),s=toMin(t1);return s!=null&&s<=m;}
+// A8: локальная дата «сегодня» без UTC-сдвига (YYYY-MM-DD по местной зоне)
+function localToday(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
+function slotIsPast(d,t1,t2){if(!d)return false;var t=localToday();if(d<t)return true;if(d>t)return false;var n=new Date(),m=n.getHours()*60+n.getMinutes(),s=toMin(t1);return s!=null&&s<=m;}
 // B2: тумблер «задним числом» — показывает селект статуса; isBF — активен ли он
-function bfToggle(){var r=document.getElementById('bf-row');var c=document.getElementById('c-bf');if(r)r.style.display=(c&&c.checked)?'block':'none';}
-function isBF(){try{var c=document.getElementById('c-bf');return !!(c&&c.checked);}catch(e){return false;}}
+function bfToggle(){var r=document.getElementById('bf-row');var c=document.getElementById('c-backfill');if(r)r.style.display=(c&&c.checked)?'block':'none';}
+function isBF(){try{var c=document.getElementById('c-backfill');return !!(c&&c.checked);}catch(e){return false;}}
 // === B1: РЕГИОНЫ/ГОРОДА (справочник DB.regions, последний выбор в localStorage) ===
 function rcList(){DB.regions=DB.regions||[];return DB.regions;}
 function rcLast(){try{return{r:localStorage.getItem('crm_last_region')||'',c:localStorage.getItem('crm_last_city')||''};}catch(e){return{r:'',c:''};}}
@@ -2119,6 +2124,7 @@ function deleteComplaint(clientId,idx){
 function renderOverdue(){
  const now = new Date(); const today = fmt(now);
  const overdue = (DB.orders||[]).filter(o => {
+  if(!visOrder(o))return false;
   if(['completed','paid','canceled'].includes(o.status) || !o.date) return false;
   if(o.date < today) return true;
   if(o.date === today && o.t2){ const [h,m] = o.t2.split(':').map(Number); if(now.getHours() > h || (now.getHours() === h && now.getMinutes() > m)) return true; }
@@ -2169,6 +2175,7 @@ function cancelOrderFromOverdue(id){
 function checkOverdueNotification(){
  const now=new Date(); const today=fmt(now);
  const isOverdue=o=>{
+  if(!visOrder(o)||o.test)return false;
   if(['completed','paid','canceled'].includes(o.status)||!o.date) return false;
   if(o.date<today) return true;
   if(o.date===today&&o.t2){const p=o.t2.split(':').map(Number);if(now.getHours()>p[0]||(now.getHours()===p[0]&&now.getMinutes()>p[1]))return true;}
