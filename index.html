@@ -1147,7 +1147,8 @@ function realWorkers(){var demoIds=['u1','u2','u3','u4','u5'];var list=(DB.users
 function renderAdmin(){
  return `
 <div class="header dark"><h1>⚙️ Админ-панель</h1></div>
-<div class="card"><div class="sec-title">🏠 База (адрес для схемы маршрута)</div>
+${secBarHtml([['service','Служебное'],['people','Люди'],['templates','Шаблоны'],['finance','Финансы']])}
+<div class="sec" id="sec-service"><div class="card"><div class="sec-title">🏠 База (адрес для схемы маршрута)</div>
  <input class="input" id="base-addr" value="${escapeHtml(DB.baseAddress||'')}" placeholder="Адрес базы / склада">
  <button class="btn btn-outline" style="margin-top:8px" onclick="DB.baseAddress=document.getElementById('base-addr').value.trim();save();alert('Адрес базы сохранён')">💾 Сохранить</button>
 </div>
@@ -1171,24 +1172,24 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Спе�
    </span></div>`).join('')||'<div class="muted">Справочник пуст</div>'}
  <div class="row2" style="margin-top:10px"><input class="input" id="spec-new" placeholder="Новая специализация">
  <button class="btn btn-outline" onclick="specAdd()">＋ Добавить</button></div>
-</div>`:''}
-<div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
+</div>`:''}</div>
+<div class="sec" id="sec-people"><div class="card"><div class="sec-title">👥 Работники и дележка прибыли</div>
  <div class="field"><label class="label">База дележки</label><select class="input" onchange="setShareBase(this.value)"><option value="profit" ${DB.shareBase!=='revenue'?'selected':''}>Прибыль (выручка − материалы)</option><option value="revenue" ${DB.shareBase==='revenue'?'selected':''}>Выручка</option></select></div>
  ${realWorkers().map(u=>`
  <div class="info-row"><span><b>${escapeHtml(u.name)}</b> <span class="muted">исполнитель</span></span>
  <span style="display:flex;align-items:center;gap:4px"><input type="number" value="${u.share}" min="0" max="100" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px" onchange="setShare('${u.id}',this.value)"><b>%</b></span></div>`).join('')}
-</div>
-<div class="card"><div class="sec-title">📝 Шаблоны работ</div>
+</div></div>
+<div class="sec" id="sec-templates"><div class="card"><div class="sec-title">📝 Шаблоны работ</div>
  ${DB.templates.map((t,i)=>`<div class="info-row"><span>${escapeHtml(t.name)}</span>
  <span style="display:flex;gap:8px;align-items:center"><b>${money(t.price)}<span class="muted" style="font-weight:400">/${unitLabel(t.unit)}</span></b>
  <span style="cursor:pointer;color:var(--red)" onclick="delTpl(${i})">🗑</span></span></div>`).join('')}
  <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽">${unitSel('nt-unit','pcs')}</div>
  <button class="btn btn-outline" onclick="addTpl()">＋ Создать шаблон</button>
-</div>
-<div class="card"><div class="sec-title">💰 Финансы (платежи)</div>
+</div></div>
+<div class="sec" id="sec-finance"><div class="card"><div class="sec-title">💰 Финансы (платежи)</div>
  <div class="row2" style="margin-bottom:8px"><input class="input" type="date" id="fin-from" onchange="renderFin()"><input class="input" type="date" id="fin-to" onchange="renderFin()"></div>
  <div id="fin-list"></div>
-</div>
+</div></div>
 <div class="card"><div class="sec-title">Данные</div>
  <button class="btn btn-red" onclick="if(confirm('Сбросить все данные демо?'))reset()">🔄 Сбросить демо-данные</button></div>`}
 function renderFin(){
@@ -2190,23 +2191,24 @@ function renderClientDetail(id){
  const filtered = orders.filter(o=>(!from||o.date>=from)&&(!to||o.date<=to));
  const totalRev = orders.filter(o=>['completed','paid'].includes(o.status)).reduce((s,o)=>s+total(o),0);
  return `<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
-<div class="card">
+${secBarHtml([['cprofile','Профиль'],['ccomplaints','Рекламации'],['chistory','История']])}
+<div class="sec" id="sec-cprofile"><div class="card">
 <div class="info-row"><span class="muted">Телефоны</span><div style="text-align:right">${c.phones.length?c.phones.map(p=>'<a href="tel:'+encodeURIComponent(p)+'" style="color:var(--blue);font-weight:600;display:block">'+escapeHtml(p)+'</a>').join(''):'<span>—</span>'}</div></div>
 <div class="info-row"><span class="muted">Адреса</span><div style="text-align:right">${c.addresses.length?c.addresses.map(a=>'<div>'+escapeHtml(a)+'</div>').join(''):'<span>—</span>'}</div></div>
 <div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
 <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
 ${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted">'+escapeHtml(c.notes)+'</div></div>':''}
 <div class="row2" style="margin-top:10px"><button class="btn-sm btn-outline" onclick="editClientModal('${c.id}')">✏️ Редактировать</button><button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button></div>
-</div>
-<div class="card"><div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
+</div></div>
+<div class="sec" id="sec-ccomplaints"><div class="card"><div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
 ${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)"><b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b><div class="muted">'+escapeHtml(comp.description||'')+'</div><button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')"> Удалить</button></div>').join(''):'<div class="muted">Рекламаций нет</div>'}
-<button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button></div>
-<div class="card"><div class="sec-title">📋 История заказов (${filtered.length})</div>
+<button class="btn btn-red" style="margin-top:10px" onclick="addComplaintModal('${c.id}')">＋ Добавить рекламацию</button></div></div>
+<div class="sec" id="sec-chistory"><div class="card"><div class="sec-title">📋 История заказов (${filtered.length})</div>
 <div style="margin-bottom:10px"><div class="row2"><div><label class="label">С</label><input class="input" type="date" value="${from}" onchange="state.clientDateFrom=this.value;render()"></div><div><label class="label">По</label><input class="input" type="date" value="${to}" onchange="state.clientDateTo=this.value;render()"></div></div>
 <div class="chips" style="margin-top:6px"><span class="chip" onclick="clientPeriod(7)">7 дней</span><span class="chip" onclick="clientPeriod(30)">30 дней</span><span class="chip" onclick="clientPeriod(0)">Всё</span> <button class="btn-sm btn-outline" onclick="state.clientDateFrom='';state.clientDateTo='';render()">Сбросить</button></div>
 <div class="muted" style="margin-top:4px">Период: любые границы, пусто — все заказы</div></div>
 ${filtered.map(o=>'<div class="mat" onclick="go(\'details\','+o.id+')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>№'+o.id+'</b><span class="badge" style="background:'+ST[o.status].c+';color:'+ST[o.status].tc+'">'+ST[o.status].t+'</span></div><div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div><div class="muted">📍 '+escapeHtml(o.address||'—')+'</div><div style="font-weight:700;color:var(--green);margin-top:4px">'+money(total(o))+'</div></div>').join('')||'<div class="muted">Заказов не найдено</div>'}
-</div>`;
+</div></div>`;
 }
 function editClientModal(id){
  const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
