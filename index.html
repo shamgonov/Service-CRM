@@ -1057,7 +1057,7 @@ function renderReports(){
  ${(function(){var html=dnames.map(n=>`
  <div class="info-row"><span><b>${escapeHtml(n)}</b><br><span class="muted">заявок ${dCnt(n)} • выручка ${money(dRev(n))} • материалы ${money(dMat(n))}</span></span>
  <span style="text-align:right"><b>${money(dProfit(n))}</b><br><span class="muted">прибыль • вознагр. исполнителей ${money(dRw(n))}</span></span></div>`).join('');
- if(noDiag.length)html+='<div class="info-row"><span><b>без диагноста</b><br><span class="muted">заявок ${noDiag.length} • выручка ${money(noDiag.reduce((s,o)=>s+total(o),0))}</span></span><span style="text-align:right"><b>${money(noDiag.reduce((s,o)=>s+profitOf(o),0))}</b></span></div>';
+ if(noDiag.length)html+='<div class="info-row"><span><b>без диагноста</b><br><span class="muted">заявок '+noDiag.length+' • выручка '+money(noDiag.reduce((s,o)=>s+total(o),0))+'</span></span><span style="text-align:right"><b>'+money(noDiag.reduce((s,o)=>s+profitOf(o),0))+'</b></span></div>';
  return html||'<div class="muted">Нет данных</div>';})()}
 </div>
 <div class="card"><div class="sec-title">Материалы (расходы)</div>
