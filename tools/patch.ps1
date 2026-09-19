@@ -16,13 +16,13 @@ const offlineResp=new Response(OFFLINE,{headers:{'Content-Type':'text/html; char
 if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).then(resp=>{if(resp&&resp.ok){const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));}return resp;}).catch(()=>caches.match(e.request).then(m=>m||caches.match('./')).then(m=>m||offlineResp)));return;}
 const net=fetch(e.request).then(resp=>{if(resp&&resp.ok){const cp=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,cp));}return resp;});
 e.respondWith(net.catch(()=>caches.match(e.request)));});
-// B4: тап по уведомлению — открыть карточку заявки (или фокус на открытое окно)
+// B4: тап по уведомлению — открыть карточку заявки (url из data, orderId — фолбэк) или фокус на открытое окно
 self.addEventListener('notificationclick',e=>{
  e.notification.close();
- const n=e.notification;const oid=n&&n.data&&n.data.orderId;
- const url='./'+(oid?'?order='+oid:'');
+ const n=e.notification;const d=(n&&n.data)||{};const oid=d.orderId;
+ const url=d.url||('./'+(oid?'?order='+oid:''));
  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(ws=>{
-  for(var i=0;i<ws.length;i++){var w=ws[i];if(w&&w.focus){if(oid&&w.navigate){try{w.navigate(url);}catch(err){}}return w.focus();}}
+  for(var i=0;i<ws.length;i++){var w=ws[i];if(w&&w.focus){if(url.indexOf('?')>=0&&w.navigate){try{w.navigate(url);}catch(err){}}return w.focus();}}
   return clients.openWindow(url);
  }));
 });

@@ -391,14 +391,14 @@ const overdue=DB.orders.filter(o=>{
 const od=o.date?new Date(o.date.replace(/-/g,'/')):null;
 return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user;
 });
-if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
-new Notification('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),icon:'icon.png'});
+if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&typeof showAppNotif==='function'){
+showAppNotif('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),tag:'crm-overdue'});
 }
 }
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.0</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.1</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -1693,7 +1693,7 @@ body:(o.client||'')+' • '+(o.address||'')+(st?'\nЭтап: '+st.title:''),
 icon:'icon.png',badge:'icon.png',
 tag:'active_order_'+o.id,
 requireInteraction:true,
-data:{orderId:o.id}
+data:{orderId:o.id,url:'./?order='+o.id}
 });
 }).catch(function(){});
 }
@@ -2000,8 +2000,8 @@ function notifyCurrentStage(){
    Notification.requestPermission().then(function(p){ if(p==='granted')notifyCurrentStage(); });
    return;
   }
-  const n=new Notification(title,{body:body,icon:'icon.png',tag:'active_order_'+active.id});
-  n.onclick=function(){ window.focus(); go('details',active.id); state.schemeTray=active.id; render(); n.close(); };
+  if(typeof showAppNotif!=='function')return;
+  showAppNotif(title,{body:body,tag:'active_order_'+active.id,url:'./?order='+active.id,orderId:active.id});
  }catch(e){}
 }
 // === КОНТРАГЕНТЫ / ПРОСРОЧЕННЫЕ: единая реализация (см. блок ниже) ===
@@ -2248,7 +2248,7 @@ function checkOverdueNotification(){
  if(overdue.length&&localStorage.getItem('crm_overdue_notif')!==today){
   localStorage.setItem('crm_overdue_notif',today);
   if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
-   try{new Notification('⚠️ Просроченные заказы',{body:'У вас '+overdue.length+' просроченных заказов. Раздел «⏰ Просроченные».',icon:'icon.png'});}catch(e){}
+   try{if(typeof showAppNotif==='function')showAppNotif('⚠️ Просроченные заказы',{body:'У вас '+overdue.length+' просроченных заказов. Раздел «⏰ Просроченные».',tag:'crm-overdue'});}catch(e){}
   }
   if(!sessionStorage.getItem('overdue_notified_'+today)){
    alert('⚠️ У вас просроченных заказов: '+overdue.length+'. Откройте «⏰ Просроченные».');

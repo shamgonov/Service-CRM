@@ -196,6 +196,36 @@ function beepNotify(){
  }catch(e){}
  try{ if(notifyCfg().vibra&&navigator.vibrate)navigator.vibrate(200); }catch(e){}
 }
+// === Единый показ уведомления: SW (Android/PWA шторка) → fallback конструктор (десктоп) ===
+ // Конструктор Notification() из page-контекста Android Chrome игнорирует — шторку даёт только reg.showNotification.
+// Звук/вибра/DND остаются на page-уровне (beepNotify); здесь — только показ в шторку.
+function showAppNotif(title,opts){
+ opts=opts||{};
+ var body=opts.body||'';
+ var tag=opts.tag||'crm';
+ var url=opts.url||'./';
+ var data={url:url};
+ if(opts.orderId!=null)data.orderId=opts.orderId;
+ try{
+  if(typeof navigator!=='undefined'&&navigator.serviceWorker&&navigator.serviceWorker.getRegistration){
+   return navigator.serviceWorker.getRegistration().then(function(reg){
+    if(reg&&reg.showNotification){
+     return reg.showNotification(title,{body:body,icon:'/icon-192.png',badge:'/icon-192.png',tag:tag,data:data});
+    }
+    return pageNotifFallback(title,body,tag,data);
+   }).catch(function(e){console.warn('showNotification err',e);return pageNotifFallback(title,body,tag,data);});
+  }
+ }catch(e){console.warn('showAppNotif err',e);}
+ return pageNotifFallback(title,body,tag,data);
+}
+// fallback: десктоп-браузеры без SW — конструктор Notification (страница живёт → клик работает)
+function pageNotifFallback(title,body,tag,data){
+ try{
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  var n=new Notification(title,{body:body,icon:'/icon-192.png',badge:'/icon-192.png',tag:tag,data:data});
+  n.onclick=function(){ try{ window.focus(); if(data&&data.url&&data.url!=='./'){location.href=data.url;} n.close(); }catch(e){} };
+ }catch(e){console.warn('page notif err',e);}
+}
 function updateAppBadge(){
  try{
   var n=unreadCount();
@@ -204,13 +234,13 @@ function updateAppBadge(){
  }catch(e){}
 }
 function showSystemNotification(ev){
- if(!notifyCfg().sys||inDND())return;
+ if(!notifyCfg().sys||inDND())return; // DND: в шторку не показываем (только бейдж)
  try{
   if(typeof Notification==='undefined')return;
   if(Notification.permission!=='granted')return;
-  var n=new Notification(ev.title,{body:ev.body,icon:'icon.png',tag:ev.orderId+'_'+ev.type});
-  n.onclick=function(){ try{ window.focus(); if(ev.orderId!=null)go('details',ev.orderId); n.close(); }catch(e){} };
  }catch(e){}
+ // SW-путь (Android/PWA): tag по заявке — повторные не стопкой; тап → карточка (data.url/orderId)
+ showAppNotif(ev.title,{body:ev.body,tag:'crm-event-'+(ev.orderId!=null?ev.orderId:'gen'),url:ev.orderId!=null?('./?order='+ev.orderId):'./',orderId:ev.orderId==null?null:ev.orderId});
 }
 // D3: тест уведомлений — БЕЗ записи в crm_events (бейдж не растёт).
 // Permission-путь: default → сразу запрос (клик = user gesture); denied → модалка-инструкция по платформе.
@@ -226,7 +256,7 @@ function notifTestPlay(){
  var c=notifyCfg();
  try{ if(c.vibra&&navigator.vibrate)navigator.vibrate(200); }catch(e){}
  if(c.sound&&!inDND())beepNotify();
- try{ new Notification('ServiceCRM',{body:'Уведомления работают ✅',icon:'icon.png'}); }catch(e){}
+ showAppNotif('ServiceCRM',{body:'Уведомления работают ✅',tag:'crm-test'});
 }
 function notifPermLabel(){
  try{ if(typeof Notification==='undefined')return 'недоступны';

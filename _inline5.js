@@ -1,5 +1,5 @@
 
-const APP_VERSION='2.4.0';
+const APP_VERSION='2.4.1';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
