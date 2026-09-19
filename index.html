@@ -740,7 +740,7 @@ if(o.status==='completed'||o.status==='paid')return renderDoneSummary(o);
 ${worksCard(o)}<div class="card"><div class="sec-title">🛒 Материалы <button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button></div>
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
-  <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span>
+  <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span>
    <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
    <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
   ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f8faff;border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
@@ -755,7 +755,7 @@ ${worksCard(o)}<div class="card"><div class="sec-title">🛒 Материалы 
  </div>`}).join(''):'<div class="muted">Материалы не требуются</div>'}
  <div id="matform" style="display:none;border:2px solid var(--blue);border-radius:8px;padding:10px;margin-top:8px;background:#f8faff">
   <input class="input" id="mf-name" placeholder="Наименование *" style="margin-bottom:6px">
-  <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-qty" placeholder="Кол-во"><input class="input" id="mf-price" type="number" placeholder="Цена ₽"></div>
+  <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-qty" placeholder="Кол-во"><input class="input" id="mf-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="mf-munit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div>
   <select class="input" id="mf-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
   <input class="input" id="mf-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
   <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-dl" type="number" value="3" min="1"><select class="input" id="mf-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
@@ -812,7 +812,7 @@ function renderCreate(){
  <div class="field"><label class="label">Быстрые шаблоны работ</label>
   <div class="chips">${DB.templates.map((t,i)=>`<span class="chip" id="tpl${i}" onclick="tplClick(${i})">${escapeHtml(t.name)}</span>`).join('')}</div>
   <textarea class="input" id="c-desc" placeholder="Описание работ..."></textarea></div>
- <div class="card"><div class="sec-title">🔧 Работы (смета)</div><div class="chips">${DB.templates.map((t,i)=>`<span class="chip" onclick="worksAddTpl(${i})">${t.name}</span>`).join(' ')}</div><div id="newworks"></div><div class="row2" style="margin-bottom:6px"><input class="input" id="nw-title" placeholder="Наименование работы *"><input class="input" id="nw-qty" value="1" style="max-width:70px"><input class="input" id="nw-price" type="number" placeholder="Цена ₽"></div><button class="btn btn-outline" onclick="worksAddManual()">＋ Добавить строку</button><div class="muted" style="margin-top:6px">Сумма заказа считается автоматически по строкам сметы.</div></div><div class="field"><label class="label">💵 Вознаграждение исполнителю</label><div class="row2"><select class="input" id="c-rw-type"><option value="percent">% от прибыли</option><option value="fixed">фикс ₽</option></select><input class="input" id="c-rw-val" type="number" placeholder="пусто = доля работника"></div><div class="muted" style="margin-top:4px">Пусто — берётся доля работника из карточки «Работники и дележка».</div></div>
+ <div class="card"><div class="sec-title">🔧 Работы (смета)</div><div class="chips">${DB.templates.map((t,i)=>`<span class="chip" onclick="worksAddTpl(${i})">${t.name}</span>`).join(' ')}</div><div id="newworks"></div><div class="row2" style="margin-bottom:6px"><input class="input" id="nw-title" placeholder="Наименование работы *"><input class="input" id="nw-qty" value="1" style="max-width:70px"><input class="input" id="nw-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="nw-unit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div><button class="btn btn-outline" onclick="worksAddManual()">＋ Добавить строку</button><div class="muted" style="margin-top:6px">Сумма заказа считается автоматически по строкам сметы.</div></div><div class="field"><label class="label">💵 Вознаграждение исполнителю</label><div class="row2"><select class="input" id="c-rw-type"><option value="percent">% от прибыли</option><option value="fixed">фикс ₽</option></select><input class="input" id="c-rw-val" type="number" placeholder="пусто = доля работника"></div><div class="muted" style="margin-top:4px">Пусто — берётся доля работника из карточки «Работники и дележка».</div></div>
 <div class="field"><label class="label">Цена ₽ (если без сметы)</label><input class="input" id="c-price" type="number" placeholder="0"></div>
  <div class="field"><label class="label">Назначить исполнителя</label>
   <input class="input" id="c-wsearch" placeholder="🔎 Поиск по имени..." oninput="filterWorkerSelect('c-worker',this.value)" style="margin-bottom:6px">
@@ -830,7 +830,7 @@ function renderCreate(){
 <div class="card"><div class="sec-title">🛒 Материалы <span class="muted" id="matcount"></span></div>
  <div id="newmats"></div>
  <div class="field"><input class="input" id="nm-name" placeholder="Наименование *" style="margin-bottom:6px">
- <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-qty" placeholder="Кол-во"><input class="input" id="nm-price" type="number" placeholder="Цена ₽"></div>
+ <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-qty" placeholder="Кол-во"><input class="input" id="nm-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="nm-munit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div>
  <select class="input" id="nm-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
  <input class="input" id="nm-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
  <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-dl" type="number" value="3" min="1"><select class="input" id="nm-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
@@ -884,7 +884,7 @@ ${tab==='free'?`
 ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначено вам (${assigned.length})</div>
   ${assigned.map(o=>{const ws=(o.works||[]).filter(x=>!x.skipped);const wsum=ws.reduce((s,x)=>s+(+x.price||0)*(+x.qty||1),0);
    return '<div class="mat" style="border-left:4px solid var(--blue)"><b>№'+o.id+' • '+escapeHtml(o.client)+'</b><div class="muted">📍 '+escapeHtml(o.address||'—')+'<br>⏰ '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
-   (ws.length?'<div class="muted" style="margin-top:4px">📋 Смета: '+ws.length+' работ на '+money(wsum)+'</div>':'')+
+   (ws.length?'<div class="muted" style="margin-top:4px">📋 Смета: '+ws.map(function(x){return escapeHtml(x.title)+' '+(x.qty&&x.qty!=1?x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):money(+x.price||0)+'/'+unitLabel(x.unit));}).join('<br>')+'<br><b>Итого смета: '+money(wsum)+'</b></div>':'')+
    '<div class="info-row" style="background:#eff6ff;border-radius:8px;padding:8px;margin-top:6px"><span>💵 Твоё вознаграждение</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>'+
    '<div class="row2" style="margin-top:8px"><button class="btn btn-green" onclick="takeOrder('+o.id+')">🚜 Взять в работу</button>'+
    '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="declineAssignment('+o.id+')">Отклонить назначение</button></div></div>';}).join('')}
@@ -930,7 +930,7 @@ function shoppingForm(){
     <input class="input" id="sq-name" placeholder="Наименование *" style="margin-bottom:8px">
     <div style="display:flex;gap:8px;margin-bottom:8px">
      <input class="input" id="sq-qty" placeholder="Кол-во *" value="1" style="flex:1">
-     <input class="input" id="sq-unit" placeholder="Ед. (шт, м)" value="шт" style="flex:1">
+     <select class="input" id="sq-munit" style="flex:1"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select>
      <input class="input" id="sq-price" placeholder="Ориент. цена" type="number" style="flex:1.4"></div>
     <input class="input" id="sq-vendor" placeholder="Поставщик (опционально)" style="margin-bottom:8px">
     <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -948,12 +948,12 @@ function shoppingCreate(){
  const name=gv('sq-name');
  if(!name)return alert('Укажите наименование');
  const rec={id:'sq-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
-  source:'manual',status:'new',name:name,qty:gv('sq-qty')||'1',unit:gv('sq-unit'),
+  source:'manual',status:'new',name:name,qty:gv('sq-qty')||'1',munit:gv('sq-munit')||'pcs',
   price:+gv('sq-price')||0,vendor:gv('sq-vendor'),due:gv('sq-due'),note:gv('sq-note'),
   by:state.user,byName:state.user,ts:Date.now()};
  DB.shopping=DB.shopping||[];DB.shopping.push(rec);
  saveSettings();closeModal();
- if(typeof pushEvent==='function')pushEvent('material','🛒 Новый запрос на закуп','«'+name+'» — '+rec.qty+(rec.unit||'')+(rec.price?' • ~'+money(rec.price):''),null,true);
+ if(typeof pushEvent==='function')pushEvent('material','🛒 Новый запрос на закуп','«'+name+'» — '+rec.qty+' '+unitLabel(rec.munit)+(rec.price?' • ~'+money(rec.price):''),null,true);
  render();
 }
 function shoppingBuy(id){
@@ -987,7 +987,7 @@ function renderShopping(){
 <div class="header dark"><h1>🛒 Закупки</h1>${canShoppingCreate()?'<button class="btn-sm btn-green" style="margin-left:auto;flex:0 0 auto" onclick="shoppingForm()">＋ Запрос на закуп</button>':''}</div>
 ${reqs.length?`<div class="card"><div class="sec-title">📝 Отдельные запросы</div>
  ${reqs.map(r=>`<div class="mat" style="border-left:4px solid #f59e0b">
-  <div class="mat-head"><span class="mat-name">${escapeHtml(r.name)} (${escapeHtml(r.qty)}${escapeHtml(r.unit||'')})</span>
+  <div class="mat-head"><span class="mat-name">${escapeHtml(r.name)} (${escapeHtml(r.qty)} ${unitLabel(r.munit)})</span>
   <span class="badge" style="background:#fef3c7;color:#92400e">отдельный запрос</span></div>
   <div class="muted">${r.price?money(r.price)+' • ':''}${r.vendor?'📍 '+escapeHtml(r.vendor)+' • ':''}нужно к ${r.due?r.due.slice(8)+'.'+r.due.slice(5,7):'—'}<br>${r.note?escapeHtml(r.note)+'<br>':''}создал: ${escapeHtml(r.byName||'')} • ${r.ts?new Date(r.ts).toLocaleDateString('ru-RU'):''}</div>
   ${canShoppingClose()?`<div style="display:flex;gap:6px;margin-top:8px">
@@ -997,7 +997,7 @@ ${reqs.length?`<div class="card"><div class="sec-title">📝 Отдельные 
 </div>`:''}
 <div class="card">
  ${rows.map(r=>`<div class="mat" style="border-left:4px solid ${r.s.tc}">
-  <div class="mat-head"><span class="mat-name">${escapeHtml(r.m.name)} (${escapeHtml(r.m.qty)})</span>
+  <div class="mat-head"><span class="mat-name">${escapeHtml(r.m.name)} (${escapeHtml(r.m.qty)} ${unitLabel(r.m.munit)})</span>
   <span class="badge" style="background:${r.s.c};color:${r.s.tc}">${r.s.t}</span></div>
   <div class="muted">Заявка №${r.o.id} • ${escapeHtml(r.o.client)} • работы ${r.o.date.slice(8)}.${r.o.date.slice(5,7)} ${r.o.t1}<br>
   ${BUYER[r.m.buyer]} • 📍 ${escapeHtml(r.m.where||'—')} • ${money(r.m.price)}<br>
@@ -1008,7 +1008,7 @@ ${reqs.length?`<div class="card"><div class="sec-title">📝 Отдельные 
  </div>`).join('')||'<div class="muted">Все материалы закуплены 🎉</div>'}
 </div>
 ${closed.length?`<div class="card"><div class="sec-title">Закрытые запросы</div>
- ${closed.map(r=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(r.name)} (${escapeHtml(r.qty)}${escapeHtml(r.unit||'')})</span>
+ ${closed.map(r=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(r.name)} (${escapeHtml(r.qty)} ${unitLabel(r.munit)})</span>
  <span class="badge" style="background:${r.status==='bought'?'#d1fae5;color:#065f46':'#fee2e2;color:#991b1b'}">${r.status==='bought'?'✅ закуплено':'❌ отменено'}</span></div>
  <div class="muted">${r.status==='bought'?'факт. '+(r.factPrice?money(r.factPrice):'—')+(r.dateBought?' • '+r.dateBought.slice(8)+'.'+r.dateBought.slice(5,7):''):''}</div></div>`).join('')}
 </div>`:''}`}
@@ -1145,9 +1145,9 @@ ${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Спе�
 </div>
 <div class="card"><div class="sec-title">📝 Шаблоны работ</div>
  ${DB.templates.map((t,i)=>`<div class="info-row"><span>${escapeHtml(t.name)}</span>
- <span style="display:flex;gap:8px;align-items:center"><b>${money(t.price)}</b>
+ <span style="display:flex;gap:8px;align-items:center"><b>${money(t.price)}<span class="muted" style="font-weight:400">/${unitLabel(t.unit)}</span></b>
  <span style="cursor:pointer;color:var(--red)" onclick="delTpl(${i})">🗑</span></span></div>`).join('')}
- <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽"></div>
+ <div class="row2" style="margin-top:10px"><input class="input" id="nt-name" placeholder="Название"><input class="input" id="nt-price" type="number" placeholder="Цена ₽">${unitSel('nt-unit','pcs')}</div>
  <button class="btn btn-outline" onclick="addTpl()">＋ Создать шаблон</button>
 </div>
 <div class="card"><div class="sec-title">💰 Финансы (платежи)</div>
@@ -1294,15 +1294,15 @@ function delExtra(id,i){if(!isOrderEditor(byId(id)))return alert('Нет пра�
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  if(!canShopMats(byId(id)))return alert('Нет права orders_edit');
- byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
+ byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,munit:g('mf-munit')||'pcs',buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
  markOrder(byId(id));save();render()}
 function addNewMat(){const g=x=>document.getElementById(x).value;
  if(!g('nm-name'))return alert('Введите наименование');
- state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
+ state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,munit:g('nm-munit')||'pcs',buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
  ['nm-name','nm-qty','nm-price','nm-where'].forEach(x=>document.getElementById(x).value='');
- document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
- document.getElementById('matcount').textContent=state.newMats.length?'('+state.newMats.length+')':'';}
-function renderCreate2(){document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]}</div></div>`).join('')}
+ document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
+}
+function renderCreate2(){document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]}</div></div>`).join('')}
 function tplClick(i){const el=document.getElementById('tpl'+i),ta=document.getElementById('c-desc');
  el.classList.toggle('sel');const t=DB.templates[i];
  ta.value=el.classList.contains('sel')?(ta.value?ta.value+'; '+t.name:t.name):ta.value.split('; ').filter(x=>x!==t.name).join('; ');}
@@ -1599,8 +1599,8 @@ function otypeChange(v){
  document.getElementById('c-stages-box').style.display=v==='standard'?'none':'block';
  if(v!=='standard')cStageRender();
 }
-function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0;
- if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p});save();render()}
+function addTpl(){const n=document.getElementById('nt-name').value,p=+document.getElementById('nt-price').value||0,u=document.getElementById('nt-unit')?document.getElementById('nt-unit').value:'pcs';
+ if(!n)return alert('Введите название');DB.templates.push({id:'t'+Date.now(),name:n,price:p,unit:u||'pcs'});save();render()}
 function delTpl(i){if(confirm('Удалить шаблон?')){DB.templates.splice(i,1);save();render()}}
 // === ПАУЗА ПОЛНОГО РЕНДЕРА: открытый select/input/textarea не должен схлопываться ===
 // Пока пользователь в поле внутри #app — render() DOM не трогает, запрос запоминается как pending.
@@ -2291,33 +2291,37 @@ function checkOverdueNotification(){
  }
 }
 
-function worksMemory(title,price){
+// U1: единицы измерения услуг/материалов (расширяемо); старые данные без unit = 'pcs'
+const UNITS={pcs:'шт',m:'пог. м',m2:'м²',kg:'кг',l:'л',h:'час'};
+function unitLabel(u){return UNITS[u]||UNITS.pcs;}
+function unitSel(id,cur){return '<select class="input" id="'+id+'">'+Object.keys(UNITS).map(function(k){return '<option value="'+k+'"'+((cur||'pcs')===k?' selected':'')+'>'+UNITS[k]+'</option>';}).join('')+'</select>';}
+function worksMemory(title,price,unit){
 if(!title)return;
 var t=(DB.templates||[]).find(function(x){return x.name.toLowerCase()===String(title).toLowerCase();});
-if(!t&&confirm('Сохранить услугу «'+title+'» с ценой '+(+price||0)+' ₽ в шаблоны?')){DB.templates=DB.templates||[];DB.templates.push({id:'t'+Date.now(),name:title,price:+price||0});save();}
+if(!t&&confirm('Сохранить услугу «'+title+'» с ценой '+(+price||0)+' ₽/'+unitLabel(unit)+' в шаблоны?')){DB.templates=DB.templates||[];DB.templates.push({id:'t'+Date.now(),name:title,price:+price||0,unit:unit||'pcs'});save();}
 }
-function worksAddTpl(i){var t=DB.templates[i];if(!t)return;state.newWorks=state.newWorks||[];var ex=state.newWorks.find(function(x){return x.title===t.name;});if(ex){state.newWorks=state.newWorks.filter(function(x){return x!==ex;});}else{state.newWorks.push({id:'w'+Date.now(),title:t.name,qty:1,price:+t.price||0,done:false,skipped:false});}worksRenderCreate();}
-function worksAddManual(){var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('nw-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('nw-qty')||1;var p=+g('nw-price')||0;worksMemory(ti,p);state.newWorks=state.newWorks||[];state.newWorks.push({id:'w'+Date.now(),title:ti,qty:q,price:p,done:false,skipped:false});document.getElementById('nw-title').value='';document.getElementById('nw-price').value='';document.getElementById('nw-qty').value='1';worksRenderCreate();}
+function worksAddTpl(i){var t=DB.templates[i];if(!t)return;state.newWorks=state.newWorks||[];var ex=state.newWorks.find(function(x){return x.title===t.name;});if(ex){state.newWorks=state.newWorks.filter(function(x){return x!==ex;});}else{state.newWorks.push({id:'w'+Date.now(),title:t.name,qty:1,price:+t.price||0,unit:t.unit||'pcs',done:false,skipped:false});}worksRenderCreate();}
+function worksAddManual(){var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('nw-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('nw-qty')||1;var p=+g('nw-price')||0;var u=g('nw-unit')||'pcs';worksMemory(ti,p,u);state.newWorks=state.newWorks||[];state.newWorks.push({id:'w'+Date.now(),title:ti,qty:q,price:p,unit:u,done:false,skipped:false});document.getElementById('nw-title').value='';document.getElementById('nw-price').value='';document.getElementById('nw-qty').value='1';worksRenderCreate();}
 function worksDelNew(i){state.newWorks.splice(i,1);worksRenderCreate();}
-function worksRenderCreate(){var el=document.getElementById('newworks');if(!el)return;var w=state.newWorks||[];el.innerHTML=w.map(function(x,i){return '<div class="info-row"><span>'+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+'</span><span style="display:flex;gap:8px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b><span style="cursor:pointer;color:var(--red)" onclick="worksDelNew('+i+')">✕</span></span></div>';}).join('')+(w.length?'<div class="total"><span>Сумма сметы</span><span style="color:var(--green)">'+money(w.filter(function(x){return !x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0))+'</span></div>':'');}
+function worksRenderCreate(){var el=document.getElementById('newworks');if(!el)return;var w=state.newWorks||[];el.innerHTML=w.map(function(x,i){return '<div class="info-row"><span>'+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><span style="display:flex;gap:8px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b><span style="cursor:pointer;color:var(--red)" onclick="worksDelNew('+i+')">✕</span></span></div>';}).join('')+(w.length?'<div class="total"><span>Сумма сметы</span><span style="color:var(--green)">'+money(w.filter(function(x){return !x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0))+'</span></div>':'');}
 function worksCard(o){
 var canEd=(typeof isOrderEditor==='function'&&isOrderEditor(o))||(o.worker&&o.worker===state.user&&isInwork(o));
 var w=o.works||[];
 if(!w.length&&!canEd)return '';
 var html='<div class="card"><div class="sec-title">🔧 Работы (смета/факт)</div>';
-html+=w.map(function(x,i){return '<div class="info-row" style="align-items:center"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.done?'✅ ':x.skipped?'⛔ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+'</span><span style="display:flex;gap:6px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b>'+(canEd?'<span style="cursor:pointer" onclick="worksDone('+o.id+','+i+')">'+(x.done?'↩':'✅')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksSkip('+o.id+','+i+')">'+(x.skipped?'↩':'')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksDel('+o.id+','+i+')">✕</span>':'')+'</span></div>';}).join('');
+html+=w.map(function(x,i){return '<div class="info-row" style="align-items:center"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.done?'✅ ':x.skipped?'⛔ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><span style="display:flex;gap:6px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b>'+(canEd?'<span style="cursor:pointer" onclick="worksDone('+o.id+','+i+')">'+(x.done?'↩':'✅')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksSkip('+o.id+','+i+')">'+(x.skipped?'↩':'⛔')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksDel('+o.id+','+i+')">✕</span>':'')+'</span></div>';}).join('');
 html+='<div class="total"><span>Итого</span><span style="color:var(--green)">'+money(total(o))+'</span></div>';
-if(canEd)html+='<div class="row2" style="margin-top:6px"><input class="input" id="wa-title" placeholder="Работа (доп)"><input class="input" id="wa-qty" value="1" style="max-width:60px"><input class="input" id="wa-price" type="number" placeholder="Цена ₽"><button class="btn-sm btn-green" style="flex:none" onclick="worksAddTo('+o.id+')">＋</button></div>';
+if(canEd)html+='<div class="row2" style="margin-top:6px"><input class="input" id="wa-title" placeholder="Работа (доп)"><input class="input" id="wa-qty" value="1" style="max-width:60px"><input class="input" id="wa-price" type="number" placeholder="Цена ₽/ед.">'+unitSel('wa-unit','pcs')+'<button class="btn-sm btn-green" style="flex:none" onclick="worksAddTo('+o.id+')">＋</button></div>';
 return html+'</div>';
 }
 function worksDone(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.done=!x.done;x.ts=x.done?Date.now():null;markOrder(o);save();render();}
 function worksSkip(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.skipped=!x.skipped;markOrder(o);save();render();}
 function worksDel(id,i){var o=byId(id);if(!o)return;if(!confirm('Удалить строку сметы?'))return;o.works.splice(i,1);markOrder(o);save();render();}
-function worksAddTo(id){var o=byId(id);if(!o)return;var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('wa-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('wa-qty')||1;var p=+g('wa-price')||0;worksMemory(ti,p);o.works=o.works||[];o.works.push({id:'w'+Date.now(),title:ti,qty:q,price:p,done:false,skipped:false});markOrder(o);save();render();}
+function worksAddTo(id){var o=byId(id);if(!o)return;var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('wa-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('wa-qty')||1;var p=+g('wa-price')||0;var u=g('wa-unit')||'pcs';worksMemory(ti,p,u);o.works=o.works||[];o.works.push({id:'w'+Date.now(),title:ti,qty:q,price:p,unit:u,done:false,skipped:false});markOrder(o);save();render();}
 function worksSummary(o){
 var w=o.works||[];
 if(!w.length)return '<div class="info-row"><span>Основная работа</span><b>'+money(o.price)+'</b></div>';
-return w.map(function(x){return '<div class="info-row"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.skipped?'⛔ ':x.done?'✅ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+'</span><b>'+money((+x.price||0)*(+x.qty||1))+'</b></div>';}).join('');
+return w.map(function(x){return '<div class="info-row"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.skipped?'⛔ ':x.done?'✅ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><b>'+money((+x.price||0)*(+x.qty||1))+'</b></div>';}).join('');
 }
 function matsSpent(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0));},0);}
 function profitOf(o){return total(o)-matsSpent(o);}
@@ -2336,8 +2340,8 @@ return {type:'percent',value:+r.value,sum:Math.round(baseOf(o)*(+r.value)/100)};
 function rewardLabel(o){var rw=rewardOf(o);if(rw.type==='fixed')return money(rw.sum)+' (фикс)';return rw.value+'% = '+money(rw.sum)+' от '+(DB.shareBase==='revenue'?'выручки':'прибыли');}
 function takeGateModal(id,proceed){
 var o=byId(id);if(!o)return proceed(id);
-var wl=(o.works||[]).filter(function(x){return !x.skipped;}).map(function(x){return '• '+escapeHtml(x.title)+(x.qty&&x.qty!=1?' ×'+x.qty:'')+' — '+money((+x.price||0)*(+x.qty||1));}).join('<br>');
-var ml=(o.materials||[]).filter(function(m){return m.status!=='bought';}).map(function(m){return '• '+escapeHtml(m.name)+(m.buyer?' ('+(BUYER[m.buyer]||m.buyer)+')':'');}).join('<br>');
+var wl=(o.works||[]).filter(function(x){return !x.skipped;}).map(function(x){return '• '+escapeHtml(x.title)+' — '+(x.qty&&x.qty!=1?x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):money(+x.price||0)+'/'+unitLabel(x.unit))+' = '+money((+x.price||0)*(+x.qty||1));}).join('<br>');
+var ml=(o.materials||[]).filter(function(m){return m.status!=='bought';}).map(function(m){return '• '+escapeHtml(m.name)+' — '+m.qty+' '+unitLabel(m.munit)+(m.buyer?' ('+(BUYER[m.buyer]||m.buyer)+')':'');}).join('<br>');
 window.__takeProceed=proceed;
 openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
 '<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
