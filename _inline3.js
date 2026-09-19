@@ -1,0 +1,1 @@
+/*takeGateWrap*/(function(){if(typeof window.takeOrder==="function"&&typeof window.takeConfirm==="function"){window.takeOrder=function(id){takeGateModal(id,window.takeConfirm);};}else{console.warn("takeOrder/takeConfirm not found - gate off");}})();
