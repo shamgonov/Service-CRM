@@ -213,7 +213,7 @@ function showAppNotif(title,opts){
   if(typeof navigator!=='undefined'&&navigator.serviceWorker&&navigator.serviceWorker.getRegistration){
    return navigator.serviceWorker.getRegistration().then(function(reg){
     if(reg&&reg.showNotification){
-     return reg.showNotification(title,{body:body,icon:'/icon-192.png',badge:'/icon-192.png',tag:tag,data:data});
+     return reg.showNotification(title,{body:body,icon:'./icon-192.png',badge:'./icon-192.png',tag:tag,data:data});
     }
     return pageNotifFallback(title,body,tag,data);
    }).catch(function(e){console.warn('showNotification err',e);return pageNotifFallback(title,body,tag,data);});
@@ -225,7 +225,7 @@ function showAppNotif(title,opts){
 function pageNotifFallback(title,body,tag,data){
  try{
   if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
-  var n=new Notification(title,{body:body,icon:'/icon-192.png',badge:'/icon-192.png',tag:tag,data:data});
+  var n=new Notification(title,{body:body,icon:'./icon-192.png',badge:'./icon-192.png',tag:tag,data:data});
   n.onclick=function(){ try{ window.focus(); if(data&&data.url&&data.url!=='./'){location.href=data.url;} n.close(); }catch(e){} };
  }catch(e){console.warn('page notif err',e);}
 }
