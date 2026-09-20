@@ -26,6 +26,8 @@ function mkSandbox(){
   localStorage:{h:{},getItem(k){return this.h[k]||null},setItem(k,v){this.h[k]=v},removeItem(k){delete this.h[k]}},
   escapeHtml:s=>String(s==null?'':s),money:n=>String(n),d0:'2026-09-16',
   isOwner:()=>sb.__owner===true,
+  isSim:()=>sb.__sim===true,
+  uiOwner:()=>sb.__owner===true&&sb.__sim!==true,
   can:p=>{if(sb.__owner)return true;return (sb.__perms||[]).indexOf(p)>=0;},
   alert:m=>{sb.__alert=String(m)},confirm:()=>true,prompt:(m,d)=>sb.__prompt!==undefined?sb.__prompt:(d||''),
    render:()=>{sb.__renders=(sb.__renders||0)+1},save:()=>{},routeGenerate:()=>{},markOrder:()=>{},

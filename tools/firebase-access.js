@@ -74,14 +74,17 @@ function unionPermsFor(roleIds){
  return out;
 }
 function myPerms(){
+ // честная симуляция роли: TESTROLE (state.simOn) важнее владения —
+ // владелец в симуляции получает ПРАВА ВЫБРАННОЙ РОЛИ, а не ['all']
+ if(TESTROLE) return unionPermsFor([TESTROLE]);
  if(isOwner()) return ['all'];
- var src = TESTROLE ? [TESTROLE] : (ME?rolesOf(ME):[]);
+ var src = ME?rolesOf(ME):[];
  if(!src.length) return [];
  // объединение прав всех ролей сотрудника
  return unionPermsFor(src);
 }
 function can(p){
- if(isOwner()) return true;
+ if(isOwner() && !(typeof state!=='undefined' && state.simOn)) return true;
  var pr = myPerms();
  if(pr.indexOf('all')>=0) return true;
  return pr.indexOf(p)>=0;
@@ -840,8 +843,11 @@ function sendRequest(){
   document.getElementById('reqBox').innerHTML='<div class="muted">✅ Запрос отправлен. Ждите подтверждения владельца.</div>';
  });
 }
-function enterAs(role){ TESTROLE=role; state.role=role; state.user='Владелец ('+roleName(role)+')'; state.screen=can('tasks')&&!can('orders_view')?'tasks':'orders'; render(); }
-function goAdminStaff(){ TESTROLE='admin'; state.role='admin'; state.user='Владелец'; STAFF_TAB='requests'; state.screen='staff'; render(); }
+// вход в симуляцию роли: state.simOn=true — все UI-гейты (uiOwner()) честны для выбранной роли
+function enterAs(role){ TESTROLE=role; state.simOn=true; state.role=role; state.user='Владелец ('+roleName(role)+')'; state.screen=can('tasks')&&!can('orders_view')?'tasks':'orders'; render(); }
+// выход из симуляции: возврат в режим владельца (панель 👑)
+function exitSim(){ TESTROLE=null; state.simOn=false; state.role='admin'; state.user='Владелец'; state.screen='orders'; render(); }
+function goAdminStaff(){ TESTROLE=null; state.simOn=false; state.role='admin'; state.user='Владелец'; STAFF_TAB='requests'; state.screen='staff'; render(); }
 
 // === СТАТУС ОДОБРЕНИЯ ===
 function checkApproved(cb){
@@ -1239,7 +1245,7 @@ window.save = function(order){
 function totalOf(o){ try{ return (+o.price||0)+((o.extras||[]).reduce(function(s,e){return s+(+e.price||0);},0)); }catch(e){ return 0; } }
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
 // сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
-window.logout = function(){ state.role=null;state.user=null;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
+window.logout = function(){ state.role=null;state.user=null;state.simOn=false;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';
  sessionStorage.removeItem('crm_unlocked');
  document.getElementById('app').innerHTML=renderAccess(); };
 

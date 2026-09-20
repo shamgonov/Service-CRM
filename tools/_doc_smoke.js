@@ -17,6 +17,8 @@ if(fail)process.exit(1);
 const state={user:'Влад',role:'owner'};
 global.state=state;
 const isOwner=()=>true;
+const isSim=()=>false;
+const uiOwner=()=>isOwner()&&!isSim();
 const DB={settings:{org:{name:'ООО Ромашка',inn:'123',phone:'+7',signer:'Петров П.'}}};
 global.DB=DB;
 const o={id:5,client:'Тест',worker:'Влад',diagnostician:null,by:'Влад',phone:'+7 900',address:'ул. Ленина 1',
