@@ -546,7 +546,11 @@ function loadCachedData(){
 }
 function queueGet(){ return lsGet('crm_queue',[]); }
 function queueSet(q){ lsSet('crm_queue',q); }
-function queuePush(item){ var q=queueGet(); q.push({t:Date.now(),item:item}); queueSet(q); }
+// B2: запись в очередь теперь планирует немедленный flush: раньше очередь отправлялась
+// ТОЛЬКО по событию 'online', которого на боевом устройстве (сеть не «падала», а отбивался
+// один запрос) не случалось вовсе → изменения лежали в localStorage и терялись при чистке.
+function queuePush(item){ var q=queueGet(); q.push({t:Date.now(),item:item}); queueSet(q);
+ if(!OFFLINE&&!SYNCING&&typeof setTimeout==='function'){ try{ setTimeout(flushQueue,500); }catch(e){} } }
 function queueCount(){ return queueGet().length; }
 function offlineBanner(){
  var n=queueCount();
@@ -558,22 +562,40 @@ function offlineBanner(){
 // последовательная отправка очереди при восстановлении сети
 function flushQueue(){
  if(SYNCING||OFFLINE)return;
- var q=queueGet();
- if(!q.length)return;
+ if(!queueGet().length)return;
  SYNCING=true;
- var i=0;
+ var stopped=false;
+ function fin(){ SYNCING=false; if(typeof render==='function')render(); }
+ function step(fn){ if(stopped)return; fn(); }
+ // B2: раньше в конце стояло queueSet([]) — очередь стиралась даже когда половина
+// записей упала, и они терялись навсегда. Теперь голову снимаем ПЕРЕД отправкой
+ // (работаем с актуальным состоянием очереди, а не со снимком: записи, добавленные
+ // во время полёта, не выбрасываются), а при сетевой ошибке возвращаем текущий
+ // элемент в начало хвоста — он будет повторён при следующей доставке.
+ function restore(item){ try{ var c=queueGet(); c.unshift(item); queueSet(c); }catch(e){} }
  function next(){
-  if(i>=q.length){ queueSet([]); SYNCING=false; SYNC_OK_TS=Date.now(); if(typeof render==='function')render(); return; }
-  var it=q[i].item;
-  var done=function(){ i++; next(); };
-  if(it.kind==='order'){ orderSave(it.order); done(); }
-  else if(it.kind==='photo'){
-   fs.collection('photos').doc(it.docId).set(it.doc).then(done).catch(function(e){ console.warn('photo flush err',e); done(); });
+  var cur=queueGet();
+  if(!cur.length){ SYNC_OK_TS=Date.now(); return fin(); }
+  var e0=cur[0],it=e0&&e0.item;
+  queueSet(cur.slice(1));
+  var ok=function(){ SYNC_OK_TS=Date.now(); step(next); };
+  var netFail=function(e){ OFFLINE=true; stopped=true; restore(e0); fin(); };
+  // permission-denied — не сетевая ошибка: повторять бессмысленно, элемент не возвращаем
+  var permSkip=function(e){ writeDeniedBanner(e); step(next); };
+  if(it&&it.kind==='order'&&it.id!=null){
+   // в очереди лежит copy БЕЗ id (orderSave вырезает id из тела) — восстанавливаем id для пути
+   ordersRef().doc(String(it.id)).set(it.order).then(ok).catch(function(e){ console.warn('flush order',e); if(isPermErr(e))permSkip(e); else netFail(e); });
   }
-  else if(it.kind==='settings'){ saveSettings(); done(); }
-  else done();
+  else if(it&&it.kind==='patch'&&it.id!=null){
+   ordersRef().doc(String(it.id)).update(it.fields||{}).then(ok).catch(function(e){ console.warn('flush patch',e); if(isPermErr(e))permSkip(e); else netFail(e); });
+  }
+  else if(it&&it.kind==='photo'){
+   fs.collection('photos').doc(it.docId).set(it.doc).then(ok).catch(function(e){ console.warn('photo flush err',e); if(isPermErr(e))permSkip(e); else netFail(e); });
+  }
+  else if(it&&it.kind==='settings'){ saveSettings(); ok(); }
+  else ok();
  }
- next();
+ step(next);
 }
 (function(){
  function upd(){
@@ -684,7 +706,22 @@ function saveSettings(){
   console.warn(e); OFFLINE=true; queuePush({kind:'settings'}); if(typeof render==='function')render();
  });
 }
-// запись одной заявки — только её документ; офлайн — патч в очередь
+// Запись отклониена правилами безопасности — это не «нет сети»: в очередь класть бессмысленно
+// (упадёт и при повторе), а OFFLINE вводить нельзя, иначе встанет вся очередь.
+function isPermErr(e){ var s=String((e&&e.code)||e||''); return s.indexOf('permission-denied')>=0||s.indexOf('PermissionDenied')>=0; }
+function writeDeniedBanner(e){
+ console.warn('ЗАПИСЬ ОТКЛОНЕНА правилами Firestore',e);
+ try{
+  if(typeof document==='undefined'||!document.body||document.getElementById('permErr'))return;
+  var d=document.createElement('div');
+  d.id='permErr';
+  d.setAttribute('style','position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#b91c1c;color:#fff;padding:12px 16px;font:600 13px/1.4 system-ui');
+  d.textContent='⛔ Сервер отклонил запись (правила доступа Firestore). Изменение НЕ сохранено в облако — пересматривать права должен владелец. Правки видны только на этом устройстве.';
+  document.body.appendChild(d);
+  setTimeout(function(){ if(d.parentNode)d.parentNode.removeChild(d); },10000);
+ }catch(_){}
+}
+// записывает патч полей одной заявки (set() целиком опасен: затирает чужие поля)
 function orderSave(order){
  if(!order||order.id==null)return;
  var copy={};
@@ -703,10 +740,28 @@ function orderSave(order){
   if(typeof render==='function')render();
   return;
  }
- ordersRef().doc(String(order.id)).set(copy).catch(function(e){
+ return ordersRef().doc(String(order.id)).set(copy).catch(function(e){
   console.warn('orderSave err',e);
+  if(isPermErr(e)){ writeDeniedBanner(e); return; }
   OFFLINE=true;
   queuePush({kind:'order',order:copy,id:order.id});
+  if(typeof render==='function')render();
+ });
+}
+// B2: точечный update полей заявки ('viewedBy.dev-1' и т.п.). set() всего документа
+// из markViewed откатывал status/worker к устаревшему снимку — отсюда «кнопка вернулась».
+function orderPatch(id,fields){
+ if(id==null||!fields)return;
+ var patch={};
+ for(var k in fields){ if(k!=='id'&&fields[k]!==undefined)patch[k]=fields[k]; }
+ patch.lastBy=deviceId();
+ if(!Object.keys(patch).length)return;
+ if(OFFLINE||ORDERS_ERR&&!ORDERS_SUB){ queuePush({kind:'patch',id:id,fields:patch}); return; }
+ return ordersRef().doc(String(id)).update(patch).catch(function(e){
+  console.warn('orderPatch err',e);
+  if(isPermErr(e)){ writeDeniedBanner(e); return; }
+  OFFLINE=true;
+  queuePush({kind:'patch',id:id,fields:patch});
   if(typeof render==='function')render();
  });
 }
@@ -1121,6 +1176,9 @@ function startMain(){
  if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
  migrateOrdersIfNeeded();
+ // B2: на старте доставляем то, что не ушло в прошлой сессии (упавшие записи очереди).
+ // Задержка — чтобы успел подключиться onSnapshot и не перетёр свежие данные старым патчем.
+ try{ if(navigator.onLine&&queueCount()&&typeof setTimeout==='function')setTimeout(function(){ OFFLINE=false; flushQueue(); },1200); }catch(e){}
  // B3: уведомление о просрочках при входе (не чаще 1 раза в день)
  try{ if(typeof checkOverdueNotification==='function')setTimeout(checkOverdueNotification,3000); }catch(e){}
 }

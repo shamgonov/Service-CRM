@@ -576,9 +576,15 @@ function markViewed(id){
  const devId=typeof deviceId==='function'?deviceId():'system';
  o.viewedBy=o.viewedBy||{};
  if(!o.viewedBy[devId]){
-  o.viewedBy[devId]=new Date().toISOString();
+  var ts=new Date().toISOString();
+  o.viewedBy[devId]=ts;
   logAction(o,'view',{by:state.user});
-  markOrder(o);orderSave(o);
+  // B2: раньше сюда шёл orderSave(o) — ЦЕЛИКОМ свой снимок заявки. На боевой карточке
+  // этот снимок был устаревшим (пришёл раньше чужого «взял в работу») и откатывал
+  // status/worker обратно, из-за чего кнопка «Взять» возвращалась после перезагрузки.
+  // Теперь пишем только поле viewedBy.<dev> точечным update (orderPatch в fa).
+  var k={};k['viewedBy.'+devId]=ts;
+  if(typeof orderPatch==='function')orderPatch(o.id,k); else markOrder(o);
  }
 }
 
@@ -1824,6 +1830,8 @@ function declineAssignment(id){
 function takeConfirm(id){
  const o=byId(id);if(!o)return;
  if(!showTakeBtn(o))return alert('Нет прав на взятие заявки');
+ // B2: гонка снапшотов — заядку могли взять раньше, чем успела перерисоваться карточка
+ if(o.worker&&o.worker!==state.user&&!uiOwner())return alert('Заявка уже взята в работу: '+o.worker);
  o.status='inwork';
  if(!o.worker)o.worker=state.user;
  o.takenBy=state.user;
@@ -1843,7 +1851,10 @@ function takeConfirm(id){
  );
  logAction(o,'take',{by:state.user});
 showActiveOrderNotification(o);
- markOrder(o);orderSave(o);saveSettings();
+ // B2: save() = localStorage (crm_db) + документ заявки через window.save/state.__mutOrder.
+ // Раньше стояло orderSave(o) без save(): в облако взятие уходило, а локальная база — нет,
+ // поэтому после F5 кнопка «Взять» возвращалась. saveSettings() при взятии не нужен.
+ markOrder(o);save();
  closeModal();
  go('details',id);
 }
