@@ -648,6 +648,14 @@ function loadCloud(cb){
    arr.push(o); });
   arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
   var prev=DB;
+  // B7: viewedBy — монотонный персональный флаг (только добавляется deviceId->ts,
+  // никогда не снимается). Полная замена DB.orders=arr смётывала локально проставленный,
+  // ещё не подтверждённый сервером viewedBy → «откат персональных полей». Union:
+  // приходящий снимок как база + локальные ключи deviceId, которых в нём ещё нет.
+  // Статус/исполнителя НЕ трогаем — иначе watchNewOrders перестал бы видеть чужие правки.
+  var localViewedBy={};
+  ((prev&&prev.orders)||[]).forEach(function(o){ if(o&&o.viewedBy&&typeof o.viewedBy==='object'&&Object.keys(o.viewedBy).length)localViewedBy[o.id]=o.viewedBy; });
+  arr.forEach(function(o){ var lv=localViewedBy[o.id]; if(!lv)return; var m=(o.viewedBy&&typeof o.viewedBy==='object')?o.viewedBy:{}; for(var k in lv){ if(m[k]===undefined)m[k]=lv[k]; } o.viewedBy=m; });
   var changed=!jsonEq(arr,LAST_ORDERS_JSON);
   LAST_ORDERS_JSON=JSON.stringify(arr);
   DB.orders=arr;
@@ -744,7 +752,11 @@ function orderSave(order){
   if(typeof render==='function')render();
   return;
  }
- return ordersRef().doc(String(order.id)).set(copy).catch(function(e){
+ // B7: merge:true — раньше set(copy) писал документ целиком и стирал на сервере
+// поля, которых нет в copy (в первую очередь чужие viewedBy.<dev>, проставленные
+// параллельно через orderPatch → «откат персональных полей» при любой правке).
+// Снятие исполнителя не страдает: во всех местах пишется worker=null, а не undefined.
+ return ordersRef().doc(String(order.id)).set(copy,{merge:true}).catch(function(e){
   console.warn('orderSave err',e);
   if(isPermErr(e)){ writeDeniedBanner(e); return; }
   OFFLINE=true;
