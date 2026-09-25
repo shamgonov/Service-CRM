@@ -641,7 +641,11 @@ function loadCloud(cb){
  // 1) заявки — коллекция orders
  ordersRef().onSnapshot(function(snap){
   var arr=[];
-  snap.forEach(function(d){ var o=d.data(); o.id=parseInt(d.id,10)||o.id; arr.push(o); });
+  snap.forEach(function(d){ var o=d.data(); o.id=parseInt(d.id,10)||o.id;
+   // B3: в облаке лежат legacy-документы без works/extras/materials/payments —
+   // приведение к массивам на входе, иначе рендеры падают на .map у undefined.
+   if(typeof normalizeOrder==='function')normalizeOrder(o);
+   arr.push(o); });
   arr.sort(function(a,b){ return (a.id||0)-(b.id||0); });
   var prev=DB;
   var changed=!jsonEq(arr,LAST_ORDERS_JSON);
@@ -1300,7 +1304,8 @@ window.save = function(order){
  }catch(e){}
  if(!wasOrder) saveSettings();
 };
-function totalOf(o){ try{ return (+o.price||0)+((o.extras||[]).reduce(function(s,e){return s+(+e.price||0);},0)); }catch(e){ return 0; } }
+// B5: синхронно с total() в index.html — доп. работы как price*(qty||1)
+function totalOf(o){ try{ return (+o.price||0)+((o.extras||[]).reduce(function(s,e){return s+(+e.price||0)*(+e.qty||1);},0)); }catch(e){ return 0; } }
 // logout: разблокировка сбрасывается; владелец видит панель 👑,
 // сотрудник — карточку «Войти как …» (или форму запроса, если профиля нет).
 window.logout = function(){ state.role=null;state.user=null;state.simOn=false;TESTROLE=null;ME=null;MYDOC=null;window.__accessMode=true;document.getElementById('nav').style.display='none';

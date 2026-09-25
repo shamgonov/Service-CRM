@@ -341,7 +341,17 @@ function markOrder(o){
 function reset(){localStorage.removeItem('crm_db');load();render();alert('Демо-данные сброшены')}
 load();
 const money=n=>(+n||0).toLocaleString('ru')+' ₽';
-const total=o=>{var ex=(o.extras||[]).reduce((s,e)=>s+(+e.price||0),0);var m=o.matsInTotal?(o.materials||[]).reduce((s,x)=>s+(+x.price||0),0):0;if((o.works||[]).length)return (o.works||[]).filter(x=>!x.skipped).reduce((s,x)=>s+(+x.price||0)*(+x.qty||1),0)+ex+m;return (+o.price||0)+ex+m;};
+// B5: доп. работы считаются как price*(qty||1) — синхронно с totalOf в firebase-access.js
+const total=o=>{var ex=(o.extras||[]).reduce((s,e)=>s+(+e.price||0)*(+e.qty||1),0);var m=o.matsInTotal?(o.materials||[]).reduce((s,x)=>s+(+x.price||0),0):0;if((o.works||[]).length)return (o.works||[]).filter(x=>!x.skipped).reduce((s,x)=>s+(+x.price||0)*(+x.qty||1),0)+ex+m;return (+o.price||0)+ex+m;};
+// B3: legacy-заявки (и записи из старых бэкапов/очередей) приходят без works/extras/materials/
+// payments/stages/history — рендеры падали на .map/.splice у undefined. Нормализуем один раз
+// на входе (onSnapshot) и перед каждой мутацией.
+function normalizeOrder(o){
+ if(!o||typeof o!=='object')return o;
+ ['works','extras','materials','payments','stages','history'].forEach(function(k){ if(!Array.isArray(o[k]))o[k]=[]; });
+ if(!o.viewedBy||typeof o.viewedBy!=='object')o.viewedBy={};
+ return o;
+}
 // === ТИПЫ ЗАЯВКИ, ЭТАПЫ, ПЛАТЕЖИ ===
 const OTYPE={standard:'Стандарт',manufacture:'С изготовлением',service:'Сервисный'};
 const STAGE_T={measure:'Замер',make:'Изготовление',install:'Монтаж',repair:'Ремонт',service:'Выезд'};
@@ -752,7 +762,7 @@ return `
 </div>
 <div class="card"><div class="sec-title">🔧 Выполненные работы</div>
 ${worksSummary(o)}
-${(o.extras||[]).map(e=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}</span><b>${money(e.price)}</b></div>`).join('')}
+${(o.extras||[]).map(e=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${(+e.qty||1)!=1?' × '+(+e.qty||1):''}</span><b>${money((+e.price||0)*(+e.qty||1))}</b></div>`).join('')}
 ${(o.materials||[]).length?`<div class="muted" style="margin-top:6px">Материалы: ${o.materials.map(m=>escapeHtml(m.name)).join(', ')}</div>`:''}
 <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
 <div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">${money(totalPaid(o))}</b></div>
@@ -768,6 +778,7 @@ ${historyBlock(o)}`;
 }
 function renderDetails(id){
  const o=byId(id);if(!o)return '<div class="card">Не найдено</div>';
+ if(typeof normalizeOrder==='function')normalizeOrder(o); // B3: legacy без works/extras/... — не роняем карточку
 if(o.status==='completed'||o.status==='paid')return renderDoneSummary(o);
  // C2: чужая взятая заявка недоступна без права orders_view_all
  if(hiddenTakeFromMe(o))return `<div class="header"><button class="back" onclick="goBack()">←</button><h1>Заявка №${o.id}</h1></div>
@@ -847,7 +858,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 </div></div>
 <div class="sec" id="sec-money"><div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  ${worksSummary(o)}
- ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money(e.price)}</b></div>`).join('')}
+ ${(o.extras||[]).map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${(+e.qty||1)!=1?' × '+(+e.qty||1):''} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money((+e.price||0)*(+e.qty||1))}</b></div>`).join('')}
  <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
  <div class="row2" style="margin-top:8px">
   ${canEditWorks(o)?`<button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>`:''}
@@ -1337,7 +1348,7 @@ function finishOrderGo(id,force){
 }
 function closeOrderModal(id){
  const o=byId(id);
- const rows=[{n:'Основная работа',s:+o.price||0}].concat((o.extras||[]).map(e=>({n:e.name,s:+e.price||0})));
+ const rows=[{n:'Основная работа',s:+o.price||0}].concat((o.extras||[]).map(e=>({n:e.name+( (+e.qty||1)!=1?' × '+(+e.qty||1):''),s:(+e.price||0)*(+e.qty||1)})));
  const pays=orderPayments(o).filter(p=>p.type!=='materials');
  const hadPays=pays.length>0;
  const bal=balance(o);
@@ -1429,8 +1440,11 @@ function isOrderEditor(o){
 }
 function addExtra(id){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');
  const n=prompt('Название доп. работы:');if(!n)return;const p=+prompt('Цена доп. работы ₽:','0')||0;
- var o=byId(id);o.extras.push({name:n,price:p});logAction(o,'edit',{fields:['доп. работа: '+n+' ('+money(p)+')']});markOrder(o);save();render()}
-function delExtra(id,i){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');if(confirm('Удалить доп. работу?')){var o=byId(id);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
+ // B5: доп. работа, как и строка сметы, имеет количество — сумма = price*qty (см. total/totalOf)
+ var q=+prompt('Кол-во:','1');if(!(q>0))q=1;
+ var o=byId(id);if(typeof normalizeOrder==='function')normalizeOrder(o);
+ o.extras.push({name:n,price:p,qty:q});logAction(o,'edit',{fields:['доп. работа: '+n+(q!=1?' ×'+q:'')+' ('+money(p*q)+')']});markOrder(o);save();render()}
+function delExtra(id,i){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');if(confirm('Удалить доп. работу?')){var o=byId(id);if(typeof normalizeOrder==='function')normalizeOrder(o);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  if(!canShopMats(byId(id)))return alert('Нет права orders_edit');
@@ -2458,13 +2472,15 @@ var w=o.works||[];
 if(!w.length&&!canEd)return '';
 var html='<div class="card"><div class="sec-title">🔧 Работы (смета/факт)</div>';
 html+=w.map(function(x,i){return '<div class="info-row" style="align-items:center"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.done?'✅ ':x.skipped?'⛔ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><span style="display:flex;gap:6px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b>'+(canEd?'<span style="cursor:pointer" onclick="worksDone('+o.id+','+i+')">'+(x.done?'↩':'✅')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksSkip('+o.id+','+i+')">'+(x.skipped?'↩':'⛔')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksDel('+o.id+','+i+')">✕</span>':'')+'</span></div>';}).join('');
+// B5: доп. работы видны прямо в смете (работы+extras=итог), с удалением строки
+html+=(o.extras||[]).map(function(e,i){return '<div class="info-row" style="align-items:center"><span>＋ '+escapeHtml(e.name)+( (+e.qty||1)!=1?' '+ (+e.qty||1)+' × '+money(+e.price||0):'')+' '+(canEd?'<span class="muted" style="cursor:pointer" onclick="delExtra('+o.id+','+i+')">✕</span>':'')+'</span><b>'+money((+e.price||0)*(+e.qty||1))+'</b></div>';}).join('');
 html+='<div class="total"><span>Итого</span><span style="color:var(--green)">'+money(total(o))+'</span></div>';
 if(canEd)html+='<div class="row2" style="margin-top:6px"><input class="input" id="wa-title" placeholder="Работа (доп)"><input class="input" id="wa-qty" value="1" style="max-width:60px"><input class="input" id="wa-price" type="number" placeholder="Цена ₽/ед.">'+unitSel('wa-unit','pcs')+'<button class="btn-sm btn-green" style="flex:none" onclick="worksAddTo('+o.id+')">＋</button></div>';
 return html+'</div>';
 }
-function worksDone(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.done=!x.done;x.ts=x.done?Date.now():null;markOrder(o);save();render();}
-function worksSkip(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.skipped=!x.skipped;markOrder(o);save();render();}
-function worksDel(id,i){var o=byId(id);if(!o)return;if(!confirm('Удалить строку сметы?'))return;o.works.splice(i,1);markOrder(o);save();render();}
+function worksDone(id,i){var o=byId(id);if(!o)return;if(typeof normalizeOrder==='function')normalizeOrder(o);var x=(o.works||[])[i];if(!x)return;x.done=!x.done;x.ts=x.done?Date.now():null;logAction(o,'edit',{fields:['работа '+(x.done?'выполнена':'снята отметка')+': '+x.title]});markOrder(o);save();if(typeof RENDER_HOLD!=='undefined')RENDER_HOLD=null;render();}
+function worksSkip(id,i){var o=byId(id);if(!o)return;if(typeof normalizeOrder==='function')normalizeOrder(o);var x=(o.works||[])[i];if(!x)return;x.skipped=!x.skipped;logAction(o,'edit',{fields:['работа '+(x.skipped?'исключена':'возвращена')+': '+x.title]});markOrder(o);save();if(typeof RENDER_HOLD!=='undefined')RENDER_HOLD=null;render();}
+function worksDel(id,i){var o=byId(id);if(!o)return;if(!confirm('Удалить строку сметы?'))return;if(typeof normalizeOrder==='function')normalizeOrder(o);var nm=(o.works[i]&&o.works[i].title)||'';o.works.splice(i,1);logAction(o,'edit',{fields:['удалена строка сметы: '+nm]});markOrder(o);save();if(typeof RENDER_HOLD!=='undefined')RENDER_HOLD=null;render();}
 function worksAddTo(id){var o=byId(id);if(!o)return;if(!canEditWorks(o))return alert('Нет права orders_edit');var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('wa-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('wa-qty')||1;var p=+g('wa-price')||0;var u=g('wa-unit')||'pcs';worksMemory(ti,p,u);o.works=o.works||[];o.works.push({id:'w'+Date.now(),title:ti,qty:q,price:p,unit:u,done:false,skipped:false});markOrder(o);save();render();}
 function worksSummary(o){
 var w=o.works||[];

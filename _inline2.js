@@ -19,8 +19,9 @@ const BUYER={worker:'Работник перед выездом',manager:'Диа
 function showTest(){return !!(DB&&DB.showTest)}
 function isTest(o){return !!o.test}
 // тестовые скрыты при showTest=false (списки/календарь/задачи/схема/уведомления);
-// из отчётов/финансов/CSV/долей исключены ВСЕГДА
-function visOrder(o){return !isTest(o)||(showTest()&&adminLike())}
+// из отчётов/финансов/CSV/долей исключены ВСЕГДА.
+// Честная симуляция: реальный владелец ВНЕ симуляции видит тестовые всегда (isOwner&&!simOn).
+function visOrder(o){return !isTest(o)||((showTest()&&adminLike())||uiOwner())}
 // единая матрица видимости заявок: без права orders_view чужие видны ТОЛЬКО в пуле
 // (new/approved без исполнителя); свои (worker=я) и созданные мной (by=я) — любых статусов
 function visibleOrders(){
@@ -34,12 +35,37 @@ function visibleOrders(){
  });
 }
 // тестовые видимы только владельцу/админу и только при включённом тумблере
-function adminLike(){if(typeof isOwner==='function'&&isOwner())return true;return state.role==='admin'||state.user==='Владелец';}
+// Честная симуляция роли: uiOwner — «владелец по UI» (реальный владелец, не в симуляции роли).
+// Все гейты ПОКАЗА контролов используют uiOwner(), а не isOwner(): в симуляции worker владелец
+// не видит владельческих контролов (isOwner остаётся для входа/облака/миграций в firebase-access.js).
+function isSim(){return !!(typeof state!=='undefined'&&state.simOn);}
+function uiOwner(){return (typeof isOwner!=='function'?false:isOwner())&&!isSim();}
+function adminLike(){if(uiOwner())return true;return state.role==='admin'||state.user==='Владелец';}
+// исполнитель СВОЕЙ inwork-заявки (матрица: этапы/куплено/фото/допродажа).
+// В симуляции роли владельцем считается и заявка, назначенная на «Владелец».
+function isMyInwork(o){
+ if(!o||!isInwork(o))return false;
+ if(o.worker===state.user)return true;
+ return isSim()&&(typeof isOwner==='function')&&isOwner()&&o.worker==='Владелец';
+}
+// имя пользователя для сверки с полями заявок (worker/by/diagnostician).
+// В симуляции роли совпадает и строка «Владелец».
+function isMeName(nm){return !!nm&&(nm===state.user||(isSim()&&nm==='Владелец'));}
+// доп-строка сметы (допродажа) по спеке: право orders_edit ИЛИ исполнитель своей inwork
+function canEditWorks(o){return (typeof isOrderEditor==='function'&&isOrderEditor(o))||isMyInwork(o);}
+// контрагенты: правка = orders_edit/владелец; новый заказ от клиента = orders_create/владелец
+function canEditClient(){return uiOwner()||((typeof can==='function')&&can('orders_edit'));}
+function canCreateOrder(){return uiOwner()||((typeof can==='function')&&can('orders_create'));}
 function bizOrder(o){return !isTest(o)}
-function canCancel(){if(typeof can==='function')return isOwner()||can('orders_cancel');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+// отмена: владелец (вне симуляции) / право orders_cancel / создатель заявки (пока она new или approved)
+function canCancel(o){
+ if(typeof can==='function'){if(uiOwner()||can('orders_cancel'))return true;}
+ else if(uiOwner())return true;
+ return !!(o&&o.by&&isMeName(o.by)&&['new','approved'].includes(o.status));
+}
 // «Взять в работу»: право orders_take (по умолчанию owner/admin/manager/operator),
 // создатель заявки имеет его неявно всегда
-function canTakeOrder(o){if(typeof can==='function')return isOwner()||can('orders_take')||(o&&o.by&&o.by===state.user);return (typeof isOwner==='function'&&isOwner())||['admin','manager','operator'].includes(state.role)}
+function canTakeOrder(o){if(typeof can==='function')return uiOwner()||can('orders_take')||(o&&o.by&&o.by===state.user);return (typeof isOwner==='function'&&uiOwner())||['admin','manager','operator'].includes(state.role)}
 // «В работе»: canonical-статус inwork + legacy in_progress (старые заявки без takenBy)
 function isInwork(o){return !!o&&(o.status==='inwork'||o.status==='in_progress')}
 // чужие взятые заявки: владелец/админ или право orders_view_all
@@ -60,12 +86,12 @@ function showTakeBtn(o){
  if(!o||['new','approved'].indexOf(o.status)<0)return false;
  if(!canTakeOrder(o))return false;
  if(!o.worker)return true;
- if(typeof isOwner==='function'&&isOwner())return true;
+ if(typeof isOwner==='function'&&uiOwner())return true;
  if(o.by&&o.by===state.user)return true;
  return typeof adminLike==='function'&&adminLike();
 }
 // удаление заявки: владелец или право orders_delete
-function canDeleteOrder(){if(typeof can==='function')return isOwner()||can('orders_delete');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+function canDeleteOrder(){if(typeof can==='function')return uiOwner()||can('orders_delete');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
 function deleteOrder(id){
  const o=byId(id);if(!o)return;
  if(!canDeleteOrder())return alert('Нет права orders_delete');
@@ -107,7 +133,7 @@ function histLine(h){
  return txt;
 }
 function historyBlock(o){
- if(!(typeof can==='function'&&can('orders_history'))&&!isOwner())return '';
+ if(!(typeof can==='function'&&can('orders_history'))&&!uiOwner())return '';
  var hist=(o.history||[]).slice().sort(function(a,b){return String(b.ts).localeCompare(String(a.ts));});
  var html='<div class="card"><div class="sec-title">📜 История</div>';
  if(!hist.length)return html+'<div class="muted">Событий пока нет</div></div>';
@@ -151,7 +177,7 @@ function defaultData(){return{
   {id:'t6',name:'Демонтаж старого блока',price:2000}],
  orders:[],
  regions:[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}]};}
-let DB,state={role:null,user:null,screen:'orders',orderId:null,filter:'all',calDate:(typeof localToday==='function'?localToday():d0),newMats:[]};
+let DB,state={role:null,user:null,simOn:false,screen:'orders',orderId:null,filter:'all',calDate:(typeof localToday==='function'?localToday():d0),newMats:[]};
 function load(){try{DB=JSON.parse(localStorage.getItem('crm_db'))||defaultData()}catch(e){DB=defaultData()}
  // B1: миграция старых баз — справочник регионов
  if(!DB.regions||!DB.regions.length)DB.regions=[{region:'Свердловская область',cities:['Екатеринбург','Нижний Тагил','Каменск-Уральский','Первоуральск']}];
@@ -184,7 +210,7 @@ function orderPayments(o){return o.payments||[]}
 function totalPaid(o){return orderPayments(o).filter(p=>p.type!=='materials').reduce((s,p)=>s+(+p.sum||0),0)}
 function materialsPaid(o){return orderPayments(o).filter(p=>p.type==='materials').reduce((s,p)=>s+(+p.sum||0),0)}
 function balance(o){return total(o)-totalPaid(o)}
-function canFinance(){if(typeof can==='function')return isOwner()||can('finance_edit');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+function canFinance(){if(typeof can==='function')return uiOwner()||can('finance_edit');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
 function stageDefault(type){
  if(type==='manufacture')return [
   {id:'st1',type:'measure',title:'Замер',dueMode:'date',plan_start:'',plan_ready:'',done:false,by:'',ts_done:null},
@@ -398,7 +424,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.1</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.2</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -407,9 +433,15 @@ function markViewed(id){
  const devId=typeof deviceId==='function'?deviceId():'system';
  o.viewedBy=o.viewedBy||{};
  if(!o.viewedBy[devId]){
-  o.viewedBy[devId]=new Date().toISOString();
+  var ts=new Date().toISOString();
+  o.viewedBy[devId]=ts;
   logAction(o,'view',{by:state.user});
-  markOrder(o);orderSave(o);
+  // B2: раньше сюда шёл orderSave(o) — ЦЕЛИКОМ свой снимок заявки. На боевой карточке
+  // этот снимок был устаревшим (пришёл раньше чужого «взял в работу») и откатывал
+  // status/worker обратно, из-за чего кнопка «Взять» возвращалась после перезагрузки.
+  // Теперь пишем только поле viewedBy.<dev> точечным update (orderPatch в fa).
+  var k={};k['viewedBy.'+devId]=ts;
+  if(typeof orderPatch==='function')orderPatch(o.id,k); else markOrder(o);
  }
 }
 
@@ -507,7 +539,7 @@ function routeTimeline(o,editable){
 }
 function routeScreen(id){
  const o=byId(id);if(!o)return;
- if(!visOrder(o)&&!canCancel())return alert('Тестовая заявка скрыта (включите «Показывать тестовые» в админке)');
+ if(!visOrder(o)&&!canCancel(o))return alert('Тестовая заявка скрыта (включите «Показывать тестовые» в админке)');
  const editable=o.route&&o.route.length?canEditRoute(o):false;
  document.getElementById('app').innerHTML='<div class="header"><button class="back" onclick="go(\''+(state.role==='worker'?'tasks':'details')+'\','+(state.role==='worker'?id:id)+')">←</button><h1>🗺 Схема — №'+o.id+'</h1></div>'+
   '<div class="card">'+routeTimeline(o,editable)+'</div>';
@@ -643,14 +675,14 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none" onchange="uploadPhoto(this,${o.id})">
  <div class="muted" style="margin-top:6px">${o.photoReport?'Фотоотчёт обязателен — без фото заказ не закрыть':'Добавить фото'}</div>
 </div></div>
-<div class="sec" id="sec-estimate">${worksCard(o)}<div class="card"><div class="sec-title">🛒 Материалы <button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button></div>
+<div class="sec" id="sec-estimate">${worksCard(o)}<div class="card"><div class="sec-title">🛒 Материалы ${canShopMats(o)?`<button class="btn-sm btn-outline" style="flex:none;width:auto" onclick="document.getElementById('matform').style.display='block'">＋ Добавить</button>`:''}</div>
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
   <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span>
    <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
    <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
   ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f8faff;border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
-  ${['todo'].includes(m.status)||['urgent','critical'].includes(s.k)?`
+  ${(['todo'].includes(m.status)||['urgent','critical'].includes(s.k))&&canShopMats(o)?`
   <div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green${hintCls(o,'mat',i)}"${hintData(o,'mat',i)} onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
    <button class="btn-sm btn-red" onclick="matAct(${o.id},${i},'issue')">❌ Не найти</button>
@@ -672,24 +704,24 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 </div></div>
 <div class="sec" id="sec-money"><div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  ${worksSummary(o)}
- ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)} <span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span></span><b>${money(e.price)}</b></div>`).join('')}
+ ${o.extras.map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money(e.price)}</b></div>`).join('')}
  <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
  <div class="row2" style="margin-top:8px">
-  <button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>
+  ${canEditWorks(o)?`<button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>`:''}
   ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
  </div>
 </div>
 ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${hintBarHtml(o)}
-  ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,true)}`:''}
+  ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,canEditWorks(o)||isMyInwork(o))}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
-  ${(isOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
+  ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
   ${o.status==='paused'&&o.worker===state.user?`<button class="btn btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
- ${canCancel()&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
+ ${canCancel(o)&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
 ${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
- ${(isOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
+ ${(uiOwner()||canFinance())&&!['completed','paid'].includes(o.status)?`<div class="tgl" style="margin-top:10px"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" ${o.test?'checked':''} onchange="setTestFlag(${o.id},this.checked)"><span class="slider"></span></label></div>`:''}
 </div>`:''}
 ${o.status==='canceled'?`<div class="card" style="border-left:4px solid #9ca3af"><div class="sec-title">❌ Заявка отменена</div>
@@ -732,9 +764,9 @@ function renderCreate(){
   ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo"><span class="slider"></span></label></div>
- ${isOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
+ ${uiOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
   <label class="switch"><input type="checkbox" id="c-test"><span class="slider"></span></label></div>`:''}
- ${(isOwner()||(typeof can==='function'&&can('orders_edit')))?`<div class="tgl"><span style="font-weight:500;font-size:14px">⏪ Внесение задним числом</span>
+ ${(uiOwner()||(typeof can==='function'&&can('orders_edit')))?`<div class="tgl"><span style="font-weight:500;font-size:14px">⏪ Внесение задним числом</span>
   <label class="switch"><input type="checkbox" id="c-backfill" onchange="bfToggle(this.checked)"><span class="slider"></span></label></div>
  <div id="bf-row" style="display:none"><div class="field"><label class="label">Статус вносимой заявки</label>
   <select class="input" id="c-backfill-status"><option value="completed">Выполнена</option><option value="paid">Выполнена и оплачена</option></select></div></div>`:''}
@@ -807,7 +839,7 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро</b>':''}<br>${escapeHtml(o.desc)}</div>
    <div style="font-weight:700;color:var(--green);margin:6px 0">${money(total(o))}</div>
    ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
-   ${(isOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
+   ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
    ${o.worker===state.user&&o.status==='approved'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (я на адресе)</button>`:''}
    <button class="btn-sm btn-outline" style="margin-top:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button></div>`).join('')||'<div class="muted">Свободных заявок нет</div>'}
  </div>`:tab==='work'?`
@@ -818,7 +850,7 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
    <div style="margin:4px 0">${badges(o)}</div>
    <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
-   ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,true)}</div>`:''}
+   ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,canEditWorks(o)||isMyInwork(o))}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
    ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
@@ -831,8 +863,8 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
   <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>`).join('')||'<div class="muted">Пока пусто</div>'}
  </div>`}`}
 function setTasksTab(t){state.tasksTab=t;try{localStorage.setItem('crm_tasks_tab',t)}catch(e){}render()}
-function canShoppingCreate(){if(typeof can==='function')return isOwner()||can('shopping_create');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
-function canShoppingClose(){if(typeof can==='function')return isOwner()||can('shopping_close');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+function canShoppingCreate(){if(typeof can==='function')return uiOwner()||can('shopping_create');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
+function canShoppingClose(){if(typeof can==='function')return uiOwner()||can('shopping_close');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
 function shoppingForm(){
  if(!canShoppingCreate())return alert('Нет прав');
  const today=fmt(new Date());
@@ -1039,18 +1071,18 @@ ${secBarHtml([['service','Служебное'],['people','Люди'],['templates
  <div class="muted" style="margin-top:6px">Пусто — шапка документа без реквизитов (только «Смета №…»). Подписант по умолчанию: диагност или исполнитель заявки.</div>
  <button class="btn btn-outline" style="margin-top:8px" onclick="saveOrg()">💾 Сохранить реквизиты</button>
 </div>
-${isOwner()||canFinance()?`<div class="card"><div class="sec-title">☁️ Firebase Storage</div>
+${uiOwner()||canFinance()?`<div class="card"><div class="sec-title">☁️ Firebase Storage</div>
  ${window.__storWarn?`<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 10px;font-size:13px;color:#854d0e;margin-bottom:8px">⚠️ Storage включён, но бакет недоступен — фото идут в базу</div>`:''}
  <div class="tgl"><span style="font-weight:500;font-size:14px">Фото в Firebase Storage (бакет создан)</span>
   <label class="switch"><input type="checkbox" id="adm-stor" ${DB.storageEnabled?'checked':''} onchange="toggleStorage(this.checked)"><span class="slider"></span></label></div>
  <div class="muted" style="margin-top:6px">Включайте только после создания бакета в консоли Firebase. Выключено — фото хранятся в базе (коллекция photos).</div>
 </div>`:''}
-${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🧪 Тестовые заявки</div>
+${uiOwner()||canFinance()?`<div class="card"><div class="sec-title">🧪 Тестовые заявки</div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">Показывать тестовые заявки</span>
   <label class="switch"><input type="checkbox" ${DB.showTest?'checked':''} onchange="DB.showTest=this.checked;save();render()"><span class="slider"></span></label></div>
  <div class="muted" style="margin-top:6px">Выключено — тестовые скрыты из списков, календаря и задач (но всегда вне отчётов, финансов и CSV).</div>
 </div>`:''}
-${isOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Специализации</div>
+${uiOwner()||canFinance()?`<div class="card"><div class="sec-title">🛠 Специализации</div>
  ${(DB.specializations||[]).map((s,i)=>`<div class="info-row" id="spec-row-${i}">
    <span id="spec-name-${i}">${escapeHtml(s)} <span class="muted">используют: ${(DB.users||[]).filter(u=>((u.profile||{}).specs||[]).indexOf(s)>=0).length}</span></span>
    <span style="display:flex;gap:6px">
@@ -1100,7 +1132,7 @@ function renderFin(){
 }
 function setStatus(id,s){const o=byId(id);
  // смена статуса на «Отменена» — только через модалку с причиной (право orders_cancel)
- if(s==='canceled'){ if(!canCancel())return alert('Нет права orders_cancel'); cancelOrderModal(id); return; }
+ if(s==='canceled'){ if(!canCancel(o))return alert('Нет права orders_cancel'); cancelOrderModal(id); return; }
  if((s==='completed'||s==='paid')&&o.photoReport){
   orderHasPhotos(id,function(has){ if(!has){alert('⚠ По этой заявке нужен фотоотчет — сначала добавьте фото.');go('details',id);} else {logAction(o,'status_change',{from:o.status,to:s});o.status=s;if(s==='approved'&&!o.diagnostician)o.diagnostician=state.user;markOrder(o);save();render();} });
   return;
@@ -1224,7 +1256,7 @@ function viewPhoto(id,i){
  const _vo=byId(id);const canDel=(_vo&&['completed','paid'].indexOf(_vo.status)>=0)?false:((p&&p.id)?canDeletePhotoDoc(p):canDeletePhoto(_vo));
  const del=canDel?`<button class="btn btn-red" style="margin:12px 0" onclick="delPhoto(${id},${i})">🗑 Удалить фото</button>`:'';
  document.getElementById('app').innerHTML=`<div class="header dark"><button class="back" onclick="go('details',${id})">←</button><h1>Фото</h1></div><div style="text-align:center;padding:16px"><img src="${src}" style="max-width:100%;border-radius:12px">${del?'<div>'+del+'</div>':''}</div>`}
-function canDeletePhoto(o){if(typeof can==='function')return isOwner()||can('orders_delete');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+function canDeletePhoto(o){if(typeof can==='function')return uiOwner()||can('orders_delete');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
 function delPhoto(id,i){
  const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
  if(i<docs.length&&docs[i].id){
@@ -1241,21 +1273,21 @@ function delPhoto(id,i){
   const o=byId(id);o.photos.splice(oi,1);markOrder(o);save();go('details',id);
  }
 }
-function canShopMats(o){if(typeof can==='function')return isOwner()||can('shopping')||can('orders_edit')||(o.worker&&o.worker===state.user);return true}
+function canShopMats(o){if(typeof can==='function')return uiOwner()||can('shopping')||can('orders_edit')||isMyInwork(o);return true}
 function matAct(id,i,st){const o=byId(id);if(!canShopMats(o))return alert('Нет права shopping');o.materials[i].status=st;
 if(st==='bought'&&o.materials[i].factPrice==null){var fp=prompt('Фактическая цена закупки ₽ (пусто = смета):','');if(fp!=='')o.materials[i].factPrice=+fp||0;}
  if(st==='issue'&&!['completed','paid'].includes(o.status)){o.status='waiting';alert('Материал отмечен «Не найден». Заявка → «Ожидание материала». Требуется решение админа.')}
  else if(st==='issue'){alert('Материал отмечен «Не найден». Заявка уже закрыта — статус не изменён, требуется решение админа.')}
  markOrder(o);save();render()}
 function isOrderEditor(o){
- if(typeof isOwner==='function'&&isOwner())return true;
+ if(typeof isOwner==='function'&&uiOwner())return true;
  if(typeof can!=='function')return ['admin','operator','manager'].includes(state.role);
  return can('orders_edit')||(o&&o.by&&o.by===state.user);
 }
-function addExtra(id){if(!isOrderEditor(byId(id)))return alert('Нет права orders_edit');
+function addExtra(id){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');
  const n=prompt('Название доп. работы:');if(!n)return;const p=+prompt('Цена доп. работы ₽:','0')||0;
  var o=byId(id);o.extras.push({name:n,price:p});logAction(o,'edit',{fields:['доп. работа: '+n+' ('+money(p)+')']});markOrder(o);save();render()}
-function delExtra(id,i){if(!isOrderEditor(byId(id)))return alert('Нет права orders_edit');if(confirm('Удалить доп. работу?')){var o=byId(id);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
+function delExtra(id,i){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');if(confirm('Удалить доп. работу?')){var o=byId(id);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  if(!canShopMats(byId(id)))return alert('Нет права orders_edit');
@@ -1283,7 +1315,7 @@ function findConflicts(worker,date,t1,t2,skipId){
   return DB.orders.filter(o=>o.id!==skipId&&o.worker===worker&&o.date===date&&['new','inspection','approved','in_progress','inwork','waiting','postponed'].includes(o.status))
   .filter(o=>{const s2=toMin(o.t1),e2=toMin(o.t2);return s2!=null&&e2!=null&&s1<e2&&s2<e1;});
 }
-function canOverrideConflict(){if(typeof can==='function')return isOwner()||can('orders_edit');return (typeof isOwner==='function'&&isOwner())||['admin'].includes(state.role)}
+function canOverrideConflict(){if(typeof can==='function')return uiOwner()||can('orders_edit');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
 // активные сотрудники для селектов исполнителя (из базы, без уволенных)
 function getUserName(u){
 if(!u)return '—';
@@ -1402,7 +1434,7 @@ function cStageRender(){
 }
 function cStageDue(i,v){state.cStages[i].dueMode=v;cStageRender()}
 function toggleStorage(on){
- if(typeof isOwner==='function'&&!isOwner()&&typeof can==='function'&&!can('finance_edit')){render();return alert('Нет прав')}
+ if(typeof isOwner==='function'&&!uiOwner()&&typeof can==='function'&&!can('finance_edit')){render();return alert('Нет прав')}
  DB.storageEnabled=!!on;
  if(typeof STOR_CHECKED!=='undefined'){STOR_CHECKED=false;STOR_OK=false}
  save();render();
@@ -1410,7 +1442,7 @@ function toggleStorage(on){
 }
 function setTestFlag(id,v){const o=byId(id);o.test=!!v;markOrder(o);save();render()}
 // === справочник специализаций (settings.specializations) ===
-function specCanEdit(){return isOwner()||canFinance()}
+function specCanEdit(){return uiOwner()||canFinance()}
 function specAdd(){
  if(!specCanEdit())return alert('Нет прав');
  const v=(document.getElementById('spec-new').value||'').trim();
@@ -1461,7 +1493,7 @@ function restoreOrder(id){
 }
 function cancelOrderModal(id){
  const o=byId(id);
- if(!canCancel())return alert('Нет права orders_cancel');
+ if(!canCancel(o))return alert('Нет права orders_cancel');
  if(['completed','paid'].includes(o.status))return alert('Закрытую заявку отменить нельзя');
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
@@ -1474,7 +1506,7 @@ function cancelOrderModal(id){
 }
  function doCancelOrder(id){closeActiveOrderNotification(id);
   const o=byId(id);
-  if(!canCancel())return alert('Нет права orders_cancel');
+  if(!canCancel(o))return alert('Нет права orders_cancel');
   const reason=(document.getElementById('cancel-reason').value||'').trim();
   if(!reason)return alert('Укажите причину отмены');
   o.status='canceled';o.cancelReason=reason;o.cancelBy=state.user;o.cancelTs=Date.now();
@@ -1490,7 +1522,7 @@ function cancelOrderModal(id){
 // === ПОЛНОЕ РЕДАКТИРОВАНИЕ ЗАЯВКИ ===
 // Доступ: владелец; completed/paid — только владелец; иначе orders_edit или создатель заявки
 function canEditOrder(o){
- if(typeof isOwner==='function'&&isOwner())return true;
+ if(typeof isOwner==='function'&&uiOwner())return true;
  if(o.status==='completed'||o.status==='paid')return false;
  return isOrderEditor(o);
 }
@@ -1524,7 +1556,7 @@ function editOrderModal(id){
     <select class="input" id="e-worker" style="margin-bottom:6px"><option value="">— без исполнителя —</option>
      ${activeWorkers().map(u=>`<option ${o.worker===getUserName(u)?'selected':''}>${escapeHtml(getUserName(u))}</option>`).join('')}</select>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px"><input type="checkbox" id="e-photo" ${o.photoReport?'checked':''}> 📸 Требовать фотоотчёт</label>
-    ${(typeof isOwner==='function'&&isOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
+    ${(typeof isOwner==='function'&&uiOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
     <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
     <button class="btn btn-blue" onclick="doEditOrder(${id})">💾 Сохранить</button></div>
    </div></div>`);
@@ -1655,6 +1687,8 @@ function declineAssignment(id){
 function takeConfirm(id){
  const o=byId(id);if(!o)return;
  if(!showTakeBtn(o))return alert('Нет прав на взятие заявки');
+ // B2: гонка снапшотов — заядку могли взять раньше, чем успела перерисоваться карточка
+ if(o.worker&&o.worker!==state.user&&!uiOwner())return alert('Заявка уже взята в работу: '+o.worker);
  o.status='inwork';
  if(!o.worker)o.worker=state.user;
  o.takenBy=state.user;
@@ -1674,7 +1708,10 @@ function takeConfirm(id){
  );
  logAction(o,'take',{by:state.user});
 showActiveOrderNotification(o);
- markOrder(o);orderSave(o);saveSettings();
+ // B2: save() = localStorage (crm_db) + документ заявки через window.save/state.__mutOrder.
+ // Раньше стояло orderSave(o) без save(): в облако взятие уходило, а локальная база — нет,
+ // поэтому после F5 кнопка «Взять» возвращалась. saveSettings() при взятии не нужен.
+ markOrder(o);save();
  closeModal();
  go('details',id);
 }
@@ -1828,6 +1865,8 @@ function reopenSchemeTray(){
 // === КНОПКА ЭТАПА: отметить готовым (только для этапов 1-5) ===
 function stageMarkDone(id,stageId){
  const o=byId(id);if(!o)return;
+ // матрица: отмечать этапы может исполнитель СВОЕЙ inwork-заявки или правщик заявок (orders_edit/владелец)
+ if(!isMyInwork(o)&&!(typeof canEditWorks==='function'&&canEditWorks(o)))return alert('Отмечать этапы может только исполнитель заявки');
  const s=(o.stages||[]).find(x=>x.id===stageId);
  if(!s||s.autoOnly)return alert('Этот этап отмечается из карточки');
  s.done=true;s.ts_done=Date.now();s.by=state.user;
@@ -2127,7 +2166,7 @@ ${secBarHtml([['cprofile','Профиль'],['ccomplaints','Рекламации
 <div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
 <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
 ${c.notes?'<div style="margin-top:10px"><b>Заметки:</b><div class="muted">'+escapeHtml(c.notes)+'</div></div>':''}
-<div class="row2" style="margin-top:10px"><button class="btn-sm btn-outline" onclick="editClientModal('${c.id}')">✏️ Редактировать</button><button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button></div>
+<div class="row2" style="margin-top:10px">${canEditClient()?`<button class="btn-sm btn-outline" onclick="editClientModal('${c.id}')">✏️ Редактировать</button>`:''}${canCreateOrder()?`<button class="btn-sm btn-green" onclick="createOrderForClient('${c.id}')">＋ Новый заказ</button>`:''}</div>
 </div></div>
 <div class="sec" id="sec-ccomplaints"><div class="card"><div class="sec-title">📜 Рекламации (${(c.complaints||[]).length})</div>
 ${(c.complaints||[]).length?c.complaints.map((comp,i)=>'<div class="mat" style="border-left:4px solid var(--red)"><b>'+(comp.date?comp.date.slice(8)+'.'+comp.date.slice(5,7):'—')+' • '+escapeHtml(comp.title||'Рекламация')+'</b><div class="muted">'+escapeHtml(comp.description||'')+'</div><button class="btn-sm btn-red" style="margin-top:4px" onclick="deleteComplaint(\''+c.id+'\','+i+')"> Удалить</button></div>').join(''):'<div class="muted">Рекламаций нет</div>'}
@@ -2271,7 +2310,7 @@ function worksAddManual(){var g=function(x){return (document.getElementById(x)||
 function worksDelNew(i){state.newWorks.splice(i,1);worksRenderCreate();}
 function worksRenderCreate(){var el=document.getElementById('newworks');if(!el)return;var w=state.newWorks||[];el.innerHTML=w.map(function(x,i){return '<div class="info-row"><span>'+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><span style="display:flex;gap:8px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b><span style="cursor:pointer;color:var(--red)" onclick="worksDelNew('+i+')">✕</span></span></div>';}).join('')+(w.length?'<div class="total"><span>Сумма сметы</span><span style="color:var(--green)">'+money(w.filter(function(x){return !x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0))+'</span></div>':'');}
 function worksCard(o){
-var canEd=(typeof isOrderEditor==='function'&&isOrderEditor(o))||(o.worker&&o.worker===state.user&&isInwork(o));
+var canEd=(typeof canEditWorks==='function')?canEditWorks(o):((typeof isOrderEditor==='function'&&isOrderEditor(o))||(o.worker&&o.worker===state.user&&isInwork(o)));
 var w=o.works||[];
 if(!w.length&&!canEd)return '';
 var html='<div class="card"><div class="sec-title">🔧 Работы (смета/факт)</div>';
@@ -2283,7 +2322,7 @@ return html+'</div>';
 function worksDone(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.done=!x.done;x.ts=x.done?Date.now():null;markOrder(o);save();render();}
 function worksSkip(id,i){var o=byId(id);if(!o)return;var x=(o.works||[])[i];if(!x)return;x.skipped=!x.skipped;markOrder(o);save();render();}
 function worksDel(id,i){var o=byId(id);if(!o)return;if(!confirm('Удалить строку сметы?'))return;o.works.splice(i,1);markOrder(o);save();render();}
-function worksAddTo(id){var o=byId(id);if(!o)return;var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('wa-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('wa-qty')||1;var p=+g('wa-price')||0;var u=g('wa-unit')||'pcs';worksMemory(ti,p,u);o.works=o.works||[];o.works.push({id:'w'+Date.now(),title:ti,qty:q,price:p,unit:u,done:false,skipped:false});markOrder(o);save();render();}
+function worksAddTo(id){var o=byId(id);if(!o)return;if(!canEditWorks(o))return alert('Нет права orders_edit');var g=function(x){return (document.getElementById(x)||{value:''}).value;};var ti=g('wa-title').trim();if(!ti)return alert('Укажите наименование');var q=+g('wa-qty')||1;var p=+g('wa-price')||0;var u=g('wa-unit')||'pcs';worksMemory(ti,p,u);o.works=o.works||[];o.works.push({id:'w'+Date.now(),title:ti,qty:q,price:p,unit:u,done:false,skipped:false});markOrder(o);save();render();}
 function worksSummary(o){
 var w=o.works||[];
 if(!w.length)return '<div class="info-row"><span>Основная работа</span><b>'+money(o.price)+'</b></div>';
@@ -2425,7 +2464,7 @@ function secSpy(force){
  },{passive:true});
 })();
 // === ПАКЕТ C: документы «Смета» и «Акт выполненных работ» (печать/шаринг/скачивание) ===
-function docPerm(o){return isOwner()||o.diagnostician===state.user||o.worker===state.user||o.by===state.user;}
+function docPerm(o){return uiOwner()||o.diagnostician===state.user||o.worker===state.user||o.by===state.user;}
 function docOrg(){var s=(DB.settings||{}).org||{};var has=(s.name&&String(s.name).trim())||(s.inn&&String(s.inn).trim())||(s.phone&&String(s.phone).trim());return has?s:{}}
 function docHeadHtml(title,o){
  var org=docOrg();
@@ -2560,6 +2599,10 @@ if(state.role){var _oo=sessionStorage.getItem('crm_open_order');if(_oo){sessionS
  const S={orders:renderOrders,clients:renderClients,clientDetail:()=>renderClientDetail(state.orderId),overdue:renderOverdue,details:()=>renderDetails(state.orderId),create:renderCreate,calendar:renderCalendar,tasks:renderTasks,shopping:renderShopping,reports:renderReports,admin:renderAdmin,profile:renderProfile};
  let banner='';
  if(typeof offlineBanner==='function')banner=offlineBanner();
+ // баннер честной симуляции роли: остаётся видимым владельцу + кнопка возврата
+ if(isSim())banner+='<div style="background:#7c3aed;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;font-size:13px">🎭 Симуляция роли: '+escapeHtml(typeof TESTROLE!=='undefined'&&TESTROLE?(typeof roleName==='function'?roleName(TESTROLE):TESTROLE):'')+'<button class="btn-sm" style="background:#fff;color:#7c3aed;flex:none" onclick="exitSim()">↩ Вернуться в владельца</button></div>';
+ // guard экрана «Админ»: прямой go('admin') без владельческих/админских прав запрещён
+ if(state.screen==='admin'&&typeof can==='function'&&!(uiOwner()||can('staff_manage')||can('roles_manage')||can('admin_templates')||can('finance_edit')))state.screen='orders';
   app.innerHTML=banner+(S[state.screen]||renderOrders)();
 if(state.screen==='create'&&typeof worksRenderCreate==='function')worksRenderCreate();
  // A4: трей — единственный контейнер #scheme-tray, очищается перед каждым рендером
@@ -2572,7 +2615,7 @@ if(state.screen==='create'&&typeof worksRenderCreate==='function')worksRenderCre
     document.getElementById('tray-body').innerHTML=
      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-left:28px">'+
      '<b style="font-size:14px">Вы выполняете заказ №'+so.id+'</b></div>'+
-     stageTimeline(so,true);
+     stageTimeline(so,(typeof canEditWorks==='function')?(canEditWorks(so)||isMyInwork(so)):true);
     trayEl.classList.add('open');
     trayHandle.style.display='none';
    } else {
