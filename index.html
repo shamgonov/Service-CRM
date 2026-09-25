@@ -442,8 +442,11 @@ function stageDel(id,i){
  st.splice(i,1);markOrder(o);save();render();
 }
 // F3: возврат завершённого этапа в работу (снимает отметку «Готово»).
+// В закрытой (completed/paid) заявке возврат этапа недоступен исполнителю/оператору —
+// только владельцу (вне симуляции), как и в canEditOrder: иначе можно «переоткрыть» закрытую работу.
 function stageUndone(id,i){
  const o=byId(id);if(!canEditRoute(o))return;
+ if((o.status==='completed'||o.status==='paid')&&!uiOwner())return alert('В закрытой заявке вернуть этап может только владелец');
  var s=(o.stages||[])[i];if(!s||!s.done)return;
  if(!confirm('Вернуть этап «'+(s.title||STAGE_T[s.type]||s.type)+'» в работу?'))return;
  s.done=false;s.ts_done=null;
