@@ -195,7 +195,10 @@ function isMyInwork(o){
 // В симуляции роли совпадает и строка «Владелец».
 function isMeName(nm){return !!nm&&(nm===state.user||(isSim()&&nm==='Владелец'));}
 // доп-строка сметы (допродажа) по спеке: право orders_edit ИЛИ исполнитель своей inwork
-function canEditWorks(o){return (typeof isOrderEditor==='function'&&isOrderEditor(o))||isMyInwork(o);}
+// F1: исполнитель своей inwork-заявки правит работы/материалы/закупки/доп-работы.
+// isMyInwork покрывает и legacy in_progress, плюс — симуляцию роли; явное условие ниже
+// фиксирует контракт «status==='inwork' && worker===state.user» независимо от isMyInwork.
+function canEditWorks(o){return (typeof isOrderEditor==='function'&&isOrderEditor(o))||isMyInwork(o)||(!!o&&o.status==='inwork'&&o.worker===state.user);}
 // контрагенты: правка = orders_edit/владелец; новый заказ от клиента = orders_create/владелец
 function canEditClient(){return uiOwner()||((typeof can==='function')&&can('orders_edit'));}
 function canCreateOrder(){return uiOwner()||((typeof can==='function')&&can('orders_create'));}
@@ -252,7 +255,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
+const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -269,7 +272,7 @@ function histLine(h){
  else if(h.action==='status_change')txt=(ST[d.from]&&ST[d.from].t||d.from||'')+' → '+(ST[d.to]&&ST[d.to].t||d.to||'');
  else if(h.action==='payment_received')txt=money(d.sum)+' • '+(PAY_T[d.type]||d.type||'')+' • '+(PAY_M[d.method]||d.method||'')+(d.note?' • '+d.note:'');
  else if(h.action==='payment_materials')txt=money(d.sum);
- else if(h.action==='stage_add'||h.action==='stage_complete')txt='«'+(d.stageTitle||'')+'»';
+ else if(h.action==='stage_add'||h.action==='stage_complete'||h.action==='stage_reopen')txt='«'+(d.stageTitle||'')+'»';
  else if(h.action==='cancel')txt='причина: '+(d.reason||'—');
  else if(h.action==='photo_add')txt=(d.count||1)+' шт.';
  else if(h.action==='edit')txt=(d.fields||[]).join(', ');
@@ -388,7 +391,9 @@ function stageTimeline(o,editable){
    '<div class="mat-head"><b>'+icon+' '+(editable?'<span style="cursor:pointer;border-bottom:1px dashed #94a3b8" onclick="stageRename('+o.id+','+i+')">'+escapeHtml(s.title||STAGE_T[s.type]||s.type)+' ✏️</span>':escapeHtml(s.title||STAGE_T[s.type]||s.type))+'</b>'+
    (editable?'<span style="display:flex;gap:4px">'+(i>0?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',-1)">↑</span>':'')+
     (i<st.length-1?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',1)">↓</span>':'')+
-    '<span style="cursor:pointer;color:var(--red)" onclick="stageDel('+o.id+','+i+')">✕</span></span>':'')+'</div>'+
+    (s.done
+      ?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" title="Вернуть завершённый этап в работу (удаление готовых этапов запрещено)" onclick="stageUndone('+o.id+','+i+')">↩ Вернуть</span>'
+      :'<span style="cursor:pointer;color:var(--red)" title="Удалить этап" onclick="stageDel('+o.id+','+i+')">✕</span>')+'</span>':'')+'</div>'+
    '<div class="muted">Срок: '+escapeHtml(stageDueLabel(s))+(s.by?' • исполнитель: '+escapeHtml(s.by):'')+'</div>'+
    (s.ts_done?'<div class="muted">✅ Готово: '+new Date(s.ts_done).toLocaleString()+'</div>':'')+
    (editable&&!s.done&&(i===0||st[i-1].done)?`<div style="display:flex;gap:6px;margin-top:6px">
@@ -425,7 +430,26 @@ function stageDone(id,i){
  if(typeof pushEvent==='function'&&nxt&&nxt.by)pushEvent('stage','✅ Этап «'+escapeHtml(s.title)+'» готов — заявка №'+o.id,'Следующий этап: '+escapeHtml(nxt.title||'')+' — для '+escapeHtml(nxt.by),o.id,true);
 }
 function stageMove(id,i,d){const o=byId(id);if(!canEditRoute(o))return;const st=o.stages;const j=i+d;if(j<0||j>=st.length)return;const t=st[i];st[i]=st[j];st[j]=t;markOrder(o);save();render()}
-function stageDel(id,i){const o=byId(id);if(!canEditRoute(o))return;if(!confirm('Удалить этап?'))return;o.stages.splice(i,1);markOrder(o);save();render()}
+function stageDel(id,i){
+ const o=byId(id);if(!canEditRoute(o))return;
+ const st=o.stages||[];
+ // F2: схема этапов не может быть обезглавлена — последний этап удалять нельзя.
+ if(st.length<=1){alert('Нельзя удалить единственный этап — заявка должна содержать хотя бы один этап.');return}
+ var s=st[i];if(!s)return;
+ // завершённые этапы — часть истории работ, их возвращают в работу, а не удаляют.
+ if(s.done){alert('Завершённый этап удалить нельзя. Нажмите «↩ Вернуть», чтобы вернуть его в работу.');return}
+ if(!confirm('Удалить этап?'))return;
+ st.splice(i,1);markOrder(o);save();render();
+}
+// F3: возврат завершённого этапа в работу (снимает отметку «Готово»).
+function stageUndone(id,i){
+ const o=byId(id);if(!canEditRoute(o))return;
+ var s=(o.stages||[])[i];if(!s||!s.done)return;
+ if(!confirm('Вернуть этап «'+(s.title||STAGE_T[s.type]||s.type)+'» в работу?'))return;
+ s.done=false;s.ts_done=null;
+ logAction(o,'stage_reopen',{stageTitle:s.title});
+ markOrder(o);save();render();
+}
 function stageAdd(id){
  const o=byId(id);if(!canEditRoute(o))return;
  const t=prompt('Название этапа:');if(!t)return;
@@ -2637,7 +2661,11 @@ function docWorksRows(w){return w.map(function(x,i){return '<tr><td>'+(i+1)+'</t
 function docWorksRowsDone(o){return (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).map(function(x,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(x.title)+'</td><td class="r">'+(+x.qty||1)+' '+unitLabel(x.unit)+'</td><td class="r">'+money(+x.price||0)+'</td><td class="r">'+money((+x.price||0)*(+x.qty||1))+'</td></tr>';}).join('');}
 function docMatsRowsPlan(o){return (o.materials||[]).map(function(m,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(m.name)+'</td><td class="r">'+(+m.qty||0)+' '+unitLabel(m.munit)+'</td><td class="r">'+money(+m.price||0)+'</td><td class="r">'+money((+m.price||0)*(+m.qty||0))+'</td></tr>';}).join('');}
 function docMatsRowsFact(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).map(function(m,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(m.name)+'</td><td class="r">'+(+m.qty||0)+' '+unitLabel(m.munit)+'</td><td class="r">'+money(m.factPrice!=null?+m.factPrice:+m.price||0)+'</td><td class="r">'+money((m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0))+'</td></tr>';}).join('');}
-function docActTotal(o){return (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0)+(o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0);},0);}
+// Доп. работы (extras) обязательны в документах: они уже входят в total()/totalOf(),
+// иначе ИТОГО сметы не сходится с суммой строк, а акт меньше оплаты/остатка в карточке.
+function docExtrasRows(o){return (o.extras||[]).map(function(x,i){return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(x.name||'доп. работа')+'</td><td class="r">'+(+x.qty||1)+' '+unitLabel(x.unit)+'</td><td class="r">'+money(+x.price||0)+'</td><td class="r">'+money((+x.price||0)*(+x.qty||1))+'</td></tr>';}).join('');}
+function docExtrasTotal(o){return (o.extras||[]).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0);}
+function docActTotal(o){return (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).reduce(function(s,x){return s+(+x.price||0)*(+x.qty||1);},0)+(o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0);},0)+docExtrasTotal(o);}
 function docSignHtml(o,extra){
  var org=docOrg(), signer=(org.signer&&String(org.signer).trim())||o.diagnostician||o.worker||'';
  return '<div class="doc-sign"><div>Исполнитель: '+escapeHtml(signer)+'</div><div>Заказчик: ____________</div>'+(extra||'')+'</div>';
@@ -2652,12 +2680,14 @@ function docEstimate(id){const o=byId(id);if(!o)return;state.docKind='estimate';
  const w=(o.works||[]).filter(function(x){return !x.skipped;});
  var inner='<div class="doc-sub">Работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docWorksRows(w)+'</table>'+
  ((o.materials||[]).length?'<div class="doc-sub">Материалы (предварительно)</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docMatsRowsPlan(o)+'</table>':'')+
+ ((o.extras||[]).length?'<div class="doc-sub">Доп. работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docExtrasRows(o)+'</table>':'')+
  '<div class="doc-total"><span>ИТОГО</span><span>'+money(total(o))+'</span></div>'+
  docSignHtml(o);
  docShell(o,inner);}
 function docAct(id){const o=byId(id);if(!o)return;if(o.status!=='completed'&&o.status!=='paid')return;state.docKind='act';state.docId=o.id;
  var inner='<div class="doc-sub">Выполненные работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docWorksRowsDone(o)+'</table>'+
  ((o.materials||[]).filter(function(m){return m.status==='bought';}).length?'<div class="doc-sub">Материалы (факт)</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docMatsRowsFact(o)+'</table>':'')+
+ ((o.extras||[]).length?'<div class="doc-sub">Доп. работы</div><table class="doc-tbl"><tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Цена ₽/ед.</th><th>Сумма</th></tr>'+docExtrasRows(o)+'</table>':'')+
  '<div class="doc-total"><span>ИТОГО</span><span>'+money(docActTotal(o))+'</span></div>'+
  (docCompletedTs(o)?'<div style="font-size:12px;margin-top:8px">Дата выполнения: '+new Date(docCompletedTs(o)).toLocaleDateString('ru-RU')+'</div>':'')+
  docSignHtml(o,'<div>Работы принял: ____________</div>');
@@ -2674,6 +2704,7 @@ function docText(){
   (o.works||[]).filter(function(x){return x.done&&!x.skipped;}).forEach(function(x){L.push(x.title+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});
   var fb=(o.materials||[]).filter(function(m){return m.status==='bought';});
   if(fb.length){L.push('Материалы (факт):');fb.forEach(function(m){L.push(m.name+' — '+(+m.qty||0)+' '+unitLabel(m.munit)+' × '+money(m.factPrice!=null?+m.factPrice:+m.price||0)+' = '+money((m.factPrice!=null?+m.factPrice:(+m.price||0))*(+m.qty||0)));});}
+  if((o.extras||[]).length){L.push('Доп. работы:');(o.extras||[]).forEach(function(x){L.push((x.name||'доп. работа')+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});}
   L.push('ИТОГО: '+money(docActTotal(o)));
   var ct=docCompletedTs(o);if(ct)L.push('Дата выполнения: '+new Date(ct).toLocaleDateString('ru-RU'));
  }else{
@@ -2681,6 +2712,7 @@ function docText(){
   (o.works||[]).filter(function(x){return !x.skipped;}).forEach(function(x){L.push(x.title+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});
   var pm=o.materials||[];
   if(pm.length){L.push('Материалы (предварительно):');pm.forEach(function(m){L.push(m.name+' — '+(+m.qty||0)+' '+unitLabel(m.munit)+' × '+money(+m.price||0)+' = '+money((+m.price||0)*(+m.qty||0)));});}
+  if((o.extras||[]).length){L.push('Доп. работы:');(o.extras||[]).forEach(function(x){L.push((x.name||'доп. работа')+' — '+(+x.qty||1)+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+' = '+money((+x.price||0)*(+x.qty||1)));});}
   L.push('ИТОГО: '+money(total(o)));
  }
  return L.join('\n');
