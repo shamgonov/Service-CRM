@@ -29,7 +29,7 @@ const logSpy=[];
 const logAction=(o,a,d)=>{logSpy.push({action:a,details:d});};
 let saveCalls=0;
 const markOrder=o=>{o.updatedTs=1;}, save=()=>{saveCalls++;}, render=()=>{};
-for(const n of ['isInwork','isMyInwork','canEditWorks','canEditRoute','orderStages','stageDueLabel','stageTimeline','stageDel','stageUndone']){
+for(const n of ['isInwork','isMeName','isMyInwork','canEditWorks','canEditRoute','orderStages','stageDueLabel','stageTimeline','stageDel','stageUndone']){
  const f=grab(n);
  if(!f){console.log('MISSING',n);fail=1;continue;}
  try{eval(f);}catch(e){console.log('EVAL FAIL',n,e.message);fail=1;}

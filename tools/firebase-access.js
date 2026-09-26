@@ -356,7 +356,10 @@ function applyEventBadges(){
  var keys=navKeysForRole(state&&state.role);
  var items=nav.querySelectorAll('.nav-item');
  Array.prototype.forEach.call(items,function(el,i){
-  var n=counts[keys[i]]||0;
+  // ключ пункта берём из разметки (data-nav): navKeysForRole может короче/иначе,
+  // чем фактический NAVS_BASE+profile — по индексу бейджи вставали не на те пункты
+  var k=el.getAttribute('data-nav')||keys[i];
+  var n=counts[k]||0;
   if(n){ el.style.position='relative'; el.insertAdjacentHTML('beforeend',eventBadgeHtml(n)); }
  });
 }
@@ -1197,6 +1200,9 @@ function startMain(){
  try{ if(navigator.onLine&&queueCount()&&typeof setTimeout==='function')setTimeout(function(){ OFFLINE=false; flushQueue(); },1200); }catch(e){}
  // B3: уведомление о просрочках при входе (не чаще 1 раза в день)
  try{ if(typeof checkOverdueNotification==='function')setTimeout(checkOverdueNotification,3000); }catch(e){}
+ // B1: переодическая сверка — заявка могла просрочиться, пока вкладка открыта.
+ // Суточный лимит crm_overdue_notif (localStorage) не даст спамить: после 1-го раза за день молчим.
+ try{ if(typeof checkOverdueNotification==='function'&&typeof setInterval==='function')setInterval(checkOverdueNotification,60000); }catch(e){}
 }
 // Единая PIN-проверка для ВСЕХ (включая владельца): профиль читается всегда,
 // гейт показывается ДО панели владельца и ДО тест-карточек ролей.
