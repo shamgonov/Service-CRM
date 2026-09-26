@@ -38,7 +38,6 @@ let saveCalls=0, renderCalls=0;
 const markOrder=o=>{o.updatedTs=1;}, save=()=>{saveCalls++;}, render=()=>{renderCalls++;};
 const isInwork=o=>!!o&&(o.status==='inwork'||o.status==='in_progress');
 const isMyInwork=o=>!!o&&isInwork(o)&&o.worker===state.user;
-const isMeName=nm=>!!nm&&nm===state.user;
 const normalizeOrder=o=>{['works','extras','materials','payments','stages','history'].forEach(k=>{if(!Array.isArray(o[k]))o[k]=[];});};
 for(const n of ['canEditWorks','canShopMats','extraEdit','extraSave','matEdit','matSave','matDel','toggleStages','delExtra']){
  const f=grab(n);
