@@ -860,7 +860,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
   <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span>
-   <span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></div>
+   <span style="display:flex;align-items:center;gap:6px">${canShopMats(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="matEdit(${o.id},${i})">✏️</span>${m.status!=='bought'?`<span class="muted" style="cursor:pointer" title="Удалить" onclick="matDel(${o.id},${i})">✕</span>`:''}`:''}<span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></span></div>
    <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
   ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f8faff;border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
   ${(['todo'].includes(m.status)||['urgent','critical'].includes(s.k))&&canShopMats(o)?`
@@ -885,7 +885,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 </div></div>
 <div class="sec" id="sec-money"><div class="card"><div class="sec-title">💰 Оплата и доп. работы</div>
  ${worksSummary(o)}
- ${(o.extras||[]).map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${(+e.qty||1)!=1?' × '+(+e.qty||1):''} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money((+e.price||0)*(+e.qty||1))}</b></div>`).join('')}
+ ${(o.extras||[]).map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${(+e.qty||1)!=1?' × '+(+e.qty||1):''} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="extraEdit(${o.id},${i})">✏️</span><span class="muted" style="cursor:pointer" title="Удалить" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money((+e.price||0)*(+e.qty||1))}</b></div>`).join('')}
  <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
  <div class="row2" style="margin-top:8px">
   ${canEditWorks(o)?`<button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>`:''}
@@ -895,6 +895,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${hintBarHtml(o)}
   ${orderType(o)==='manufacture'&&orderStages(o).length?`<div class="sec-title">🔧 Этапы работ</div>${stageTimeline(o,canEditWorks(o)||isMyInwork(o))}`:''}
+  ${orderType(o)!=='manufacture'&&(o.stages||[]).length?`<div class="sec-title">🧩 Этапы схемы</div>${state.stagesOpen===o.id?stageTimeline(o,(canEditWorks(o)||isMyInwork(o))&&!['completed','paid'].includes(o.status)):`<button class="btn-sm btn-outline" onclick="toggleStages(${o.id})">🧩 Показать этапы (${(o.stages||[]).filter(s=>s.done).length}/${(o.stages||[]).length})</button>`}`:''}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
   ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
@@ -1472,6 +1473,70 @@ function addExtra(id){if(!canEditWorks(byId(id)))return alert('Нет права
  var o=byId(id);if(typeof normalizeOrder==='function')normalizeOrder(o);
  o.extras.push({name:n,price:p,qty:q});logAction(o,'edit',{fields:['доп. работа: '+n+(q!=1?' ×'+q:'')+' ('+money(p*q)+')']});markOrder(o);save();render()}
 function delExtra(id,i){if(!canEditWorks(byId(id)))return alert('Нет права orders_edit');if(confirm('Удалить доп. работу?')){var o=byId(id);if(typeof normalizeOrder==='function')normalizeOrder(o);var nm=o.extras[i]&&o.extras[i].name;o.extras.splice(i,1);logAction(o,'edit',{fields:['удалена доп. работа: '+(nm||'')]});markOrder(o);save();render()}}
+// Read-only строки extras/материалов в карточке: правка — модалкой (не prompt),
+// сумма пересчитывается total()/totalOf() автоматически при сохранении.
+function extraEdit(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canEditWorks(o))return alert('Нет права orders_edit');
+ if(typeof normalizeOrder==='function')normalizeOrder(o);
+ var e=(o.extras||[])[i];if(!e)return;
+ openModal('<div class="card"><div class="sec-title">✏️ Доп. работа</div>'+
+  '<input class="input" id="ex-name" value="'+escapeHtml(e.name||'')+'" placeholder="Название *" style="margin-bottom:6px">'+
+  '<div class="row2" style="margin-bottom:6px"><input class="input" id="ex-qty" type="number" min="1" step="0.5" value="'+(+e.qty||1)+'" placeholder="Кол-во">'+unitSel('ex-unit',e.unit||'pcs')+'</div>'+
+  '<input class="input" id="ex-price" type="number" min="0" value="'+(+e.price||0)+'" placeholder="Цена ₽/ед." style="margin-bottom:8px">'+
+  '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn-sm btn-blue" onclick="extraSave('+o.id+','+i+')">💾 Сохранить</button></div></div>');
+}
+function extraSave(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canEditWorks(o))return alert('Нет права orders_edit');
+ var g=function(x){return (document.getElementById(x)||{value:''}).value;};
+ var nm=g('ex-name').trim();if(!nm)return alert('Укажите наименование');
+ var q=+g('ex-qty');if(!(q>0))q=1;
+ var p=+g('ex-price')||0;
+ if(typeof normalizeOrder==='function')normalizeOrder(o);
+ var old=(o.extras||[])[i];if(!old)return;
+ o.extras[i]={name:nm,price:p,qty:q,unit:g('ex-unit')||'pcs'};
+ logAction(o,'edit',{fields:['доп. работа изменена: '+(old.name||'')+' → '+nm+' ('+money(p*q)+')']});
+ markOrder(o);save();closeModal();render();
+}
+function matEdit(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canShopMats(o))return alert('Нет права shopping');
+ var m=(o.materials||[])[i];if(!m)return;
+ openModal('<div class="card"><div class="sec-title">✏️ Материал</div>'+
+  '<input class="input" id="me-name" value="'+escapeHtml(m.name||'')+'" placeholder="Наименование *" style="margin-bottom:6px">'+
+  '<div class="row2" style="margin-bottom:6px"><input class="input" id="me-qty" value="'+escapeHtml(m.qty!=null?m.qty:'1')+'" placeholder="Кол-во">'+
+  '<select class="input" id="me-munit" style="max-width:110px">'+Object.keys(UNITS).map(function(k){return '<option value="'+k+'"'+((m.munit||'pcs')===k?' selected':'')+'>'+UNITS[k]+'</option>';}).join('')+'</select></div>'+
+  '<input class="input" id="me-price" type="number" min="0" value="'+(+m.price||0)+'" placeholder="Цена ₽/ед." style="margin-bottom:6px">'+
+  '<select class="input" id="me-buyer" style="margin-bottom:6px">'+Object.keys(BUYER).map(function(k){return '<option value="'+k+'"'+((m.buyer||'worker')===k?' selected':'')+'>'+BUYER[k]+'</option>';}).join('')+'</select>'+
+  '<input class="input" id="me-where" value="'+escapeHtml(m.where||'')+'" placeholder="Где купить / забрать" style="margin-bottom:8px">'+
+  '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn-sm btn-blue" onclick="matSave('+o.id+','+i+')">💾 Сохранить</button></div></div>');
+}
+function matSave(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canShopMats(o))return alert('Нет права shopping');
+ var g=function(x){return (document.getElementById(x)||{value:''}).value;};
+ var nm=g('me-name').trim();if(!nm)return alert('Укажите наименование');
+ var ms=o.materials||[];var m=ms[i];if(!m)return;
+ m.name=nm;m.qty=g('me-qty')||m.qty||'1';m.price=+g('me-price')||0;
+ m.munit=g('me-munit')||m.munit||'pcs';m.buyer=g('me-buyer')||m.buyer;m.where=g('me-where');
+ logAction(o,'edit',{fields:['материал изменён: '+nm]});
+ markOrder(o);save();closeModal();render();
+}
+function matDel(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canShopMats(o))return alert('Нет права shopping');
+ var m=(o.materials||[])[i];if(!m)return;
+ if(m.status==='bought')return alert('Купленный материал удалить нельзя — он уже в факте закупки');
+ if(!confirm('Удалить материал «'+(m.name||'')+'»?'))return;
+ o.materials.splice(i,1);
+ logAction(o,'edit',{fields:['удалён материал: '+(m.name||'')]});
+ markOrder(o);save();render();
+}
+// Этапы не-manufacture заявок были видны только в трее — даём постоянный доступ из карточки.
+function toggleStages(id){state.stagesOpen=state.stagesOpen===id?null:id;render();}
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  if(!canShopMats(byId(id)))return alert('Нет права orders_edit');
@@ -2500,7 +2565,7 @@ if(!w.length&&!canEd)return '';
 var html='<div class="card"><div class="sec-title">🔧 Работы (смета/факт)</div>';
 html+=w.map(function(x,i){return '<div class="info-row" style="align-items:center"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.done?'✅ ':x.skipped?'⛔ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><span style="display:flex;gap:6px;align-items:center"><b>'+money((+x.price||0)*(+x.qty||1))+'</b>'+(canEd?'<span style="cursor:pointer" onclick="worksDone('+o.id+','+i+')">'+(x.done?'↩':'✅')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksSkip('+o.id+','+i+')">'+(x.skipped?'↩':'⛔')+'</span><span style="cursor:pointer;color:var(--red)" onclick="worksDel('+o.id+','+i+')">✕</span>':'')+'</span></div>';}).join('');
 // B5: доп. работы видны прямо в смете (работы+extras=итог), с удалением строки
-html+=(o.extras||[]).map(function(e,i){return '<div class="info-row" style="align-items:center"><span>＋ '+escapeHtml(e.name)+( (+e.qty||1)!=1?' '+ (+e.qty||1)+' × '+money(+e.price||0):'')+' '+(canEd?'<span class="muted" style="cursor:pointer" onclick="delExtra('+o.id+','+i+')">✕</span>':'')+'</span><b>'+money((+e.price||0)*(+e.qty||1))+'</b></div>';}).join('');
+html+=(o.extras||[]).map(function(e,i){return '<div class="info-row" style="align-items:center"><span>＋ '+escapeHtml(e.name)+( (+e.qty||1)!=1?' '+ (+e.qty||1)+' × '+money(+e.price||0):'')+' '+(canEd?'<span class="muted" style="cursor:pointer" title="Изменить" onclick="extraEdit('+o.id+','+i+')">✏️</span><span class="muted" style="cursor:pointer" title="Удалить" onclick="delExtra('+o.id+','+i+')">✕</span>':'')+'</span><b>'+money((+e.price||0)*(+e.qty||1))+'</b></div>';}).join('');
 html+='<div class="total"><span>Итого</span><span style="color:var(--green)">'+money(total(o))+'</span></div>';
 if(canEd)html+='<div class="row2" style="margin-top:6px"><input class="input" id="wa-title" placeholder="Работа (доп)"><input class="input" id="wa-qty" value="1" style="max-width:60px"><input class="input" id="wa-price" type="number" placeholder="Цена ₽/ед.">'+unitSel('wa-unit','pcs')+'<button class="btn-sm btn-green" style="flex:none" onclick="worksAddTo('+o.id+')">＋</button></div>';
 return html+'</div>';
