@@ -284,7 +284,7 @@ function histLine(h){
 function historyBlock(o){
  if(!(typeof can==='function'&&can('orders_history'))&&!uiOwner())return '';
  var hist=(o.history||[]).slice().sort(function(a,b){return String(b.ts).localeCompare(String(a.ts));});
- var html='<div class="card"><div class="sec-title"'+(hist.length?' style="cursor:pointer" onclick="openHistoryModal('+o.id+')"':'')+'>📜 История <span class="muted">('+hist.length+')</span>'+(hist.length?'<span class="muted" style="font-weight:400;font-size:12px">показать ▸</span>':'')+'</div>';
+ var html='<div class="card"><div class="sec-title"'+(hist.length?' style="cursor:pointer" onclick="openHistoryModal('+o.id+')"':'')+'><span>📜 История <span class="muted">('+hist.length+')</span></span>'+(hist.length?'<span class="muted" style="font-weight:400;font-size:12px">показать ▸</span>':'')+'</div>';
  if(!hist.length)return html+'<div class="muted">Событий пока нет</div></div>';
  return html+'</div>';
 }

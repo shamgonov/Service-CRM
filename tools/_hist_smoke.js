@@ -45,6 +45,9 @@ ok(!b.includes('hist-details'),'в карточке НЕТ раскрытых д
 ok(!b.includes('info-row'),'в карточке НЕТ строк истории (список свёрнут)');
 ok(!b.includes('Событий пока нет'),'при непустой истории заглушки нет');
 ok((b.match(/<div/g)||[]).length===(b.match(/<\/div>/g)||[]).length,'баланс div в карточке');
+// .sec-title — flex + justify-content:space-between (index.html L16): если счётчик идёт
+// отдельным ребёнком, он уедет к центру ряда. Текст+счётчик должны быть в одном span.
+ok(/<span>📜 История <span class="muted">\(3\)<\/span><\/span>/.test(b),'заголовок+счётчик в одном span (иначе flex space-between разъедет их)');
 
 // 2. пустая история: счётчик (0), некликабельно, заглушка
 var EMPTY={id:5,status:'new',history:[]};
