@@ -1479,12 +1479,12 @@ function extraEdit(id,i){
  if(!canEditWorks(o))return alert('Нет права orders_edit');
  if(typeof normalizeOrder==='function')normalizeOrder(o);
  var e=(o.extras||[])[i];if(!e)return;
- openModal('<div class="card"><div class="sec-title">✏️ Доп. работа</div>'+
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto" onclick="if(event.target===this)closeModal()"><div class="card" style="max-width:520px;width:100%;margin:0" onclick="event.stopPropagation()"><div class="sec-title">✏️ Доп. работа</div>'+
   '<input class="input" id="ex-name" value="'+escapeHtml(e.name||'')+'" placeholder="Название *" style="margin-bottom:6px">'+
   '<div class="row2" style="margin-bottom:6px"><input class="input" id="ex-qty" type="number" min="1" step="0.5" value="'+(+e.qty||1)+'" placeholder="Кол-во">'+unitSel('ex-unit',e.unit||'pcs')+'</div>'+
   '<input class="input" id="ex-price" type="number" min="0" value="'+(+e.price||0)+'" placeholder="Цена ₽/ед." style="margin-bottom:8px">'+
   '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button>'+
-  '<button class="btn-sm btn-blue" onclick="extraSave('+o.id+','+i+')">💾 Сохранить</button></div></div>');
+  '<button class="btn-sm btn-blue" onclick="extraSave('+o.id+','+i+')">💾 Сохранить</button></div></div></div>');
 }
 function extraSave(id,i){
  var o=byId(id);if(!o)return;
