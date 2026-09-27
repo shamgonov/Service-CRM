@@ -640,7 +640,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.7</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.4.8</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -2975,18 +2975,18 @@ render();
 <!-- CRM-UPDATER -->
 <div id="updStrip" onclick="updOpenModal()" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:9px 16px;font:600 13px sans-serif;z-index:98;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)">🔄 Доступно обновление — нажмите для подробностей</div>
 <div id="updOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:99;align-items:center;justify-content:center">
- <div style="background:var(--bg-secondary);border-radius:14px;max-width:360px;width:88%;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
+ <div style="background:#fff;border-radius:14px;max-width:360px;width:88%;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
   <div id="updMTitle" style="font-weight:700;font-size:16px;margin-bottom:10px"></div>
-  <div id="updMText" style="font-size:14px;color:var(--text-secondary);white-space:pre-line;max-height:50vh;overflow:auto;margin-bottom:14px"></div>
+  <div id="updMText" style="font-size:14px;color:#333;white-space:pre-line;max-height:50vh;overflow:auto;margin-bottom:14px"></div>
   <div id="updMBtns" style="display:flex;gap:8px">
    <button id="updNow" style="flex:1;padding:11px;border:none;border-radius:8px;background:#10b981;color:#fff;font-weight:700;cursor:pointer">Обновить</button>
-   <button id="updLate" style="flex:1;padding:11px;border:none;border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-weight:600;cursor:pointer">Обновить позже</button>
+   <button id="updLate" style="flex:1;padding:11px;border:none;border-radius:8px;background:#e5e7eb;color:#374151;font-weight:600;cursor:pointer">Обновить позже</button>
   </div>
-  <button id="updMOk" style="display:none;width:100%;padding:11px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer">Понятно</button>
+  <button id="updMOk" style="display:none;width:100%;padding:11px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Понятно</button>
  </div>
 </div>
 <script>
-const APP_VERSION='2.4.7';
+const APP_VERSION='2.4.8';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
