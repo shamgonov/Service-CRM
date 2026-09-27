@@ -96,6 +96,12 @@ matEdit(5,0);
 t('материалы: модалка открылась', !!modal&&/me-name/.test(modal||''));
 t('материалы: поля заполнены', /value="Клей"/.test(modal)&&/value="2"/.test(modal)&&/value="300"/.test(modal)&&/Стройсклад/.test(modal));
 t('материалы: есть поставщик (buyer)', /me-buyer/.test(modal)&&modal.includes('Доставка на адрес'));
+// Модалка обязана быть центрированным fixed-оверлеем (как payModal/takeGateModal).
+// Без него форма уезжала в конец <body> — у #modal-root нет CSS, и ✏️ выглядел «мёртвым».
+t('материалы: модалка — fixed-оверлей на весь экран', /position:fixed/.test(modal)&&/inset:0/.test(modal)&&/z-index:99/.test(modal));
+t('материалы: оверлей центрирует форму', /display:flex/.test(modal)&&/align-items:center/.test(modal)&&/justify-content:center/.test(modal));
+t('материалы: клик по фону закрывает, клик по форме — нет', /onclick="if\(event\.target===this\)closeModal\(\)"/.test(modal)&&/onclick="event\.stopPropagation\(\)"/.test(modal));
+t('материалы: фон затемнён', /rgba\(0,0,0,\.45\)/.test(modal));
 FIELDS['me-name']='Клей супер';FIELDS['me-qty']='5';FIELDS['me-price']='350';FIELDS['me-munit']='l';FIELDS['me-buyer']='delivery';FIELDS['me-where']='База';
 logSpy.length=0;modal='X';
 matSave(5,0);

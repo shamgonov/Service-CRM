@@ -1503,15 +1503,19 @@ function matEdit(id,i){
  var o=byId(id);if(!o)return;
  if(!canShopMats(o))return alert('Нет права shopping');
  var m=(o.materials||[])[i];if(!m)return;
- openModal('<div class="card"><div class="sec-title">✏️ Материал</div>'+
+ // Без fixed-оверлея форма рендерилась статичным блоком в конце <body> (у #modal-root нет CSS) —
+ // выглядело как «кнопка ✏️ не работает, надо скроллить вниз». Оверлей — по эталону payModal/takeGateModal.
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+  '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
+  '<div class="sec-title">✏️ Материал</div>'+
   '<input class="input" id="me-name" value="'+escapeHtml(m.name||'')+'" placeholder="Наименование *" style="margin-bottom:6px">'+
   '<div class="row2" style="margin-bottom:6px"><input class="input" id="me-qty" value="'+escapeHtml(m.qty!=null?m.qty:'1')+'" placeholder="Кол-во">'+
   '<select class="input" id="me-munit" style="max-width:110px">'+Object.keys(UNITS).map(function(k){return '<option value="'+k+'"'+((m.munit||'pcs')===k?' selected':'')+'>'+UNITS[k]+'</option>';}).join('')+'</select></div>'+
   '<input class="input" id="me-price" type="number" min="0" value="'+(+m.price||0)+'" placeholder="Цена ₽/ед." style="margin-bottom:6px">'+
   '<select class="input" id="me-buyer" style="margin-bottom:6px">'+Object.keys(BUYER).map(function(k){return '<option value="'+k+'"'+((m.buyer||'worker')===k?' selected':'')+'>'+BUYER[k]+'</option>';}).join('')+'</select>'+
   '<input class="input" id="me-where" value="'+escapeHtml(m.where||'')+'" placeholder="Где купить / забрать" style="margin-bottom:8px">'+
-  '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button>'+
-  '<button class="btn-sm btn-blue" onclick="matSave('+o.id+','+i+')">💾 Сохранить</button></div></div>');
+  '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button><button class="btn-sm btn-blue" onclick="matSave('+o.id+','+i+')">💾 Сохранить</button></div>'+
+  '</div></div>');
 }
 function matSave(id,i){
  var o=byId(id);if(!o)return;
