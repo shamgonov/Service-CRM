@@ -104,6 +104,21 @@ CANS={};stageUndone(1,0);
 t('F3 чужая заявка без права — отказ', st(DB.orders[0])[0].done===true);
 t('F3 идемпотентен для недоделанного этапа', (function(){DB.orders=[mk({stages:[{id:'a',title:'Не готов',done:false}]})];stageUndone(1,0);return st(DB.orders[0])[0].done===false;})());
 
+// ===== регресс: схема этапов видна в карточке заявки =====
+// Блоки этапов должны рендериться в sec-scheme (её показывают всем), а не внутри
+// карточки действий, которая гейтится условием isW||canManage||showTakeBtn.
+(function(){
+ const a=src.indexOf('id="sec-scheme"'), b=src.indexOf('id="sec-estimate"');
+ const scheme=a>=0&&b>a?src.slice(a,b):'';
+ t('карточка: заголовок «🧩 Этапы схемы» рендерится в sec-scheme', scheme.includes('🧩 Этапы схемы'));
+ t('карточка: «🔧 Этапы работ» (manufacture) тоже в sec-scheme', scheme.includes('🔧 Этапы работ'));
+ t('карточка: в sec-scheme есть точка разворачивания toggleStages', scheme.includes('toggleStages('));
+ t('карточка: для пустых этапов есть заглушка, а не пустота', scheme.includes('Этапы появятся после взятия'));
+ const gate=src.indexOf('${isW||canManage||showTakeBtn(o)?');
+ const gateBlock=gate>=0?src.slice(gate,gate+3000):'';
+ t('карточка: этапы убраны из-под гейта карточки действий', !gateBlock.includes('Этапы схемы')&&!gateBlock.includes('Этапы работ'));
+})();
+
 console.log(fail?'\nSTAGES SMOKE: FAIL':'\nSTAGES SMOKE: ALL OK');
 process.exit(fail?1:0);
 
