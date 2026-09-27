@@ -5,51 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>ServiceCRM</title>
 <style>
-:root{--blue:#2563eb;--green:#10b981;--red:#dc2626;--dark:#1e293b}
+/* Тема 1/5: чёрный + янтарный акцент. --blue сохранён как алиас акцента,
+   чтобы 26 мест разметки (color/background:var(--accent)) перекрасились без правок в JS. */
+:root{--bg-primary:#0a0a0a;--bg-secondary:#1a1a1a;--bg-card:rgba(26,26,26,.6);--accent:#fbbf24;--accent-hover:#f59e0b;--on-accent:#0a0a0a;--text-primary:#ffffff;--text-secondary:#a1a1aa;--border:rgba(251,191,36,.2);--shadow:0 8px 32px rgba(0,0,0,.4);--blue:var(--accent);--green:#10b981;--red:#dc2626;--dark:#1e293b}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f5f5f5;max-width:430px;margin:0 auto;padding-bottom:110px;min-height:100vh}
-.header{background:var(--blue);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
-.header.dark{background:var(--dark)}.header.green{background:var(--green)}.header.red{background:var(--red)}
-.header h1{font-size:17px}
-.back{background:none;border:none;color:#fff;font-size:22px;cursor:pointer}
-.card{background:#fff;margin:12px 16px;padding:14px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.sec-title{font-weight:600;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
-.muted{font-size:12px;color:#666}
+body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg-primary);color:var(--text-primary);max-width:430px;margin:0 auto;padding-bottom:110px;min-height:100vh}
+.header{background:var(--bg-secondary);color:var(--accent);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:10px}
+.header.dark{background:var(--dark);color:var(--text-primary)}.header.green{background:var(--green);color:var(--text-primary)}.header.red{background:var(--red);color:var(--text-primary)}
+.header h1{font-size:17px;color:inherit}
+.back{background:none;border:none;color:inherit;font-size:22px;cursor:pointer}
+.card{background:var(--bg-card);border:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin:12px 16px;padding:14px;border-radius:12px;box-shadow:var(--shadow)}
+.sec-title{font-weight:600;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;color:var(--accent)}
+.muted{font-size:12px;color:var(--text-secondary)}
 .badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;margin:2px 4px 2px 0}
-.role-card{border:1px solid #e5e5e5;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer}
-.role-card:active{background:#f0f7ff}
-#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #e5e5e5;z-index:10}
+.role-card{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;transition:background .25s ease,border-color .25s ease}
+.role-card:active{background:rgba(251,191,36,.1)}
+#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(26,26,26,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);z-index:10}
 /* === ТРЕЙ СХЕМЫ: единственный контейнер, ручка сворачивания (A1–A6) === */
-#scheme-tray{position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:#fff;box-shadow:-4px 0 12px rgba(0,0,0,.15);z-index:95;padding:16px;display:none}
+#scheme-tray{position:fixed;top:60px;right:0;bottom:0;width:320px;max-width:90vw;background:var(--bg-secondary);border-left:1px solid var(--border);box-shadow:-4px 0 12px rgba(0,0,0,.5);z-index:95;padding:16px;display:none}
 #scheme-tray.open{display:block}
 #tray-body{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
-#tray-collapse{position:absolute;left:-20px;top:14px;width:44px;height:44px;min-width:44px;min-height:44px;border-radius:50%;background:#2563eb;color:#fff;border:none;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:22px;line-height:44px;text-align:center;cursor:pointer;padding:0}
-#tray-handle{position:fixed;right:0;top:45%;width:44px;height:100px;background:#2563eb;color:#fff;border:none;border-radius:12px 0 0 12px;box-shadow:-2px 2px 10px rgba(0,0,0,.3);z-index:96;font-size:24px;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0}
+#tray-collapse{position:absolute;left:-20px;top:14px;width:44px;height:44px;min-width:44px;min-height:44px;border-radius:50%;background:var(--accent);color:var(--on-accent);border:none;box-shadow:0 2px 8px rgba(0,0,0,.5);font-size:22px;line-height:44px;text-align:center;cursor:pointer;padding:0}
+#tray-handle{position:fixed;right:0;top:45%;width:44px;height:100px;background:var(--accent);color:var(--on-accent);border:none;border-radius:12px 0 0 12px;box-shadow:-2px 2px 10px rgba(0,0,0,.5);z-index:96;font-size:24px;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0}
 @media (max-width:430px){#scheme-tray{width:85vw}}
-.nav-item{min-width:0;position:relative;text-align:center;padding:8px 2px;cursor:pointer;color:#666;font-size:10px}
+.nav-item{min-width:0;position:relative;text-align:center;padding:8px 2px;cursor:pointer;color:var(--text-secondary);font-size:10px;transition:color .25s ease}
 .nav-item span{display:block;font-size:20px}
 .nav-item [data-ev-badge]{position:absolute;top:-4px;right:calc(50% - 22px);width:18px;height:18px;background:#dc2626;color:#fff;border-radius:50%;font:700 11px/18px sans-serif;text-align:center;pointer-events:none}
-.nav-item.active{color:var(--blue)}
+.nav-item.active{color:var(--accent)}
 @media (max-width:380px){#nav .nav-item{padding:6px 1px;font-size:9px}#nav .nav-item span{font-size:18px}}
 @media (max-width:330px){#nav .nav-item{padding:6px 0;font-size:8px}#nav .nav-item span{font-size:16px}}
-.input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;background:#fff}
+.input{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg-secondary);color:var(--text-primary);transition:border-color .25s ease,box-shadow .25s ease}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(251,191,36,.15)}
 textarea.input{min-height:60px;resize:vertical}
-.label{display:block;font-weight:500;font-size:13px;margin-bottom:5px;color:#333}
+.label{display:block;font-weight:500;font-size:13px;margin-bottom:5px;color:var(--text-secondary)}
 .field{margin-bottom:12px}
 .row2{display:flex;gap:8px}.row2>*{flex:1}
-.btn{width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
-.btn-blue{background:var(--blue);color:#fff}.btn-green{background:var(--green);color:#fff}
-.btn-red{background:#fee2e2;color:#991b1b}.btn-purple{background:#8b5cf6;color:#fff}
-.btn-outline{background:#fff;border:1px solid var(--blue);color:var(--blue)}
+.btn{width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;transition:background .25s ease,transform .25s ease}
+.btn-blue{background:var(--accent);color:var(--on-accent)}.btn-blue:hover{background:var(--accent-hover)}.btn-blue:active{transform:scale(.98)}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:rgba(220,38,38,.18);color:#fca5a5}.btn-purple{background:#8b5cf6;color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--accent);color:var(--accent);transition:background .25s ease}
+.btn-outline:hover{background:rgba(251,191,36,.12)}
 .btn-sm{padding:8px 10px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;flex:1}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.chip{padding:6px 11px;border:1px solid var(--blue);color:var(--blue);border-radius:14px;font-size:12px;cursor:pointer;background:#fff;user-select:none}
+.chip{padding:6px 11px;border:1px solid var(--accent);color:var(--accent);border-radius:14px;font-size:12px;cursor:pointer;background:transparent;user-select:none;transition:background .25s ease}
 /* === НАВИГАТОР СЕКЦИЙ: липкая полоса чипов + scrollspy + свайп (details/reports) === */
 .sec{scroll-margin-top:64px}
-.secbar{position:sticky;top:0;z-index:20;background:#f5f5f5;display:flex;gap:6px;overflow-x:auto;padding:8px 16px 6px;-webkit-overflow-scrolling:touch;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.secbar{position:sticky;top:0;z-index:20;background:var(--bg-primary);display:flex;gap:6px;overflow-x:auto;padding:8px 16px 6px;-webkit-overflow-scrolling:touch;box-shadow:0 1px 2px rgba(0,0,0,.5)}
 .secbar .chip{white-space:nowrap;flex:0 0 auto}
-.secbar .chip.on{background:var(--blue);color:#fff}
-.chip.sel{background:var(--blue);color:#fff}
+.secbar .chip.on{background:var(--accent);color:var(--on-accent)}
+.chip.sel{background:var(--accent);color:var(--on-accent)}
 /* === ПАКЕТ C: документы Смета/Акт — белый лист, печать, шаринг === */
 .doc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;overflow-y:auto;padding:16px}
 .doc-sheet{background:#fff;max-width:794px;margin:0 auto;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.18);color:#111;font-size:13px;line-height:1.5}
@@ -66,35 +71,44 @@ textarea.input{min-height:60px;resize:vertical}
 .doc-actions{max-width:794px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 @media print{body.printing>*:not(#modal-root){display:none!important}body.printing #modal-root{position:static!important}body.printing .doc-overlay{display:block!important;position:static;overflow:visible;padding:0;background:#fff}body.printing .doc-overlay .doc-actions{display:none!important}body.printing .doc-sheet{box-shadow:none;max-width:100%;margin:0;padding:0}}
 /* === ПАКЕТ D: подсказка следующего действия === */
-.hint-bar{background:#eef6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:10px}
+.hint-bar{background:rgba(251,191,36,.1);border:1px solid var(--border);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:10px}
 .hint-pulse{animation:hintPulse 2s infinite}
-@keyframes hintPulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.35)}50%{box-shadow:0 0 0 8px rgba(37,99,235,0)}}
-.mat{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px}
+@keyframes hintPulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.35)}50%{box-shadow:0 0 0 8px rgba(251,191,36,0)}}
+.mat{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg-secondary)}
 .mat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .mat-name{font-weight:600;font-size:13px}
-.ord{background:#fff;margin:10px 16px;padding:14px;border-radius:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.ord:active{transform:scale(.99)}
-.filters{display:flex;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid #eee;overflow-x:auto}
-.fbtn{padding:6px 12px;border:1px solid #ddd;border-radius:16px;background:#fff;font-size:12px;cursor:pointer;white-space:nowrap}
-.fbtn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
-.info-row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f5f5f5}
+.ord{background:var(--bg-card);border:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin:10px 16px;padding:14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow);transition:background .25s ease,border-color .25s ease}
+.ord:active{transform:scale(.99);background:var(--bg-secondary)}
+.filters{display:flex;gap:6px;padding:10px 16px;background:var(--bg-secondary);border-bottom:1px solid var(--border);overflow-x:auto}
+.fbtn{padding:6px 12px;border:1px solid var(--border);border-radius:16px;background:transparent;color:var(--text-secondary);font-size:12px;cursor:pointer;white-space:nowrap;transition:background .25s ease,color .25s ease}
+.fbtn.active{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.info-row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid var(--border)}
 .info-row:last-child{border:none}
-.total{display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:16px;border-top:2px solid #eee;margin-top:6px}
+.total{display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:16px;border-top:2px solid var(--border);margin-top:6px;color:var(--accent)}
 .photos{display:flex;gap:8px;flex-wrap:wrap}
-.photo{width:64px;height:64px;border-radius:8px;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:22px}
-.photo-add{border:2px dashed var(--blue);background:#fff;color:var(--blue);cursor:pointer}
-.slot{border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid #ccc}
+.photo{width:64px;height:64px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px}
+.photo-add{border:2px dashed var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.slot{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid var(--border);background:var(--bg-secondary)}
 .switch{position:relative;width:44px;height:25px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;inset:0;background:#ccc;border-radius:25px;transition:.2s;cursor:pointer}
-.slider:before{content:'';position:absolute;height:19px;width:19px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-input:checked+.slider{background:var(--green)}
-input:checked+.slider:before{transform:translateX(19px)}
-.tgl{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #f0f0f0}
-h1,h2,h3{font-weight:600}
+.slider{position:absolute;inset:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:25px;transition:.25s ease;cursor:pointer}
+.slider:before{content:'';position:absolute;height:19px;width:19px;left:3px;bottom:3px;background:var(--text-secondary);border-radius:50%;transition:.2s}
+input:checked+.slider{background:var(--green);border-color:var(--green)}
+input:checked+.slider:before{transform:translateX(19px);background:#fff}
+.tgl{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border)}
+h1,h2,h3{font-weight:600;color:var(--text-primary)}
+/* Акцентные надписи в разметке (color:var(--blue)/var(--accent)) на тёмном фоне читаемы;
+   серые инлайн-подписи (#666/#888/#999) приподнимаем до вторичного текста. */
+.muted,.sec-note,[style*="color:#666"],[style*="color:#777"],[style*="color:#888"],[style*="color:#999"]{color:var(--text-secondary)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(251,191,36,.25);border-radius:3px}
+select.input{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--accent) 50%),linear-gradient(135deg,var(--accent) 50%,transparent 50%);background-position:calc(100% - 16px) 18px,calc(100% - 11px) 18px;background-size:5px 5px;background-repeat:no-repeat}
+input[type=date].input{color-scheme:dark}
+::placeholder{color:var(--text-secondary);opacity:.7}
 </style>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#fbbf24">
 <link rel="apple-touch-icon" href="icon.png">
 </head>
 <body>
@@ -313,10 +327,10 @@ function openHistoryModal(id){
  if(!(typeof can==='function'&&can('orders_history'))&&!(typeof uiOwner==='function'&&uiOwner()))return alert('Нет права orders_history');
  var hist=(o.history||[]).slice().sort(function(a,b){return String(b.ts).localeCompare(String(a.ts));});
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:85vh;overflow-y:auto;padding:20px" onclick="event.stopPropagation()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:560px;width:100%;max-height:85vh;overflow-y:auto;padding:20px" onclick="event.stopPropagation()">'+
   '<b style="display:block;margin-bottom:10px">📜 История заявки №'+o.id+' <span class="muted">('+hist.length+')</span></b>'+
   (hist.length?histRows(hist):'<div class="muted">Событий пока нет</div>')+
-  '<div style="margin-top:14px;text-align:right"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Закрыть</button></div>'+
+  '<div style="margin-top:14px;text-align:right"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Закрыть</button></div>'+
   '</div></div>');
 }
 function histToggle(el){
@@ -409,7 +423,7 @@ function stageTimeline(o,editable){
  var html='<div style="margin-top:8px">';
  st.forEach(function(s,i){
   var icon=s.done?'✅':(i===0||st[i-1].done)?'🟡':'⚪';
-  html+='<div style="border-left:3px solid '+(s.done?'var(--green)':(i===0||st[i-1].done)?'var(--blue)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px">'+
+  html+='<div style="border-left:3px solid '+(s.done?'var(--green)':(i===0||st[i-1].done)?'var(--accent)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px">'+
    '<div class="mat-head"><b>'+icon+' '+(editable?'<span style="cursor:pointer;border-bottom:1px dashed #94a3b8" onclick="stageRename('+o.id+','+i+')">'+escapeHtml(s.title||STAGE_T[s.type]||s.type)+' ✏️</span>':escapeHtml(s.title||STAGE_T[s.type]||s.type))+'</b>'+
    (editable?'<span style="display:flex;gap:4px">'+(i>0?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',-1)">↑</span>':'')+
     (i<st.length-1?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="stageMove('+o.id+','+i+',1)">↓</span>':'')+
@@ -487,9 +501,9 @@ function paymentsBlock(o){
  var canW=canFinance();
  var html='<div class="card"><div class="sec-title">💰 Платежи</div>'+
   '<div class="info-row"><span class="muted">Сумма заказа (с доп. работами)</span><b>'+money(total(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">Оплачено: '+money(totalPaid(o))+'</span><b>'+(balance(o)>0?'<span style="color:var(--red)">Остаток: '+money(balance(o))+'</span>':(balance(o)<0?'<span style="color:var(--blue)">Переплата: '+money(Math.abs(balance(o)))+'</span>':'Остаток: 0 ₽'))+'</b></div>'+
+  '<div class="info-row"><span class="muted">Оплачено: '+money(totalPaid(o))+'</span><b>'+(balance(o)>0?'<span style="color:var(--red)">Остаток: '+money(balance(o))+'</span>':(balance(o)<0?'<span style="color:var(--accent)">Переплата: '+money(Math.abs(balance(o)))+'</span>':'Остаток: 0 ₽'))+'</b></div>'+
   '<div class="info-row"><span class="muted">Аванс на материалы (выдан)</span><b>'+money(materialsPaid(o))+'</b></div>'+
-  '<div class="info-row"><span class="muted">💵 Вознаграждение исполнителя</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>';
+  '<div class="info-row"><span class="muted">💵 Вознаграждение исполнителя</span><b style="color:var(--accent)">'+rewardLabel(o)+'</b></div>';
  if(pays.length){
   html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">';
   pays.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(function(p){
@@ -505,13 +519,13 @@ function payModal(id,dir){
  const types=dir==='materials'?['materials']:['advance','partial','full'];
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">${dir==='materials'?'📤 Выдать на материалы':'📥 Приход'}</b>
     <select class="input" id="pay-type" style="margin-bottom:8px">${types.map(t=>`<option value="${t}">${PAY_T[t]}</option>`).join('')}</select>
     <input class="input" id="pay-sum" type="number" placeholder="Сумма ₽ *" style="margin-bottom:8px">
     <select class="input" id="pay-method" style="margin-bottom:8px">${Object.keys(PAY_M).map(m=>`<option value="${m}">${PAY_M[m]}</option>`).join('')}</select>
     <input class="input" id="pay-note" placeholder="Примечание" style="margin-bottom:12px">
-    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>
     <button class="btn btn-green" onclick="payAdd(${id},'${dir}')">Сохранить</button></div>
    </div></div>`);
 }
@@ -571,11 +585,11 @@ function tickTimeLabels(){
 setInterval(tickTimeLabels,1000);
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
- if(isTest(o))b+=`<span class="badge" style="background:#f3f4f6;color:#6b7280">🧪 тест</span>`;
- if(o.diagnostician)b+=`<span class="badge" style="background:#f3f4f6;color:#6b7280">👤 диагност: ${escapeHtml(o.diagnostician)}</span>`;
+ if(isTest(o))b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">🧪 тест</span>`;
+ if(o.diagnostician)b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">👤 диагност: ${escapeHtml(o.diagnostician)}</span>`;
  if(o.worker&&['new','approved'].includes(o.status)&&!isInwork(o))b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🎯 назначен: ${escapeHtml(o.worker)}</span>`;
  if(o.backfill)b+=`<span class="badge" style="background:#fef3c7;color:#92400e">⏪ задним числом</span>`;
- if(o.status==='canceled')b+=`<span class="badge" style="background:#e5e7eb;color:#6b7280">отменена</span>`;
+ if(o.status==='canceled')b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">отменена</span>`;
  if(orderType(o)!=='standard')b+=`<span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span>`;
  if(orderType(o)==='manufacture'&&orderStages(o).length){const d=orderStages(o).filter(s=>s.done).length;b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🔧 ${d}/${orderStages(o).length}</span>`;}
  if(orderPayments(o).length&&balance(o)>0)b+=`<span class="badge" style="background:#fee2e2;color:#991b1b">💰 долг ${money(balance(o))}</span>`;
@@ -709,7 +723,7 @@ function routeTimeline(o,editable){
   var times='';
   if(p.ts_arrived)times+='<div class="muted">📍 Прибыл: '+new Date(p.ts_arrived).toLocaleString()+(p.geo?' ('+p.geo.lat.toFixed(4)+','+p.geo.lon.toFixed(4)+')':'')+'</div>';
   if(p.ts_done)times+='<div class="muted">✅ Выполнено: '+new Date(p.ts_done).toLocaleString()+'</div>';
-  html+='<div style="border-left:3px solid '+(p.status==='done'?'var(--green)':p.status==='arrived'?'var(--blue)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px;position:relative">'+
+  html+='<div style="border-left:3px solid '+(p.status==='done'?'var(--green)':p.status==='arrived'?'var(--accent)':'#ddd')+';margin-left:8px;padding:6px 0 6px 12px;position:relative">'+
    '<div class="mat-head"><b>'+icon+' '+escapeHtml(p.title)+'</b>'+(editable?'<span style="display:flex;gap:4px">'+
     (i>0?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="routeMove('+o.id+','+i+',-1)">↑</span>':'')+
     (i<r.length-1?'<span class="btn-sm btn-outline" style="cursor:pointer;padding:2px 6px" onclick="routeMove('+o.id+','+i+',1)">↓</span>':'')+
@@ -788,7 +802,7 @@ function routeNext(id,i){const o=byId(id);if(!canDoRoute(o))return;o.route[i].st
 function completeModal(id){
 const o=byId(id);if(!o)return;
 openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px">'+
-'<div style="background:#fff;border-radius:14px;max-width:340px;width:100%;padding:24px;text-align:center">'+
+'<div style="background:var(--bg-secondary);border-radius:14px;max-width:340px;width:100%;padding:24px;text-align:center">'+
 '<div style="font-size:44px">✅</div>'+
 '<b style="display:block;font-size:17px;margin:10px 0 6px">Заказ №'+id+' выполнен</b>'+
 '<div style="font-size:22px;font-weight:800;color:var(--green);margin-bottom:14px">+'+money(total(o))+'</div>'+
@@ -804,7 +818,7 @@ return `
 <div class="card">
 <div>${badges(o)}</div>
 <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
-<div class="info-row"><span class="muted">Телефон</span><a href="tel:${encodeURIComponent(o.phone)}" style="color:var(--blue);font-weight:600">${escapeHtml(o.phone)}</a></div>
+<div class="info-row"><span class="muted">Телефон</span><a href="tel:${encodeURIComponent(o.phone)}" style="color:var(--accent);font-weight:600">${escapeHtml(o.phone)}</a></div>
 <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${escapeHtml(o.address)}</b></div>
 <div class="info-row"><span class="muted">Дата</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
 <div class="info-row"><span class="muted">Исполнитель</span><b>${escapeHtml(o.worker||'—')}</b></div>
@@ -815,7 +829,7 @@ ${(o.extras||[]).map(e=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${
 ${(o.materials||[]).length?`<div class="muted" style="margin-top:6px">Материалы: ${o.materials.map(m=>escapeHtml(m.name)).join(', ')}</div>`:''}
 <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
 <div class="info-row"><span class="muted">Оплачено</span><b style="color:var(--green)">${money(totalPaid(o))}</b></div>
-${balance(o)>0?`<div class="info-row"><span class="muted">Остаток к оплате</span><b style="color:var(--red)">${money(balance(o))}</b></div>`:(balance(o)<0?`<div class="info-row"><span class="muted">Переплата</span><b style="color:var(--blue)">${money(Math.abs(balance(o)))}</b></div>`:`<div class="info-row"><span class="muted">Остаток</span><b>0 ₽</b></div>`)}
+${balance(o)>0?`<div class="info-row"><span class="muted">Остаток к оплате</span><b style="color:var(--red)">${money(balance(o))}</b></div>`:(balance(o)<0?`<div class="info-row"><span class="muted">Переплата</span><b style="color:var(--accent)">${money(Math.abs(balance(o)))}</b></div>`:`<div class="info-row"><span class="muted">Остаток</span><b>0 ₽</b></div>`)}
 ${pays.length?'<div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px">'+pays.map(p=>'<div class="muted">'+(p.date||'')+' • '+(PAY_T[p.type]||p.type)+' • '+(PAY_M[p.method]||p.method)+' • '+money(p.sum)+'</div>').join('')+'</div>':''}
 ${(typeof canFinance==='function'&&canFinance()&&o.status==='completed')?`<button class="btn btn-green" onclick="setStatus(${o.id},'paid')">💰 Отметить оплаченным</button>`:''}
 ${docPerm(o)?`<button class="btn btn-outline" style="margin-top:8px" onclick="docAct(${o.id})">📄 Акт выполненных работ</button>`:''}
@@ -854,7 +868,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 <div class="sec" id="sec-main"><div class="card">
  <div>${badges(o)}</div>
  <div class="info-row"><span class="muted">Клиент</span><b>${escapeHtml(o.client)}</b></div>
- <div class="info-row"><span class="muted">Телефон</span><a href="tel:${encodeURIComponent(o.phone)}" style="color:var(--blue);font-weight:600">${escapeHtml(o.phone)}</a></div>
+ <div class="info-row"><span class="muted">Телефон</span><a href="tel:${encodeURIComponent(o.phone)}" style="color:var(--accent);font-weight:600">${escapeHtml(o.phone)}</a></div>
  <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${escapeHtml(o.address)}</b></div>
  <div class="info-row"><span class="muted">Время</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
  <div class="info-row"><span class="muted">Исполнитель</span><b>${o.worker?escapeHtml(o.worker):'— не назначен —'}</b></div>
@@ -885,7 +899,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
   <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span>
    <span style="display:flex;align-items:center;gap:6px">${canShopMats(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="matEdit(${o.id},${i})">✏️</span>${m.status!=='bought'?`<span class="muted" style="cursor:pointer" title="Удалить" onclick="matDel(${o.id},${i})">✕</span>`:''}`:''}<span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></span></div>
    <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
-  ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f8faff;border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
+  ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:rgba(251,191,36,.06);border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
   ${(['todo'].includes(m.status)||['urgent','critical'].includes(s.k))&&canShopMats(o)?`
   <div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green${hintCls(o,'mat',i)}"${hintData(o,'mat',i)} onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
@@ -895,7 +909,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
    ⚠ Требуется решение: заменить / ждать / купить дороже / убрать<br>
    <button class="btn-sm btn-outline" style="margin-top:6px" onclick="matAct(${o.id},${i},'todo')">↩ Вернуть в закупку</button></div>`:''}
  </div>`}).join(''):'<div class="muted">Материалы не требуются</div>'}
- <div id="matform" style="display:none;border:2px solid var(--blue);border-radius:8px;padding:10px;margin-top:8px;background:#f8faff">
+ <div id="matform" style="display:none;border:2px solid var(--accent);border-radius:8px;padding:10px;margin-top:8px;background:rgba(251,191,36,.06)">
   <input class="input" id="mf-name" placeholder="Наименование *" style="margin-bottom:6px">
   <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-qty" placeholder="Кол-во"><input class="input" id="mf-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="mf-munit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div>
   <select class="input" id="mf-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
@@ -997,7 +1011,7 @@ function renderCalendar(){
    const busy=inSlot.filter(o=>o.worker);
 const past=slotIsPast(state.calDate,sStart,sEnd);
    return `<div class="slot" data-slot="${si}" data-start="${sStart}" data-end="${sEnd}"
-    style="${past?'opacity:.45;filter:grayscale(1);':CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--blue);background:#f8faff':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
+    style="${past?'opacity:.45;filter:grayscale(1);':CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--accent);background:rgba(251,191,36,.06)':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
     onmousedown="calSlotClick(event,${si},'${sStart}','${sEnd}')" ontouchstart="calSlotClick(event,${si},'${sStart}','${sEnd}')"
     onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
     ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
@@ -1031,11 +1045,11 @@ function renderTasks(){
 ${tab==='free'?`
 ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначено вам (${assigned.length})</div>
   ${assigned.map(o=>{const ws=(o.works||[]).filter(x=>!x.skipped);const wsum=ws.reduce((s,x)=>s+(+x.price||0)*(+x.qty||1),0);
-   return '<div class="mat" style="border-left:4px solid var(--blue)"><b>№'+o.id+' • '+escapeHtml(o.client)+'</b><div class="muted">📍 '+escapeHtml(o.address||'—')+'<br>⏰ '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
+   return '<div class="mat" style="border-left:4px solid var(--accent)"><b>№'+o.id+' • '+escapeHtml(o.client)+'</b><div class="muted">📍 '+escapeHtml(o.address||'—')+'<br>⏰ '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
    (ws.length?'<div class="muted" style="margin-top:4px">📋 Смета: '+ws.map(function(x){return escapeHtml(x.title)+' '+(x.qty&&x.qty!=1?x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):money(+x.price||0)+'/'+unitLabel(x.unit));}).join('<br>')+'<br><b>Итого смета: '+money(wsum)+'</b></div>':'')+
-   '<div class="info-row" style="background:#eff6ff;border-radius:8px;padding:8px;margin-top:6px"><span>💵 Твоё вознаграждение</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>'+
+   '<div class="info-row" style="background:rgba(251,191,36,.08);border-radius:8px;padding:8px;margin-top:6px"><span>💵 Твоё вознаграждение</span><b style="color:var(--accent)">'+rewardLabel(o)+'</b></div>'+
    '<div class="row2" style="margin-top:8px"><button class="btn btn-green" onclick="takeOrder('+o.id+')">🚜 Взять в работу</button>'+
-   '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="declineAssignment('+o.id+')">Отклонить назначение</button></div></div>';}).join('')}
+   '<button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="declineAssignment('+o.id+')">Отклонить назначение</button></div></div>';}).join('')}
  </div>`:''}
 <div class="card">
   ${free.map(o=>`<div class="mat" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b':''}"><b>${escapeHtml(o.client)}</b> <span class="muted">№${o.id}</span>
@@ -1073,7 +1087,7 @@ function shoppingForm(){
  const today=fmt(new Date());
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">🛒 Отдельный запрос на закупку</b>
     <input class="input" id="sq-name" placeholder="Наименование *" style="margin-bottom:8px">
     <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -1353,13 +1367,13 @@ function finishOrder(id){
  if(rows.warn.length===0)return finishOrderGo(id); // всё готово — без модалки
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">🧾 Завершить заявку №${o.id}?</b>
     ${rows.warn.map(w=>`<div class="info-row" style="align-items:flex-start"><span>⚠️ ${w.t}</span><span class="muted" style="text-align:right;max-width:55%">${w.d}</span></div>`).join('')}
     ${rows.ok.map(t=>`<div class="info-row"><span>✅ ${t}</span></div>`).join('')}
     <div class="muted" style="margin-top:6px">Можно завершить позже — список останется в карточке.</div>
     <button class="btn btn-purple" style="width:100%;margin-top:12px" onclick="finishOrderForce(${o.id})">✅ Завершить всё равно</button>
-    <button class="btn" style="width:100%;margin-top:8px;background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <button class="btn" style="width:100%;margin-top:8px;background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>
    </div></div>`);
 }
 function finishChecklistRows(o){
@@ -1403,7 +1417,7 @@ function closeOrderModal(id){
  const bal=balance(o);
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">🧾 Закрытие заказа №${o.id}</b>
     ${rows.map(r=>`<div class="info-row"><span>${escapeHtml(r.n)}</span><b>${money(r.s)}</b></div>`).join('')}
     <div class="info-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:6px"><span><b>Итого</b></span><b>${money(total(o))}</b></div>
@@ -1411,7 +1425,7 @@ function closeOrderModal(id){
     <div class="info-row"><span class="muted">Остаток</span><b style="color:var(--red)">${money(bal)}</b></div>
     <button class="btn btn-green" style="width:100%;margin-top:12px" onclick="closeOrderPay(${o.id})">✅ Заказчик внёс остаток (${money(bal)})</button>
     ${!hadPays?`<button class="btn btn-blue" style="width:100%;margin-top:8px" onclick="closeOrderFull(${o.id})">💵 Оплачено полностью (${money(total(o))})</button>`:''}
-    <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="closeModal()">Отмена</button>
+    <button class="btn" style="width:100%;background:var(--bg-secondary);color:var(--text-secondary);margin-top:8px" onclick="closeModal()">Отмена</button>
    </div></div>`);
 }
 function closeOrderPay(id){
@@ -1528,7 +1542,7 @@ function matEdit(id,i){
  // Без fixed-оверлея форма рендерилась статичным блоком в конце <body> (у #modal-root нет CSS) —
  // выглядело как «кнопка ✏️ не работает, надо скроллить вниз». Оверлей — по эталону payModal/takeGateModal.
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
   '<div class="sec-title">✏️ Материал</div>'+
   '<input class="input" id="me-name" value="'+escapeHtml(m.name||'')+'" placeholder="Наименование *" style="margin-bottom:6px">'+
   '<div class="row2" style="margin-bottom:6px"><input class="input" id="me-qty" value="'+escapeHtml(m.qty!=null?m.qty:'1')+'" placeholder="Кол-во">'+
@@ -1626,12 +1640,12 @@ function saveOrder(){
   const canOv=canOverrideConflict();
   openModal(
    `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px">
-    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px;text-align:center">
+    <div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px;text-align:center">
      <div style="font-size:34px">⚠️</div>
      <b style="display:block;margin:8px 0">Исполнитель занят ${c.t1||'?'}–${c.t2||'?'} (${escapeHtml(c.client)})</b>
      <div class="muted" style="margin-bottom:14px">Заявок с пересечением: ${conf.length}</div>
      ${canOv?`<button class="btn btn-blue" style="width:100%" onclick="doSaveOrder(true)">Всё равно назначить</button>`:''}
-     <button class="btn" style="width:100%;background:#f3f4f6;color:#374151;margin-top:8px" onclick="closeConflictModal()">Отмена</button>
+     <button class="btn" style="width:100%;background:var(--bg-secondary);color:var(--text-secondary);margin-top:8px" onclick="closeConflictModal()">Отмена</button>
     </div></div>`);
   return;
  }
@@ -1771,10 +1785,10 @@ function cancelOrderModal(id){
  if(['completed','paid'].includes(o.status))return alert('Закрытую заявку отменить нельзя');
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">❌ Отмена заявки №${o.id}</b>
     <textarea class="input" id="cancel-reason" placeholder="Причина отмены * (обязательно)" style="min-height:70px;margin-bottom:12px"></textarea>
-    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>
     <button class="btn btn-red" onclick="doCancelOrder(${id})">Отменить заявку</button></div>
    </div></div>`);
 }
@@ -1807,7 +1821,7 @@ function editOrderModal(id){
  const workers=activeWorkers();
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-   <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:85vh;overflow:auto" onclick="event.stopPropagation()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:85vh;overflow:auto" onclick="event.stopPropagation()">
     <b style="display:block;margin-bottom:10px">✏️ Редактирование заявки №${o.id}</b>
     <input class="input" id="e-client" value="${escapeHtml(o.client)}" placeholder="Клиент *" style="margin-bottom:6px">
     <input class="input" id="e-phone" value="${escapeHtml(o.phone||'')}" placeholder="Телефон" style="margin-bottom:6px">
@@ -1831,7 +1845,7 @@ function editOrderModal(id){
      ${activeWorkers().map(u=>`<option ${o.worker===getUserName(u)?'selected':''}>${escapeHtml(getUserName(u))}</option>`).join('')}</select>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px"><input type="checkbox" id="e-photo" ${o.photoReport?'checked':''}> 📸 Требовать фотоотчёт</label>
     ${(typeof isOwner==='function'&&uiOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
-    <div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>
+    <div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>
     <button class="btn btn-blue" onclick="doEditOrder(${id})">💾 Сохранить</button></div>
    </div></div>`);
 }
@@ -1923,7 +1937,7 @@ function savePinLocal(pin){if(typeof makePinRecord==='function'){makePinRecord(p
 function resetMyPinLocal(){MYDOC.profile=MYDOC.profile||{};delete MYDOC.profile.pin;delete MYDOC.profile.pinSalt;delete MYDOC.profile.pinHash;saveProfile();alert('PIN сброшен');render();}
 function schedToggleDay(i,on){MYDOC.profile.schedule=MYDOC.profile.schedule||{days:[],from:'09:00',to:'18:00'};const d=MYDOC.profile.schedule.days||[];if(on&&d.indexOf(i)<0)d.push(i);if(!on){const j=d.indexOf(i);if(j>=0)d.splice(j,1);}MYDOC.profile.schedule.days=d.sort(function(a,b){return a-b;});saveProfile();render();}
 function openClockPicker(field){const cur=(MYDOC.profile.schedule||{})[field]||'09:00';const pp=cur.split(':');let h=+pp[0]||0,m=+pp[1]||0;window._clk={field:field,h:h,m:m};drawClock();}
-function drawClock(){const c=window._clk;if(!c)return;const root=document.getElementById('clockPickerRoot');if(!root)return;const ha=(c.h*30-90)*Math.PI/180,ma=(c.m*6-90)*Math.PI/180;let marks='';for(let i=0;i<12;i++){const a=(i*30-90)*Math.PI/180;const x=100+75*Math.cos(a),y=100+75*Math.sin(a);marks+='<text x="'+x+'" y="'+(y+5)+'" text-anchor="middle" font-size="14" fill="#374151">'+(i||12)+'</text>';}root.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeClockPicker()"><div style="background:#fff;border-radius:14px;padding:20px;text-align:center" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:12px">'+(c.field==='from'?'Начало':'Конец')+' рабочего дня</b><svg width="200" height="200" viewBox="0 0 200 200" style="cursor:pointer" onclick="clockTap(event)"><circle cx="100" cy="100" r="90" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="2"/>'+marks+'<line x1="100" y1="100" x2="'+(100+50*Math.cos(ha))+'" y2="'+(100+50*Math.sin(ha))+'" stroke="#2563eb" stroke-width="3" stroke-linecap="round"/><line x1="100" y1="100" x2="'+(100+70*Math.cos(ma))+'" y2="'+(100+70*Math.sin(ma))+'" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><circle cx="100" cy="100" r="4" fill="#2563eb"/></svg><div style="font-size:24px;font-weight:700;margin:10px 0">'+String(c.h).padStart(2,'0')+':'+String(c.m).padStart(2,'0')+'</div><div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeClockPicker()">Отмена</button><button class="btn btn-blue" onclick="saveClockPicker()">OK</button></div></div></div>';}
+function drawClock(){const c=window._clk;if(!c)return;const root=document.getElementById('clockPickerRoot');if(!root)return;const ha=(c.h*30-90)*Math.PI/180,ma=(c.m*6-90)*Math.PI/180;let marks='';for(let i=0;i<12;i++){const a=(i*30-90)*Math.PI/180;const x=100+75*Math.cos(a),y=100+75*Math.sin(a);marks+='<text x="'+x+'" y="'+(y+5)+'" text-anchor="middle" font-size="14" fill="#374151">'+(i||12)+'</text>';}root.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeClockPicker()"><div style="background:var(--bg-secondary);border-radius:14px;padding:20px;text-align:center" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:12px">'+(c.field==='from'?'Начало':'Конец')+' рабочего дня</b><svg width="200" height="200" viewBox="0 0 200 200" style="cursor:pointer" onclick="clockTap(event)"><circle cx="100" cy="100" r="90" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="2"/>'+marks+'<line x1="100" y1="100" x2="'+(100+50*Math.cos(ha))+'" y2="'+(100+50*Math.sin(ha))+'" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><line x1="100" y1="100" x2="'+(100+70*Math.cos(ma))+'" y2="'+(100+70*Math.sin(ma))+'" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><circle cx="100" cy="100" r="4" fill="#fbbf24"/></svg><div style="font-size:24px;font-weight:700;margin:10px 0">'+String(c.h).padStart(2,'0')+':'+String(c.m).padStart(2,'0')+'</div><div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeClockPicker()">Отмена</button><button class="btn btn-blue" onclick="saveClockPicker()">OK</button></div></div></div>';}
 function clockTap(e){const svg=e.currentTarget,rect=svg.getBoundingClientRect();const x=(e.clientX-rect.left)*(200/rect.width)-100,y=(e.clientY-rect.top)*(200/rect.height)-100;const dist=Math.sqrt(x*x+y*y);let ang=Math.atan2(y,x)*180/Math.PI+90;if(ang<0)ang+=360;if(dist<55){window._clk.h=Math.round(ang/30)%12;}else{window._clk.m=Math.round(ang/6/5)*5%60;}drawClock();}
 function saveClockPicker(){const c=window._clk;if(!c)return;MYDOC.profile.schedule=MYDOC.profile.schedule||{days:[],from:'09:00',to:'18:00'};MYDOC.profile.schedule[c.field]=String(c.h).padStart(2,'0')+':'+String(c.m).padStart(2,'0');saveProfile();closeClockPicker();render();}
 function closeClockPicker(){window._clk=null;const r=document.getElementById('clockPickerRoot');if(r)r.innerHTML='';}
@@ -1933,12 +1947,12 @@ function assignWorkerModal(id){
  const o=byId(id);if(!o)return;
  const opts=activeWorkers().map(u=>{const n=getUserName(u);const sp=((u.profile||{}).specs||[])[0];return '<option value="'+escapeHtml(n)+'"'+(o.worker===n?' selected':'')+'>'+escapeHtml(n)+(sp?' — '+escapeHtml(sp):'')+'</option>';}).join('');
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
   '<b style="display:block;margin-bottom:10px">🎯 Назначить исполнителя — заявка №'+o.id+'</b>'+
   '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
   '<div class="field"><label class="label">Исполнитель</label><select class="input" id="aw-worker">'+
   '<option value="">— оставить в пуле —</option>'+opts+'</select></div>'+
-  '<div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
+  '<div class="row2" style="margin-top:12px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>'+
   '<button class="btn btn-blue" onclick="assignWorkerApply('+o.id+')">Подтвердить</button></div></div></div>');
 }
 function assignWorkerApply(id){
@@ -2239,13 +2253,13 @@ function calMoveModal(oid){
   return '<option value="'+s+'"'+(past?' disabled':'')+(cur?' selected':'')+'>'+s+(past?' (прошло)':'')+'</option>';
  }).join('');
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
   '<b style="display:block;margin-bottom:10px">📅 Перенос заявки №'+o.id+'</b>'+
   '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • сейчас: '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+o.t1+'–'+o.t2+'</div>'+
   '<div class="field"><label class="label">Новая дата</label><input class="input" id="mv-date" type="date" value="'+escapeHtml(selDate)+'" onchange="calMoveReslot()"></div>'+
   '<div class="field"><label class="label">Слот времени</label><select class="input" id="mv-slot">'+opts+'</select></div>'+
   '<div class="row2" style="margin-top:12px">'+
-  '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>'+
   '<button class="btn btn-blue" onclick="calMoveApply('+o.id+')">Подтвердить</button>'+
   '</div></div></div>');
 }
@@ -2285,7 +2299,7 @@ function calDrop(e,ti,tStart,tEnd){
  const newT1=tStart,newT2=String(Math.floor((toMin(tStart)+srcDur)/60)).padStart(2,'0')+':'+String((toMin(tStart)+srcDur)%60).padStart(2,'0');
  let msg='<b>Перенос заявки №'+src.id+'</b><br>'+src.date+' '+src.t1+'–'+src.t2+' → '+state.calDate+' '+newT1+'–'+newT2;
  if(swap){msg+='<br><br><b>Обмен с заявкой №'+swap.id+'</b><br>'+swap.date+' '+swap.t1+'–'+swap.t2+' ↔ '+src.date+' '+src.t1+'–'+src.t2;}
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📅 Подтвердите изменение</b><div style="margin-bottom:14px;font-size:14px">'+msg+'</div><div class="row2"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="CAL_SRC=null;CAL_DRAG=null;closeModal();render()">Отмена</button><button class="btn btn-blue" onclick="calConfirmMove('+src.id+',\''+newT1+'\',\''+newT2+'\','+(swap?swap.id:'null')+')">Подтвердить</button></div></div></div>');
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">📅 Подтвердите изменение</b><div style="margin-bottom:14px;font-size:14px">'+msg+'</div><div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="CAL_SRC=null;CAL_DRAG=null;closeModal();render()">Отмена</button><button class="btn btn-blue" onclick="calConfirmMove('+src.id+',\''+newT1+'\',\''+newT2+'\','+(swap?swap.id:'null')+')">Подтвердить</button></div></div></div>');
 }
 function calConfirmMove(oid,newT1,newT2,swapId){
  const o=byId(oid);if(!o){closeModal();return;}
@@ -2382,7 +2396,7 @@ function checkClientDuplicate(){
   if(!phone&&!address)return;
   const dup=findClientByPhoneOrAddress(phone,address);
   if(dup&&dup.name.toLowerCase()!==(name||'').toLowerCase()){
-   openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b><div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div><div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div><div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div><div class="row2" style="margin-top:14px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Создать нового</button><button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button></div></div></div>');
+   openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">⚠️ Найден похожий контрагент</b><div class="info-row"><span class="muted">Имя</span><b>'+escapeHtml(dup.name)+'</b></div><div class="info-row"><span class="muted">Телефон</span><b>'+escapeHtml((dup.phones||[]).join(', ')||dup.phone||'—')+'</b></div><div class="info-row"><span class="muted">Адреса</span><b>'+escapeHtml((dup.addresses||[]).join('; ')||dup.address||'—')+'</b></div><div class="row2" style="margin-top:14px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Создать нового</button><button class="btn btn-green" onclick="useExistingClient(\''+dup.id+'\')">Использовать этого</button></div></div></div>');
   }
  }catch(e){/* молча: подсказка не должна ломать форму */}
 }
@@ -2435,7 +2449,7 @@ function renderClientDetail(id){
  return `<div class="header"><button class="back" onclick="go('clients')">←</button><h1>${escapeHtml(c.name)}</h1></div>
 ${secBarHtml([['cprofile','Профиль'],['ccomplaints','Рекламации'],['chistory','История']])}
 <div class="sec" id="sec-cprofile"><div class="card">
-<div class="info-row"><span class="muted">Телефоны</span><div style="text-align:right">${c.phones.length?c.phones.map(p=>'<a href="tel:'+encodeURIComponent(p)+'" style="color:var(--blue);font-weight:600;display:block">'+escapeHtml(p)+'</a>').join(''):'<span>—</span>'}</div></div>
+<div class="info-row"><span class="muted">Телефоны</span><div style="text-align:right">${c.phones.length?c.phones.map(p=>'<a href="tel:'+encodeURIComponent(p)+'" style="color:var(--accent);font-weight:600;display:block">'+escapeHtml(p)+'</a>').join(''):'<span>—</span>'}</div></div>
 <div class="info-row"><span class="muted">Адреса</span><div style="text-align:right">${c.addresses.length?c.addresses.map(a=>'<div>'+escapeHtml(a)+'</div>').join(''):'<span>—</span>'}</div></div>
 <div class="info-row"><span class="muted">Всего заказов</span><b>${orders.length}</b></div>
 <div class="info-row"><span class="muted">Выручка</span><b style="color:var(--green)">${money(totalRev)}</b></div>
@@ -2456,7 +2470,7 @@ function editClientModal(id){
  const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
  if(!c.phones && c.phone) c.phones = [c.phone]; if(!c.addresses && c.address) c.addresses = [c.address];
  if(!c.phones) c.phones = []; if(!c.addresses) c.addresses = [];
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b><div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="'+escapeHtml(c.name||'')+'"></div><div class="field"><label class="label">Телефоны</label><textarea class="input" id="cl-phones" rows="3" placeholder="+7 900 111-22-33&#10;+7 900 444-55-66">'+escapeHtml((c.phones||[]).join('\n'))+'</textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Адреса</label><textarea class="input" id="cl-addresses" rows="3" placeholder="ул. Ленина, 1, кв. 2&#10;ул. Мира, 10">'+escapeHtml((c.addresses||[]).join('\n'))+'</textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">'+escapeHtml(c.notes||'')+'</textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveEditClientV2(\''+c.id+'\')">Сохранить</button></div></div></div>');
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:var(--bg-secondary);border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">✏️ Редактировать контрагента</b><div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" value="'+escapeHtml(c.name||'')+'"></div><div class="field"><label class="label">Телефоны</label><textarea class="input" id="cl-phones" rows="3" placeholder="+7 900 111-22-33&#10;+7 900 444-55-66">'+escapeHtml((c.phones||[]).join('\n'))+'</textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Адреса</label><textarea class="input" id="cl-addresses" rows="3" placeholder="ул. Ленина, 1, кв. 2&#10;ул. Мира, 10">'+escapeHtml((c.addresses||[]).join('\n'))+'</textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3">'+escapeHtml(c.notes||'')+'</textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveEditClientV2(\''+c.id+'\')">Сохранить</button></div></div></div>');
 }
 function saveEditClientV2(id){
  const c = (DB.clients||[]).find(x=>x.id===id); if(!c) return;
@@ -2468,7 +2482,7 @@ function saveEditClientV2(id){
  save(); closeModal(); render();
 }
 function addClientModal(){
- openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Новый контрагент</b><div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div><div class="field"><label class="label">Телефоны</label><textarea class="input" id="cl-phones" rows="3" placeholder="+7 900 111-22-33&#10;+7 900 444-55-66"></textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Адреса</label><textarea class="input" id="cl-addresses" rows="3" placeholder="ул. Ленина, 1, кв. 2&#10;ул. Мира, 10"></textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveNewClientV2()">Сохранить</button></div></div></div>');
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:var(--bg-secondary);border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Новый контрагент</b><div class="field"><label class="label">Имя *</label><input class="input" id="cl-name" placeholder="ФИО или название"></div><div class="field"><label class="label">Телефоны</label><textarea class="input" id="cl-phones" rows="3" placeholder="+7 900 111-22-33&#10;+7 900 444-55-66"></textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Адреса</label><textarea class="input" id="cl-addresses" rows="3" placeholder="ул. Ленина, 1, кв. 2&#10;ул. Мира, 10"></textarea><div class="muted" style="margin-top:4px">Несколько — каждый с новой строки</div></div><div class="field"><label class="label">Заметки</label><textarea class="input" id="cl-notes" rows="3"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button><button class="btn btn-green" onclick="saveNewClientV2()">Сохранить</button></div></div></div>');
 }
 function saveNewClientV2(){
  const name = g('cl-name'); if(!name) return alert('Укажите имя');
@@ -2480,7 +2494,7 @@ function saveNewClientV2(){
  save(); closeModal(); render();
 }
 function addComplaintModal(clientId){
- openModal(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Добавить рекламацию</b><div class="field"><label class="label">Дата</label><input class="input" id="comp-date" type="date" value="${d0}"></div><div class="field"><label class="label">Заголовок *</label><input class="input" id="comp-title" placeholder="Краткое описание"></div><div class="field"><label class="label">Описание *</label><textarea class="input" id="comp-desc" rows="5" placeholder="Подробности рекламации"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button><button class="btn btn-red" onclick="saveComplaint('${clientId}')">Сохранить</button></div></div></div>`);
+ openModal(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()"><div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()"><b style="display:block;margin-bottom:10px">＋ Добавить рекламацию</b><div class="field"><label class="label">Дата</label><input class="input" id="comp-date" type="date" value="${d0}"></div><div class="field"><label class="label">Заголовок *</label><input class="input" id="comp-title" placeholder="Краткое описание"></div><div class="field"><label class="label">Описание *</label><textarea class="input" id="comp-desc" rows="5" placeholder="Подробности рекламации"></textarea></div><div class="row2" style="margin-top:12px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button><button class="btn btn-red" onclick="saveComplaint('${clientId}')">Сохранить</button></div></div></div>`);
 }
 function saveComplaint(clientId){
  const c=(DB.clients||[]).find(x=>x.id===clientId);if(!c)return;
@@ -2513,7 +2527,7 @@ function rescheduleOrder(id){
  const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  openModal(
   '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-  '<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
   '<b style="display:block;margin-bottom:10px">📅 Перенос заявки №'+o.id+'</b>'+
   '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • было: '+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'+
   '<div class="field"><label class="label">Новая дата *</label><input class="input" id="rs-date" type="date" value="'+(o.date||d0)+'"></div>'+
@@ -2521,7 +2535,7 @@ function rescheduleOrder(id){
   slots.map(s=>'<option value="'+s+'"'+(o.t1&&o.t2&&s===(o.t1+'–'+o.t2)?' selected':'')+'>'+s+'</option>').join('')+
   '</select></div>'+
   '<div class="row2" style="margin-top:12px">'+
-  '<button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отмена</button>'+
+  '<button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>'+
   '<button class="btn btn-blue" onclick="rescheduleApply('+o.id+')">Перенести</button>'+
   '</div></div></div>');
 }
@@ -2625,7 +2639,7 @@ var wl=(o.works||[]).filter(function(x){return !x.skipped;}).map(function(x){ret
 var ml=(o.materials||[]).filter(function(m){return m.status!=='bought';}).map(function(m){return '• '+escapeHtml(m.name)+' — '+m.qty+' '+unitLabel(m.munit)+(m.buyer?' ('+(BUYER[m.buyer]||m.buyer)+')':'');}).join('<br>');
 window.__takeProceed=proceed;
 openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
-'<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
+'<div style="background:var(--bg-secondary);border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">'+
 '<b style="display:block;margin-bottom:8px">📋 Заявка №'+id+' — '+escapeHtml(o.client||'')+'</b>'+
 '<div class="muted">'+(o.date?o.date.slice(8)+'.'+o.date.slice(5,7):'—')+' '+(o.t1||'')+'–'+(o.t2||'')+' • '+escapeHtml(o.address||'')+'</div>'+
 '<div style="margin:10px 0"><b>Работы:</b><div style="font-size:13px;margin-top:4px">'+(wl||'• состав не задан')+'</div></div>'+
@@ -2633,8 +2647,8 @@ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index
 '<div class="info-row"><span class="muted">Сумма заказа</span><b>'+money(total(o))+'</b></div>'+
 '<div class="info-row"><span class="muted">Аванс внесён</span><b style="color:var(--green)">'+money(totalPaid(o))+'</b></div>'+
 '<div class="info-row"><span class="muted">Остаток с заказчика после работ</span><b>'+money(balance(o))+'</b></div>'+
-'<div class="info-row" style="background:#eff6ff;border-radius:8px;padding:8px"><span>💵 Твоё вознаграждение</span><b style="color:var(--blue)">'+rewardLabel(o)+'</b></div>'+
-'<div class="row2" style="margin-top:12px"><button class="btn" style="background:#f3f4f6;color:#374151" onclick="closeModal()">Отклонить</button>'+
+'<div class="info-row" style="background:rgba(251,191,36,.08);border-radius:8px;padding:8px"><span>💵 Твоё вознаграждение</span><b style="color:var(--accent)">'+rewardLabel(o)+'</b></div>'+
+'<div class="row2" style="margin-top:12px"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отклонить</button>'+
 '<button class="btn btn-green" onclick="closeModal();window.__takeProceed('+id+')">Взять в работу</button></div>'+
 '</div></div>');
 }
@@ -2931,12 +2945,12 @@ render();
 </script>
 <script>/*takeGateWrap*/(function(){if(typeof window.takeOrder==="function"&&typeof window.takeConfirm==="function"){window.takeOrder=function(id){takeGateModal(id,window.takeConfirm);};}else{console.warn("takeOrder/takeConfirm not found - gate off");}})();</script>
 <!-- CRM-INSTALL -->
-<button id="crmInstallBtn" style="display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:60;background:#2563eb;color:#fff;border:none;border-radius:24px;padding:12px 22px;font:700 14px sans-serif;box-shadow:0 4px 14px rgba(37,99,235,.4);cursor:pointer">📲 Установить приложение</button>
+<button id="crmInstallBtn" style="display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:60;background:var(--accent);color:var(--on-accent);border:none;border-radius:24px;padding:12px 22px;font:700 14px sans-serif;box-shadow:0 4px 14px rgba(251,191,36,.4);cursor:pointer">📲 Установить приложение</button>
 <div id="crmIosHint" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
- <div style="background:#fff;border-radius:14px;max-width:340px;width:88%;padding:18px;font:14px sans-serif">
+ <div style="background:var(--bg-secondary);border-radius:14px;max-width:340px;width:88%;padding:18px;font:14px sans-serif">
   <div style="font-weight:700;font-size:16px;margin-bottom:10px">Установка на iPhone</div>
-  <div style="color:#333;line-height:1.7">1. Нажмите кнопку «Поделиться» (квадрат со стрелкой вверх)<br>2. Выберите «На экран “Домой”»<br>3. Нажмите «Добавить»<br><br>Иконка CRM появится на рабочем столе, приложение будет открываться полноэкранно.</div>
-  <button onclick="document.getElementById('crmIosHint').style.display='none'" style="width:100%;margin-top:12px;padding:11px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Понятно</button>
+  <div style="color:var(--text-secondary);line-height:1.7">1. Нажмите кнопку «Поделиться» (квадрат со стрелкой вверх)<br>2. Выберите «На экран “Домой”»<br>3. Нажмите «Добавить»<br><br>Иконка CRM появится на рабочем столе, приложение будет открываться полноэкранно.</div>
+  <button onclick="document.getElementById('crmIosHint').style.display='none'" style="width:100%;margin-top:12px;padding:11px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer">Понятно</button>
  </div>
 </div>
 <script>
@@ -2961,14 +2975,14 @@ render();
 <!-- CRM-UPDATER -->
 <div id="updStrip" onclick="updOpenModal()" style="display:none;position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;background:#10b981;color:#fff;padding:9px 16px;font:600 13px sans-serif;z-index:98;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)">🔄 Доступно обновление — нажмите для подробностей</div>
 <div id="updOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:99;align-items:center;justify-content:center">
- <div style="background:#fff;border-radius:14px;max-width:360px;width:88%;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
+ <div style="background:var(--bg-secondary);border-radius:14px;max-width:360px;width:88%;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
   <div id="updMTitle" style="font-weight:700;font-size:16px;margin-bottom:10px"></div>
-  <div id="updMText" style="font-size:14px;color:#333;white-space:pre-line;max-height:50vh;overflow:auto;margin-bottom:14px"></div>
+  <div id="updMText" style="font-size:14px;color:var(--text-secondary);white-space:pre-line;max-height:50vh;overflow:auto;margin-bottom:14px"></div>
   <div id="updMBtns" style="display:flex;gap:8px">
    <button id="updNow" style="flex:1;padding:11px;border:none;border-radius:8px;background:#10b981;color:#fff;font-weight:700;cursor:pointer">Обновить</button>
-   <button id="updLate" style="flex:1;padding:11px;border:none;border-radius:8px;background:#e5e7eb;color:#374151;font-weight:600;cursor:pointer">Обновить позже</button>
+   <button id="updLate" style="flex:1;padding:11px;border:none;border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-weight:600;cursor:pointer">Обновить позже</button>
   </div>
-  <button id="updMOk" style="display:none;width:100%;padding:11px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Понятно</button>
+  <button id="updMOk" style="display:none;width:100%;padding:11px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer">Понятно</button>
  </div>
 </div>
 <script>
