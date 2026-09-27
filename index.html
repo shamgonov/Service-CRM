@@ -640,7 +640,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.5.0</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.5.1</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -2942,6 +2942,61 @@ if(state.screen==='create'&&typeof worksRenderCreate==='function')worksRenderCre
   }
  });
 }
+// === Android/PWA: защита от случайного выхода по аппаратной «Назад» ===
+// Включается ТОЛЬКО в standalone-режиме (PWA / обёртка): в обычном браузере
+// «Назад» не перехватывается и работает как раньше.
+// Под ногами всегда лежит «буферная» запись history.pushState, поэтому аппаратная
+// «Назад» приходит сюда как popstate, а не закрывает приложение.
+// Разбор: модалка -> закрыть; есть предыдущий экран -> вернуться;
+// иначе (главный экран) -> диалог «Выйти из приложения?».
+var __navStack=[],__navSilent=false;
+function __isStandalone(){return !!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||!!navigator.standalone;}
+function __navBuf(){try{history.pushState({crmBack:1},'');}catch(e){}}
+function __navTop(){return __navStack[__navStack.length-1]||null;}
+function __showExitConfirm(){
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this){closeModal();__navBuf()}">'+
+ '<div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
+ '<b style="display:block;margin-bottom:10px">Выйти из приложения?</b>'+
+ '<div style="font-size:14px;margin-bottom:14px">Вы на главном экране. «Да» закроет приложение, «Отмена» — останетесь в нём.</div>'+
+ '<div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal();__navBuf()">Отмена</button>'+
+ '<button class="btn btn-red" onclick="__confirmExit()">Да, выйти</button></div></div></div>');
+}
+function __confirmExit(){closeModal();try{history.go(-(history.length||2));}catch(e){}setTimeout(function(){window.close();},200);}
+(function(){
+ if(!__isStandalone())return;
+ var _go=go,_om=openModal,_cm=closeModal;
+ go=function(s,id){
+  _go(s,id);
+  if(__navSilent)return;
+  var t=__navTop();
+  if(t&&t.k==='s'&&t.s===s&&t.id===id)return;
+  __navStack.push({k:'s',s:s,id:id});
+ };
+ openModal=function(html){
+  var was=modalIsOpen();
+  _om(html);
+  if(!was&&!__navSilent)__navStack.push({k:'m'});
+ };
+ closeModal=function(){
+  var was=modalIsOpen();
+  _cm();
+  if(was){var t=__navTop();if(t&&t.k==='m')__navStack.pop();}
+ };
+ __navStack=[{k:'s',s:state.screen,id:state.orderId}];
+ try{history.replaceState({crmBack:0},'');}catch(e){}
+ __navBuf();
+ window.addEventListener('popstate',function(){
+  var t=__navTop();
+  if(t&&t.k==='m'){__navSilent=true;try{closeModal();}finally{__navSilent=false;}__navBuf();return;}
+  if(__navStack.length>1){
+   __navStack.pop();
+   var p=__navTop();
+   __navSilent=true;try{go(p.s,p.id);}finally{__navSilent=false;}
+   __navBuf();return;
+  }
+  __showExitConfirm();
+ });
+})();
 render();
 </script>
 <script>/*takeGateWrap*/(function(){if(typeof window.takeOrder==="function"&&typeof window.takeConfirm==="function"){window.takeOrder=function(id){takeGateModal(id,window.takeConfirm);};}else{console.warn("takeOrder/takeConfirm not found - gate off");}})();</script>
@@ -2987,7 +3042,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.5.0';
+const APP_VERSION='2.5.1';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
