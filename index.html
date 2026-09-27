@@ -2606,7 +2606,7 @@ html+=w.map(function(x,i){return '<div class="info-row" style="align-items:cente
 // B5: доп. работы видны прямо в смете (работы+extras=итог), с удалением строки
 html+=(o.extras||[]).map(function(e,i){return '<div class="info-row" style="align-items:center"><span>＋ '+escapeHtml(e.name)+( (+e.qty||1)!=1?' '+ (+e.qty||1)+' × '+money(+e.price||0):'')+' '+(canEd?'<span class="muted" style="cursor:pointer" title="Изменить" onclick="extraEdit('+o.id+','+i+')">✏️</span><span class="muted" style="cursor:pointer" title="Удалить" onclick="delExtra('+o.id+','+i+')">✕</span>':'')+'</span><b>'+money((+e.price||0)*(+e.qty||1))+'</b></div>';}).join('');
 html+='<div class="total"><span>Итого</span><span style="color:var(--green)">'+money(total(o))+'</span></div>';
-if(docPerm(o))html+='<div style="margin-top:8px"><button class="btn btn-outline" style="width:100%" onclick="docEstimate('+o.id+')">📄 Открыть смету</button></div>';
+if(['approved','inwork','completed','paid'].indexOf(o.status)>=0)html+='<div style="margin-top:8px"><button class="btn btn-outline" style="width:100%" onclick="docEstimate('+o.id+')">📄 Открыть смету</button></div>';
 if(canEd)html+='<div class="row2" style="margin-top:6px"><input class="input" id="wa-title" placeholder="Работа (доп)"><input class="input" id="wa-qty" value="1" style="max-width:60px"><input class="input" id="wa-price" type="number" placeholder="Цена ₽/ед.">'+unitSel('wa-unit','pcs')+'<button class="btn-sm btn-green" style="flex:none" onclick="worksAddTo('+o.id+')">＋</button></div>';
 return html+'</div>';
 }
