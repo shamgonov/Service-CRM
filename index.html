@@ -1617,14 +1617,18 @@ function activeWorkers(){
  // Исполнителем может быть ЛЮБОЙ активный пользователь с доступом, независимо от роли:
  // у недавно одобренного сотрудника роль может быть ещё не назначена (roles[0]||''),
  // и раньше он молча выпадал из всех селектов исполнителя.
- // Неактивные по-прежнему исключаются: active===false, уволенные, тестовые.
- return (DB.users||[]).filter(u=>{
+ // Отсекаем только явно неактивных: active===false и уволенных.
+ const list=(DB.users||[]).filter(u=>{
   if(u.active===false) return false;
   if(u.status==='fired'||u.status==='quit') return false;
-  if(u.role==='test') return false;
-  if(u.name && u.name.toLowerCase().includes('тест')) return false;
   return true;
  });
+ // Текущий пользователь обязан быть в списке: иначе он не увидит себя как исполнителя.
+ if(state&&state.user&&!list.some(u=>getUserName(u)===state.user)){
+  const me=(DB.users||[]).find(u=>getUserName(u)===state.user);
+  if(me)list.push(me);
+ }
+ return list;
 }
 function filterWorkerSelect(selId,q){
  const sel=document.getElementById(selId);if(!sel)return;
@@ -1724,7 +1728,7 @@ function cStageRender(){
    (s.dueMode!=='ready'&&s.dueMode!=='agree'?'<div class="row2" style="margin-top:6px"><input class="input" type="date" value="'+s.plan_start+'" onchange="state.cStages['+i+'].plan_start=this.value" placeholder="начало">'+
    '<input class="input" type="date" value="'+s.plan_ready+'" onchange="state.cStages['+i+'].plan_ready=this.value" placeholder="готовность"></div>':'')+
     '<select class="input" style="margin-top:6px" onchange="state.cStages['+i+'].by=this.value"><option value="">— исполнитель этапа —</option>'+
-    activeWorkers().map(u=>'<option '+(s.by===u.name?'selected':'')+'>'+u.name+'</option>').join('')+'</select></div>';
+    activeWorkers().map(u=>{const n=getUserName(u);return '<option '+(s.by===n?'selected':'')+'>'+escapeHtml(n)+'</option>';}).join('')+'</select></div>';
  }).join('');
 }
 function cStageDue(i,v){state.cStages[i].dueMode=v;cStageRender()}
