@@ -88,7 +88,9 @@ textarea.input{min-height:60px;resize:vertical}
 .photos{display:flex;gap:8px;flex-wrap:wrap}
 .photo{width:64px;height:64px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px}
 .photo-add{border:2px dashed var(--accent);background:transparent;color:var(--accent);cursor:pointer}
-.slot{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid var(--border);background:var(--bg-secondary)}
+.slot{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid var(--border);background:var(--bg-secondary);color:var(--text-primary)}
+.cal-order{color:var(--text-primary)}
+.cal-order b{color:var(--text-primary)}
 .switch{position:relative;width:44px;height:25px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0}
 .slider{position:absolute;inset:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:25px;transition:.25s ease;cursor:pointer}
@@ -1014,12 +1016,12 @@ function renderCalendar(){
    const busy=inSlot.filter(o=>o.worker);
 const past=slotIsPast(state.calDate,sStart,sEnd);
    return `<div class="slot" data-slot="${si}" data-start="${sStart}" data-end="${sEnd}"
-    style="${past?'opacity:.45;filter:grayscale(1);':CAL_SRC===si?'border:2px dashed #f59e0b;background:#fffbeb':busy.length?'border-left-color:var(--red);background:#fef2f2':inSlot.length?'border-left-color:var(--accent);background:rgba(251,191,36,.06)':'border-left-color:var(--green);background:#f0fdf4;cursor:pointer'}"
+    style="${past?'opacity:.45;filter:grayscale(1);':CAL_SRC===si?'border:2px dashed #f59e0b;background:rgba(245,158,11,.18)':busy.length?'border-left-color:var(--red);background:rgba(220,38,38,.16)':inSlot.length?'border-left-color:var(--accent);background:rgba(251,191,36,.06)':'border-left-color:var(--green);background:rgba(16,185,129,.14);cursor:pointer'}"
     onmousedown="calSlotClick(event,${si},'${sStart}','${sEnd}')" ontouchstart="calSlotClick(event,${si},'${sStart}','${sEnd}')"
     onmouseup="calSlotRelease(event,${si},'${sStart}','${sEnd}')" ontouchend="calSlotRelease(event,${si},'${sStart}','${sEnd}')"
     ondragover="event.preventDefault()" ondrop="calDrop(event,${si},'${sStart}','${sEnd}')">
     <b style="font-size:13px">${slot}</b>
-    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" draggable="true" ondragstart="CAL_DRAG=${o.id};event.stopPropagation()" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:#fef9c3;border-left:3px solid #f59e0b;padding-left:4px':''}"
+    ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" draggable="true" ondragstart="CAL_DRAG=${o.id};event.stopPropagation()" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:rgba(245,158,11,.2);border-left:3px solid #f59e0b;padding-left:4px':''}"
      onmousedown="calOrderDown(event,${o.id},${si})" ontouchstart="calOrderDown(event,${o.id},${si})"
      onclick="if(Date.now()-(CAL_HELD||0)<700)return;event.stopPropagation();go('details',${o.id})">
      ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
