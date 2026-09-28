@@ -980,6 +980,7 @@ function renderCreate(){
  <div class="field"><label class="label">Назначить исполнителя</label>
   <input class="input" id="c-wsearch" placeholder="🔎 Поиск по имени..." oninput="filterWorkerSelect('c-worker',this.value)" style="margin-bottom:6px">
   <select class="input" id="c-worker"><option value="">— не назначен (заявка в пуле) —</option>
+  ${creatorOption(state.user)}
   ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo"><span class="slider"></span></label></div>
@@ -1623,12 +1624,28 @@ function activeWorkers(){
   if(u.status==='fired'||u.status==='quit') return false;
   return true;
  });
+ // Автор заявки обязан оставаться выбираемым: его карточка могла быть
+ // помечена неактивной/уволенной, а право назначать исполнителя у создателя остаётся.
+ const authors={};
+ (DB.orders||[]).forEach(o=>{if(o&&o.by)authors[o.by]=1;});
+ Object.keys(authors).forEach(nm=>{
+  if(list.some(u=>getUserName(u)===nm))return;
+  const u=(DB.users||[]).find(x=>getUserName(x)===nm);
+  if(u)list.push(u);
+ });
  // Текущий пользователь обязан быть в списке: иначе он не увидит себя как исполнителя.
  if(state&&state.user&&!list.some(u=>getUserName(u)===state.user)){
   const me=(DB.users||[]).find(u=>getUserName(u)===state.user);
   if(me)list.push(me);
  }
  return list;
+}
+// Создатель заявки, которого в activeWorkers() нет вовсе (запись удалена из DB.users) —
+// отдельным option по имени из o.by, чтобы выбор исполнителя не терялся.
+function creatorOption(by,selected){
+ const nm=(by||'').trim();
+ if(!nm||activeWorkers().some(u=>getUserName(u)===nm))return '';
+ return '<option value="'+escapeHtml(nm)+'"'+(selected===nm?' selected':'')+'>'+escapeHtml(nm)+' — создатель</option>';
 }
 function filterWorkerSelect(selId,q){
  const sel=document.getElementById(selId);if(!sel)return;
@@ -1853,6 +1870,7 @@ function editOrderModal(id){
      <option value="service" ${orderType(o)==='service'?'selected':''}>Сервисный</option></select>
     <input class="input" id="e-wsearch" placeholder="🔎 Поиск исполнителя..." oninput="filterWorkerSelect('e-worker',this.value)" style="margin-bottom:6px">
     <select class="input" id="e-worker" style="margin-bottom:6px"><option value="">— без исполнителя —</option>
+     ${creatorOption(o.by,o.worker)}
      ${activeWorkers().map(u=>`<option ${o.worker===getUserName(u)?'selected':''}>${escapeHtml(getUserName(u))}</option>`).join('')}</select>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px"><input type="checkbox" id="e-photo" ${o.photoReport?'checked':''}> 📸 Требовать фотоотчёт</label>
     ${(typeof isOwner==='function'&&uiOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
@@ -1956,7 +1974,7 @@ function closeClockPicker(){window._clk=null;const r=document.getElementById('cl
 // === ЭТАП 3: назначение исполнителя из карточки approved / отклонение назначения ===
 function assignWorkerModal(id){
  const o=byId(id);if(!o)return;
- const opts=activeWorkers().map(u=>{const n=getUserName(u);const sp=((u.profile||{}).specs||[])[0];return '<option value="'+escapeHtml(n)+'"'+(o.worker===n?' selected':'')+'>'+escapeHtml(n)+(sp?' — '+escapeHtml(sp):'')+'</option>';}).join('');
+ const opts=creatorOption(o.by,o.worker)+activeWorkers().map(u=>{const n=getUserName(u);const sp=((u.profile||{}).specs||[])[0];return '<option value="'+escapeHtml(n)+'"'+(o.worker===n?' selected':'')+'>'+escapeHtml(n)+(sp?' — '+escapeHtml(sp):'')+'</option>';}).join('');
  openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
   '<div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">'+
   '<b style="display:block;margin-bottom:10px">🎯 Назначить исполнителя — заявка №'+o.id+'</b>'+
