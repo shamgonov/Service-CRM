@@ -541,7 +541,7 @@ function cacheState(){ lsSet('crm_cache_state',{seq:DB.seq||270,users:DB.users||
 function loadCachedData(){
  var co=lsGet('crm_cache_orders',null), cs=lsGet('crm_cache_state',null);
  if(co&&co.length&&(!DB.orders||!DB.orders.length))DB.orders=co;
- if(cs){ if(!DB.users||!DB.users.length)DB.users=cs.users||[]; if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; if(DB.shopping===undefined)DB.shopping=cs.shopping||[]; if(cs.clients&&cs.clients.length&&(!DB.clients||!DB.clients.length))DB.clients=cs.clients; if(cs.settings&&DB.settings===undefined)DB.settings=cs.settings; }
+ if(cs){ if(!DB.users||!DB.users.length)DB.users=normalizeUsers(cs.users||[]); else normalizeUsers(DB.users); if(!DB.templates||!DB.templates.length)DB.templates=cs.templates||[]; if(!DB.seq)DB.seq=cs.seq||270; if(DB.specializations===undefined)DB.specializations=cs.specializations||[]; if(DB.shopping===undefined)DB.shopping=cs.shopping||[]; if(cs.clients&&cs.clients.length&&(!DB.clients||!DB.clients.length))DB.clients=cs.clients; if(cs.settings&&DB.settings===undefined)DB.settings=cs.settings; }
  return !!(co&&co.length);
 }
 function queueGet(){ return lsGet('crm_queue',[]); }
@@ -685,7 +685,7 @@ function loadCloud(cb){
    var ns={users:st.db.users||[],templates:st.db.templates||[],seq:st.db.seq||270,specializations:st.db.specializations||[],shopping:st.db.shopping||[],clients:(Array.isArray(st.db.clients)?st.db.clients:undefined),settings:(st.db.settings&&typeof st.db.settings==='object'&&!Array.isArray(st.db.settings)?st.db.settings:undefined)};
     changed=!jsonEq(ns,{users:DB.users||[],templates:DB.templates||[],seq:DB.seq||270,specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[],settings:DB.settings||{}});
     LAST_STATE_JSON=JSON.stringify(ns);
-    DB.users=ns.users; DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations; DB.shopping=ns.shopping;
+    DB.users=normalizeUsers(ns.users); DB.templates=ns.templates; DB.seq=ns.seq; DB.specializations=ns.specializations; DB.shopping=ns.shopping;
     if(ns.settings)DB.settings=ns.settings;
    if(ns.clients)DB.clients=ns.clients; // массив пришёл из облака — берём; иначе не трогаем локальный
    // миграция (одноразово, владелец): облако без clients, локально непусто → залить
@@ -711,6 +711,7 @@ function loadCloud(cb){
 // запись настроек (users/templates/seq) — app/state БЕЗ orders
 function saveSettings(){
  if(!DB)return;
+ normalizeUsers(DB.users);
  var copy={seq:DB.seq||270,users:DB.users||[],templates:DB.templates||[],specializations:DB.specializations||[],shopping:DB.shopping||[],clients:DB.clients||[],settings:DB.settings||{}};
  cacheState();
  if(OFFLINE||ORDERS_ERR&&!STATE_SUB){ queuePush({kind:'settings'}); return; }
@@ -824,6 +825,22 @@ function ensureOwnerInDb(){
 // селекты попадали тестовые люди, которых во вкладке нет. Теперь DB.users
 // перестраивается из employees — того же источника, что читает tabStaff.
 var EMPLOYEES_CACHE=null;
+// role в DB.users обязана быть плоской строкой: legacy-доки employees несут
+// role=["worker"], а realWorkers() и отчёты сравнивают строго u.role==='worker'.
+function flatRole(v){
+ if(Array.isArray(v)){ for(var i=0;i<v.length;i++){ var r=flatRole(v[i]); if(r)return r; } return ''; }
+ return (v==null)?'':String(v);
+}
+function normalizeUsers(list){
+ (list||[]).forEach(function(u){
+  if(!u)return;
+  var r=flatRole(u.role); u.role=r;
+  var rs=(Array.isArray(u.roles)?u.roles:(r?[r]:[])).map(flatRole).filter(function(x){return x;});
+  if(r&&rs.indexOf(r)<0)rs.unshift(r);
+  u.roles=rs;
+ });
+ return list;
+}
 function syncEmployeesFromCloud(){
  try{
   fs.collection('employees').get().then(function(s){
@@ -842,7 +859,7 @@ function applyEmployeesToUsers(){
   if(!e||!e.deviceId)return;
   if(e.status==='fired'||e.status==='quit')return;
   var prev=byDev[e.deviceId]||byName[e.name]||{};
-  var roles=(Array.isArray(e.roles)&&e.roles.length)?e.roles.slice():[e.role].filter(Boolean);
+  var roles=(Array.isArray(e.roles)?e.roles:[e.role]).map(flatRole).filter(Boolean);
   // id пересобираются на employees-ключ: заявка хранит имя (o.worker), а не id, так что
   // привязка не теряется; share берём из прежней записи, чтобы дележка не обнулилась.
   next.push({id:'u_'+e.deviceId,name:e.name||e.deviceId,role:roles[0]||'',roles:roles,
