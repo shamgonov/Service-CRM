@@ -819,6 +819,48 @@ function ensureOwnerInDb(){
    saveSettings();
  }
 }
+// === ЕДИНЫЙ СПИСОК ИСПОЛНИТЕЛЕЙ = вкладка «Сотрудники» (collection employees) ===
+// DB.users раньше сеялся из defaultData() (u1–u5) и жил в app/state, поэтому в
+// селекты попадали тестовые люди, которых во вкладке нет. Теперь DB.users
+// перестраивается из employees — того же источника, что читает tabStaff.
+var EMPLOYEES_CACHE=null;
+function syncEmployeesFromCloud(){
+ try{
+  fs.collection('employees').get().then(function(s){
+   var arr=[]; s.forEach(function(d){ var e=d.data(); e.deviceId=e.deviceId||d.id; arr.push(e); });
+   EMPLOYEES_CACHE=arr; applyEmployeesToUsers();
+  }).catch(function(e){ console.warn('employees sync err',e); });
+ }catch(e){}
+}
+function applyEmployeesToUsers(){
+ if(!DB||!EMPLOYEES_CACHE)return;
+ var old=DB.users||[];
+ var byDev={},byName={};
+ old.forEach(function(u){ if(u&&u.deviceId)byDev[u.deviceId]=u; if(u&&u.name)byName[u.name]=u; });
+ var next=[];
+ EMPLOYEES_CACHE.forEach(function(e){
+  if(!e||!e.deviceId)return;
+  if(e.status==='fired'||e.status==='quit')return;
+  var prev=byDev[e.deviceId]||byName[e.name]||{};
+  var roles=(Array.isArray(e.roles)&&e.roles.length)?e.roles.slice():[e.role].filter(Boolean);
+  // id пересобираются на employees-ключ: заявка хранит имя (o.worker), а не id, так что
+  // привязка не теряется; share берём из прежней записи, чтобы дележка не обнулилась.
+  next.push({id:'u_'+e.deviceId,name:e.name||e.deviceId,role:roles[0]||'',roles:roles,
+   share:+prev.share||0,deviceId:e.deviceId,status:e.status||'approved',
+   quals:e.quals||prev.quals||[],owner:!!e.owner,profile:e.profile||prev.profile||{}});
+ });
+ // владелец обязан остаться: его employees-док на первом запуске мог ещё не создаться
+ var dev=deviceId();
+ if(isOwner()&&!next.some(function(u){return u.deviceId===dev;})){
+  var me=null; old.forEach(function(u){ if(u&&u.deviceId===dev)me=u; });
+  if(me)next.unshift(me);
+ }
+ if(!next.length)return; // employees пуст — не затираем офлайн-fallback
+ if(jsonEq(next,old))return;
+ DB.users=next;
+ if(isOwner())saveSettings(); else cacheState();
+ if(typeof render==='function')render();
+}
 
 // === Сид ролей + загрузка кэша ===
 function ensureRolesSeeded(cb){
@@ -1003,6 +1045,8 @@ function tabRequests(wrap){
 // --- Вкладка Сотрудники ---
 function tabStaff(wrap){
  fs.collection('employees').get().then(function(es){
+  var cache=[]; es.forEach(function(d){ var e=d.data(); e.deviceId=e.deviceId||d.id; cache.push(e); });
+  EMPLOYEES_CACHE=cache; applyEmployeesToUsers();
   var html='<div class="sec-title">Принятые сотрудники</div>';
   if(es.empty)html+='<div class="muted">Пока никого</div>';
   var allRoles=ROLES.length?ROLES:BUILTIN_ROLES;
@@ -1088,6 +1132,7 @@ function approve(dev,name){
    if(typeof saveSettings==='function')saveSettings();
   }
  }catch(e){}
+ syncEmployeesFromCloud();
  setTimeout(loadStaff,500);
 }
 function reject(dev){ if(!can('staff_manage'))return alert('Нет права staff_manage'); fs.collection('requests').doc(dev).delete(); setTimeout(loadStaff,500); }
@@ -1104,6 +1149,7 @@ function toggleEmpRole(dev,roleId,on){
   fs.collection('employees').doc(dev).update({roles:roles,role:roles[0]||''}).then(function(){
    if(ME&&ME.deviceId===dev){ ME.roles=roles; ME.role=roles[0]||''; if(typeof effectiveRole==='function')state.role=effectiveRole(); if(typeof render==='function')render(); }
    try{ var w=DB.users&&DB.users.find(function(u){return u.deviceId===dev;}); if(w)w.role=roles[0]||''; if(typeof saveSettings==='function')saveSettings(); }catch(e){}
+   syncEmployeesFromCloud();
    setTimeout(loadStaff,300);
   });
  }).catch(function(e){ alert('Ошибка: '+e.message); });
@@ -1125,6 +1171,7 @@ function addQual(dev){
 }
 function fireEmp(dev){ if(!can('staff_manage'))return alert('Нет права staff_manage'); if(confirm('Уволить сотрудника?')){fs.collection('employees').doc(dev).delete();
  try{ DB.users=(DB.users||[]).filter(function(u){return u.deviceId!==dev;}); if(typeof saveSettings==='function')saveSettings(); }catch(e){}
+ syncEmployeesFromCloud();
  setTimeout(loadStaff,400);} }
 
 function togglePerm(roleId,key,on){
@@ -1191,6 +1238,7 @@ function startMain(){
  });
  if(!navigator.onLine){ OFFLINE=true; loadCachedData(); }
  loadCloud(function(){});
+ syncEmployeesFromCloud();
  migrateOrdersIfNeeded();
  // B2: на старте доставляем то, что не ушло в прошлой сессии (упавшие записи очереди).
  // Задержка — чтобы успел подключиться onSnapshot и не перетёр свежие данные старым патчем.

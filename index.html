@@ -346,12 +346,8 @@ function histToggle(el){
 function defaultData(){return{
  seq:270,
  clients:[],
- users:[
-  {id:'u1',name:'Дмитрий',role:'admin',share:0},
-  {id:'u2',name:'Оля',role:'operator',share:0},
-  {id:'u3',name:'Анна',role:'manager',share:0},
-  {id:'u4',name:'Вася',role:'worker',share:50},
-  {id:'u5',name:'Петя',role:'worker',share:40}],
+ users:[ // офлайн-fallback первого запуска: только владелец; реальный список приходит из employees
+  {id:'u1',name:'Дмитрий',role:'admin',share:0}],
  templates:[
   {id:'t1',name:'Осмотр и диагностика',price:1500},
   {id:'t2',name:'Замеры',price:1000},
