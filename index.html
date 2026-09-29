@@ -243,6 +243,16 @@ function urgentSoon(o){
  const diff=(p[0]*60+(p[1]||0))-(new Date().getHours()*60+new Date().getMinutes());
  return diff>=0&&diff<=60;
 }
+// «🚗 Приступил (на адресе)» для заявки, где исполнитель уже назначен, но статус ещё
+// new/inspection: там showTakeBtn не срабатывает (у исполнителя нет orders_take), и без
+// этого входа в работу карточка не показала бы ни одной кнопки смены статуса.
+function showStartWorkBtn(o){
+ if(!o||!o.worker)return false;
+ if(!['new','inspection'].includes(o.status))return false;
+ if(orderType(o)==='manufacture')return false;
+ if(showTakeBtn(o))return false;
+ return o.worker===state.user||((typeof can==='function')&&can('orders_status'));
+}
 // кнопка «Взять в работу»: статус new/approved + право + (исполнитель пуст ИЛИ я создатель/owner/admin)
 function showTakeBtn(o){
  if(!o||['new','approved'].indexOf(o.status)<0)return false;
@@ -933,11 +943,12 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
   ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
  </div>
 </div>
-${isW||canManage||showTakeBtn(o)?`<div class="card">
+${isW||canManage||showTakeBtn(o)||showStartWorkBtn(o)?`<div class="card">
   ${hintBarHtml(o)}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
   ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
+  ${showStartWorkBtn(o)?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter&&!isEnroute(o)?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
   ${isInwork(o)&&o.worker===state.user?(isEnroute(o)?`<button class="btn btn-red" onclick="emergencyEnroute(${o.id})">⚠️ Экстренная ситуация<span class="muted" style="display:block;font-weight:400;font-size:12px">выехал ${o.enroute?new Date(o.enroute).toLocaleTimeString().slice(0,5):'—'} — снять выезд</span></button>`:`<button class="btn btn-green" onclick="enrouteToggle(${o.id})">🚗 Я поехал</button>`):''}
   ${isInwork(o)&&o.worker===state.user?`<button class="btn btn-outline" onclick="lateModal(${o.id})">🕒 Опаздываю</button>`:''}
