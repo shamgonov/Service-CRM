@@ -271,7 +271,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре'};
+const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре',enroute:'Я поехал',enroute_cancel:'Экстренная ситуация',late:'Задержка (звонок клиенту)',conflict_accept:'Конфликт принят'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -291,6 +291,10 @@ function histLine(h){
  else if(h.action==='stage_add'||h.action==='stage_complete'||h.action==='stage_reopen')txt='«'+(d.stageTitle||'')+'»';
  else if(h.action==='cancel')txt='причина: '+(d.reason||'—');
  else if(h.action==='photo_add')txt=(d.count||1)+' шт.';
+ else if(h.action==='enroute')txt='выехал к клиенту • план '+(d.plan||'—');
+ else if(h.action==='enroute_cancel')txt='причина: '+(d.reason||'—')+(d.was?' • выезд был с '+d.was:'');
+ else if(h.action==='late')txt='звонок клиенту: задержка '+(d.mins!=null?d.mins:'?')+' мин • '+(d.from||'')+' → '+(d.to||'')+(d.also?' • + перенос №'+d.also:'');
+ else if(h.action==='conflict_accept')txt='конфликт с №'+(d.order!=null?d.order:'—')+' принят, следующую заявку не сдвигаем';
  else if(h.action==='edit')txt=(d.fields||[]).join(', ');
  return txt;
 }
@@ -676,7 +680,7 @@ function renderOrders(){
 ${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
- <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро, нет исполнителя</b>':''}</div>
+ <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро, нет исполнителя</b>':''}${(burnVisible()&&isBurning(o))?' <b style="color:#dc2626">🔴 горит</b>':''}</div>
   <div style="margin-top:6px">${badges(o)}${isInwork(o)&&o.worker?`<span class="badge" style="background:#ffedd5;color:#9a3412">🚜 ${escapeHtml(o.worker)}</span>`:''}</div>
   <div style="font-weight:700;color:var(--green);margin-top:4px">${money(total(o))}</div>
 </div>`).join('')||'<div class="card muted">Ничего не найдено</div>'}`}
@@ -870,7 +874,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${escapeHtml(o.address)}</b></div>
  <div class="info-row"><span class="muted">Время</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
  <div class="info-row"><span class="muted">Исполнитель</span><b>${o.worker?escapeHtml(o.worker):'— не назначен —'}</b></div>
- ${canEditOrder(o)?`<button class="btn-sm btn-outline" style="margin-top:8px" onclick="editOrderModal(${o.id})">✏️ Редактировать</button>`:''}
+ ${(canEditOrder(o)&&!isEnroute(o))?`<button class="btn-sm btn-outline" style="margin-top:8px" onclick="editOrderModal(${o.id})">✏️ Редактировать</button>`:''}
  ${canDeleteOrder()?`<button class="btn-sm btn-red" style="margin-top:8px;margin-left:6px" onclick="deleteOrder(${o.id})">🗑 Удалить</button>`:''}
  <div class="info-row"><span class="muted">Работы</span><span style="text-align:right;max-width:60%">${escapeHtml(o.desc)}</span></div>
 </div></div>
@@ -934,7 +938,9 @@ ${isW||canManage||showTakeBtn(o)?`<div class="card">
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
   ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
-  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+  ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить заказ</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter&&!isEnroute(o)?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+  ${isInwork(o)&&o.worker===state.user?(isEnroute(o)?`<button class="btn btn-red" onclick="emergencyEnroute(${o.id})">⚠️ Экстренная ситуация<span class="muted" style="display:block;font-weight:400;font-size:12px">выехал ${o.enroute?new Date(o.enroute).toLocaleTimeString().slice(0,5):'—'} — снять выезд</span></button>`:`<button class="btn btn-green" onclick="enrouteToggle(${o.id})">🚗 Я поехал</button>`):''}
+  ${isInwork(o)&&o.worker===state.user?`<button class="btn btn-outline" onclick="lateModal(${o.id})">🕒 Опаздываю</button>`:''}
   ${o.status==='paused'&&o.worker===state.user?`<button class="btn btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
  ${canCancel(o)&&!['completed','paid','canceled'].includes(o.status)?`<button class="btn btn-red" style="margin-top:8px" onclick="cancelOrderModal(${o.id})">❌ Отменить заказ</button>`:''}
 ${o.status==='canceled'&&can('orders_restore')?`<button class="btn btn-green" style="margin-top:8px" onclick="restoreOrder(${o.id})">♻️ Возобновить заказ</button>`:''}
@@ -1071,7 +1077,9 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,canEditWorks(o)||isMyInwork(o))}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
-   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+   ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter&&!isEnroute(o)?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
+   ${isInwork(o)&&o.worker===state.user?(isEnroute(o)?`<button class="btn-sm btn-red" onclick="emergencyEnroute(${o.id})">⚠️ Экстренная ситуация</button>`:`<button class="btn-sm btn-green" onclick="enrouteToggle(${o.id})">🚗 Я поехал</button>`):''}
+   ${isInwork(o)&&o.worker===state.user?`<button class="btn-sm btn-outline" onclick="lateModal(${o.id})">🕒 Опаздываю</button>`:''}
    ${o.status==='paused'&&o.worker===state.user?`<button class="btn-sm btn-blue" onclick="resumeWork(${o.id})">▶ Возобновить работу</button>`:''}
   </div>`).join('')||'<div class="muted">Взятых заказов нет</div>'}
  </div>`:`
@@ -2224,6 +2232,121 @@ function resumeWork(id){
  logAction(o,'resume',{by:state.user});
  markOrder(o);orderSave(o);
  render();
+}
+// === ЭТАП A: ОБЯЗАТЕЛЬСТВА ИСПОЛНИТЕЛЯ («я поехал» / «опаздываю» / конфликт времени) ===
+// o.enroute = ISO-метка выезда. Статус заявки НЕ меняется. История — только через logAction.
+function isEnroute(o){return !!(o&&o.enroute);}
+// «горение»: inwork, от начала интервала >30 мин, и за 30 мин в истории нет
+// действий выезда/задержки (enroute/late/enroute_cancel/conflict_accept).
+function isBurning(o){
+ if(!isInwork(o)||!o.date||!o.t1)return false;
+ if(typeof localToday==='function'&&o.date!==localToday())return false;
+ var s=toMin(o.t1);if(s==null)return false;
+ var n=new Date();
+ if(n.getHours()*60+n.getMinutes()<=s+30)return false;
+ var cut=Date.now()-30*60000;
+ var acted=(o.history||[]).some(function(e){
+  if(['enroute','late','enroute_cancel','conflict_accept'].indexOf(e.action)<0)return false;
+  var t=Date.parse(e.ts);return !isNaN(t)&&t>=cut;
+ });
+ return !acted;
+}
+// 🔴 видно только контролирующим: владелец (вне симуляции) / admin / manager
+function burnVisible(){
+ if(typeof uiOwner==='function'&&uiOwner())return true;
+ if(typeof adminLike==='function'&&adminLike())return true;
+ return !!(typeof state!=='undefined'&&state.role==='manager');
+}
+// сдвиг HH:MM на N минут (не дальше 23:59)
+function shiftTime(t,mins){
+ var m=toMin(t);if(m==null)return t;
+ var x=Math.min(m+(+mins||0),23*60+59);
+ return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0');
+}
+// ближайшая по времени начала заявка того же исполнителя в тот же день,
+// пересекающаяся с [t1;t2] — «следующая», которой может потребоваться перенос.
+function nextOrderOfWorker(o,t1,t2){
+ if(!o||!o.worker||!o.date)return null;
+ var list=findConflicts(o.worker,o.date,t1,t2,o.id)||[];
+ if(!list.length)return null;
+ return list.slice().sort(function(a,b){return (toMin(a.t1)||0)-(toMin(b.t1)||0);})[0];
+}
+function enrouteGate(o){
+ if(!o)return false;
+ if(!isInwork(o)||o.worker!==state.user){alert('Кнопка доступна только исполнителю заявки в работе');return false;}
+ return true;
+}
+// «🚗 Я поехал»: метка выезда + история; статус не трогает. Снятие — только «Экстренная ситуация».
+function enrouteToggle(id){
+ var o=byId(id);if(!enrouteGate(o))return;
+ if(isEnroute(o))return emergencyEnroute(id);
+ if(!confirm('Отметить «Я поехал»? Время визита ('+o.t1+'–'+o.t2+') останется прежним — руководитель увидит, что вы выехали.'))return;
+ o.enroute=new Date().toISOString();
+ logAction(o,'enroute',{by:state.user,plan:o.t1});
+ markOrder(o);orderSave(o);render();
+ if(typeof pushEvent==='function')pushEvent('order','🚗 Исполнитель выехал №'+o.id,state.user+' • выезд к клиенту '+escapeHtml(o.client||''),o.id,true);
+}
+// «⚠️ Экстренная ситуация»: причина ОБЯЗАТЕЛЬНА (пусто/отмена — без действий); enroute снимается.
+function emergencyEnroute(id){
+ var o=byId(id);if(!enrouteGate(o))return;
+ if(!confirm('Экстренная ситуация? Отметка «Я поехал» будет снята, руководитель получит уведомление. Причина обязательна.'))return;
+ var reason=prompt('Причина (обязательно), например: сломался автомобиль / пробка / клиент не открывает');
+ if(reason===null)return;
+ reason=String(reason).trim();
+ if(!reason){alert('Причина обязательна — действие не выполнено');return;}
+ var was=o.enroute?new Date(o.enroute).toLocaleTimeString().slice(0,5):'—';
+ o.enroute=null;
+ logAction(o,'enroute_cancel',{by:state.user,reason:reason,was:was});
+ markOrder(o);orderSave(o);render();
+ if(typeof pushEvent==='function')pushEvent('order','⚠️ Экстренная ситуация №'+o.id,state.user+' • '+escapeHtml(reason)+' • выезд снят',o.id,false);
+}
+var LATE_MINS=15; // выбранная задержка внутри открытой модалки
+function lateModal(id){
+ var o=byId(id);if(!enrouteGate(o))return;
+ LATE_MINS=15;lateRender(o);
+}
+function latePick(id,m){var o=byId(id);if(!o)return;LATE_MINS=+m||15;lateRender(o);}
+function lateRender(o){
+ var m=LATE_MINS,nT1=shiftTime(o.t1,m),nT2=shiftTime(o.t2,m);
+ var nx=nextOrderOfWorker(o,nT1,nT2);
+ var chips=[15,30,60].map(function(x){return '<span class="chip'+(x===m?' sel':'')+'" onclick="latePick('+o.id+','+x+')">+'+x+' мин</span>';}).join('');
+ var warn=nx?'<div style="background:rgba(220,38,38,.14);border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px">⚠️ <b>Конфликт времени.</b><br>Следующая заявка №'+nx.id+' ('+escapeHtml(nx.client||'')+') — '+nx.t1+'–'+nx.t2+' тоже на вас. Сдвинуть и её?</div>':'';
+ var btns=nx?'<button class="btn btn-blue" onclick="lateApply('+o.id+',true)">📞 Следующему клиенту + перенос</button><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="lateApply('+o.id+',false)">✅ Успеваю (только эта заявка)</button>':'<button class="btn btn-blue" onclick="lateApply('+o.id+',false)">✅ Подтвердить задержку +'+m+' мин</button>';
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">'+
+  '<div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:88vh;overflow-y:auto" onclick="event.stopPropagation()">'+
+  '<b style="display:block;margin-bottom:10px">🕒 Опаздываю — заявка №'+o.id+'</b>'+
+  '<div class="muted" style="margin-bottom:10px">'+escapeHtml(o.client)+' • сейчас: '+o.t1+'–'+o.t2+(isEnroute(o)?' • 🚗 выехал':'')+'</div>'+
+  '<div class="field"><label class="label">Задержка</label><div class="chips" style="margin-bottom:0">'+chips+'</div></div>'+
+  '<div class="info-row" style="margin-bottom:10px"><span>Новое время</span><b>'+nT1+'–'+nT2+'</b></div>'+
+  '<div class="muted" style="margin-bottom:6px">Обязательно позвоните клиенту и предупредите — в истории это будет зафиксировано.</div>'+
+  '<a href="tel:'+encodeURIComponent(o.phone||'')+'" style="display:block;text-align:center;padding:11px;border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-weight:600;text-decoration:none;margin-bottom:12px">📞 Позвонить клиенту</a>'+
+  warn+btns+
+  '<button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>'+
+  '</div></div>');
+}
+// alsoNext=true → тот же сдвиг и к следующей заявке (обе логируются 'late');
+// alsoNext=false при конфликте → лог 'conflict_accept', сдвиг только текущей.
+function lateApply(id,alsoNext){
+ var o=byId(id);if(!enrouteGate(o)){closeModal();return;}
+ var m=+LATE_MINS||15;
+ var oldT1=o.t1,oldT2=o.t2,nT1=shiftTime(oldT1,m),nT2=shiftTime(oldT2,m);
+ var nx=nextOrderOfWorker(o,nT1,nT2);
+ o.t1=nT1;o.t2=nT2;
+ logAction(o,'late',{by:state.user,mins:m,from:oldT1+'–'+oldT2,to:nT1+'–'+nT2,call:true,also:nx&&alsoNext?nx.id:null});
+ markOrder(o);orderSave(o);
+ if(alsoNext&&nx){
+  var s1=nx.t1,s2=nx.t2;
+  nx.t1=shiftTime(s1,m);nx.t2=shiftTime(s2,m);
+  logAction(nx,'late',{by:state.user,mins:m,from:s1+'–'+s2,to:nx.t1+'–'+nx.t2,call:true,also:o.id});
+  markOrder(nx);orderSave(nx);
+  if(typeof pushEvent==='function')pushEvent('order','🕒 Перенос из-за задержки №'+nx.id,state.user+' • +'+m+' мин • заявка №'+nx.id+' → '+nx.t1+'–'+nx.t2,nx.id,false);
+ } else if(nx){
+  logAction(o,'conflict_accept',{by:state.user,order:nx.id,mins:m});
+  if(typeof pushEvent==='function')pushEvent('order','🕒 Конфликт принят №'+o.id,state.user+' • задержка +'+m+' мин при занятой №'+nx.id+' ('+nx.t1+'–'+nx.t2+')',o.id,false);
+ } else if(typeof pushEvent==='function'){
+  pushEvent('order','🕒 Задержка +'+m+' мин №'+o.id,state.user+' • звонок клиенту • '+oldT1+'–'+oldT2+' → '+nT1+'–'+nT2,o.id,false);
+ }
+ closeModal();render();
 }
 function autoMarkPaymentDone(id){
  const o=byId(id);if(!o)return;
