@@ -67,9 +67,19 @@ service cloud.firestore {
     }
     match /orders/{orderId} {
       allow read: if true;
-      // payments и stages — часть документа заявки: write по общим правилам orders
+      // payments и stages — часть документа orders: write по общим правилам orders
       // (клиент дополнительно ограничен правом finance_edit для платежей, orders_edit для этапов)
       allow create, update, delete: if request.auth != null;
+    }
+    match /sched/{deviceId} {
+      // «Мой календарь» (sched1): конфиг конкретного дня {days:{'YYYY-MM-DD':{from,to,off}}}.
+      // Читают все — админ/менеджер смотрят чужой календарь ТОЛЬКО просмотром (гейт в UI).
+      // Пишет только владелец документа (своё устройство по usermap), либо владелец/админ.
+      allow read: if true;
+      allow write: if isOwner() || isAdmin() ||
+        (request.auth != null &&
+         exists(/databases/$(database)/documents/usermap/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/usermap/$(request.auth.uid)).data.deviceId == deviceId);
     }
     match /meta/{doc} {
       allow read: if true;

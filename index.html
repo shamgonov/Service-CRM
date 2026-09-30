@@ -1017,10 +1017,18 @@ function renderCreate(){
 </div>
 <div style="padding:0 16px"><button class="btn btn-blue" onclick="saveOrder()">💾 Сохранить заявку</button></div>`}
 function renderCalendar(){
+ // «sched1»: табы вкладки — общий календарь не изменён, вынесен в renderCalendarCommon
+ return `
+<div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
+<div class="filters">
+ <button class="fbtn ${calTab()==='mine'?'':'active'}" onclick="setCalTab('common')">📅 Общий</button>
+ <button class="fbtn ${calTab()==='mine'?'active':''}" onclick="setCalTab('mine')">🙋 Мой</button>
+</div>`+(calTab()==='mine'?renderMyCalendar():renderCalendarCommon());
+}
+function renderCalendarCommon(){
  const list=visibleOrders().filter(o=>o.date===state.calDate&&o.status!=='canceled'&&!['completed','paid'].includes(o.status)&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0)||(a.t1||'').localeCompare(b.t1||''));
  const slots=['08:00–10:00','10:00–12:00','12:00–14:00','14:00–16:00','16:00–18:00','18:00–20:00'];
  return `
-<div class="header"><h1>📅 Календарь</h1><input type="date" value="${state.calDate}" onchange="state.calDate=this.value;render()" style="margin-left:auto;padding:6px;border-radius:6px;border:none"></div>
 <div class="card">
  <div class="sec-title">Загрузка на ${state.calDate.slice(8)}.${state.calDate.slice(5,7)} <span class="muted" style="font-weight:400;font-size:12px">(клик — открыть/создать, удержание — перенести)</span></div>
  ${slots.map((slot,si)=>{
@@ -1041,6 +1049,169 @@ const past=slotIsPast(state.calDate,sStart,sEnd);
     :'<div class="muted" style="margin-top:2px">🟩 свободно — клик для новой заявки</div>'}
    </div>`}).join('')}
 </div>`}
+// === «МОЙ КАЛЕНДАРЬ» (sched1): конфиг КОНКРЕТНОГО дня + просмотр занятости ===
+// Данные: Firestore sched/{deviceId} = {days:{'YYYY-MM-DD':{from:'HH:MM',to:'HH:MM',off:bool}}}.
+// Шаблона недели нет — настройка только отдельного дня. Занятость НЕ храним:
+// считается из DB.orders (worker===имя, активные статусы) прямо при рендере.
+const SCHED_ACTIVE=['new','inspection','approved','in_progress','inwork','waiting','postponed'];
+function schedMineId(){return (typeof deviceId==='function')?deviceId():'me'}
+function schedPad(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function schedViewUid(){return state.schedView||schedMineId()}
+function schedViewName(){
+ const uid=state.schedView;
+ if(!uid)return state.user||'';
+ const u=(DB.users||[]).find(function(x){return String(x.deviceId)===String(uid);});
+ return u?getUserName(u):'';
+}
+// Чужой календарь — ТОЛЬКО просмотром, по существующим правам (матрица прав не тронута):
+// владелец/админ по умолчанию, менеджер — по роли (как в burnVisible), остальным —
+// право orders_view_all или staff_manage.
+function schedCanViewOthers(){
+ if(adminLike())return true;
+ if(typeof state!=='undefined'&&state.role==='manager')return true;
+ if(typeof can==='function')return can('orders_view_all')||can('staff_manage');
+ return false;
+}
+function schedCanEdit(){return String(schedViewUid())===String(schedMineId())}
+function schedDaysOf(uid){
+ if(typeof schedDaysCloud==='function')return schedDaysCloud(uid||schedViewUid());
+ return {};
+}
+function schedSlots(from,to){
+ const a=toMin(from),b=toMin(to);
+ if(a==null||b==null||b<=a)return [];
+ const out=[];
+ for(let t=a;t<b;t+=120)out.push([schedPad(t),schedPad(Math.min(t+120,b))]);
+ return out;
+}
+// мои (или просматриваемого исполнителя) активные заявки на день
+function schedBusyOrders(name,date){
+ if(!name||!date)return [];
+ return (DB.orders||[]).filter(function(o){
+  return o.date===date&&o.worker===name&&!isTest(o)&&SCHED_ACTIVE.indexOf(o.status)>=0;
+ }).sort(function(a,b){return String(a.t1||'').localeCompare(String(b.t1||''));});
+}
+function schedSetCalTab(t){state.calTab=t;try{localStorage.setItem('crm_cal_tab',t)}catch(e){}
+ if(t==='mine'&&typeof schedWatchMine==='function')schedWatchMine();
+ render()}
+function calTab(){
+ if(!state.calTab){
+  try{state.calTab=localStorage.getItem('crm_cal_tab')==='mine'?'mine':'common'}catch(e){state.calTab='common'}
+ }
+ return state.calTab;
+}
+function setCalTab(t){schedSetCalTab(t)}
+function schedSetMonth(d){state.calDate=d;render()}
+// Сетка дней месяца: off — серый; from/to — слоты (занятые — красные с №, свободные — зелёные);
+// не задан — «✏ День» (или «🔴N», если заявки уже есть).
+function renderMyCalendar(){
+ if(typeof schedWatchMine==='function')schedWatchMine(); // идемпотентно: подписка поднимается один раз
+ const uid=schedViewUid(),name=schedViewName();
+ const days=schedDaysOf(uid),canEdit=schedCanEdit();
+ const y=+state.calDate.slice(0,4),mo=+state.calDate.slice(5,7);
+ const first=new Date(y,mo-1,1),dim=new Date(y,mo,0).getDate();
+ const lead=(first.getDay()+6)%7; // Пн=0
+ const cells=[];
+ for(let i=0;i<lead;i++)cells.push('');
+ for(let d=1;d<=dim;d++)cells.push(y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
+ while(cells.length%7)cells.push('');
+ const today=localToday();
+ const head=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+ return `
+<div class="card">
+ <div class="sec-title">${canEdit?'🙋 Мой календарь':'👁 '+escapeHtml(name||'—')} <span class="muted" style="font-weight:400;font-size:12px">${canEdit?'настройка дня — по тапу':'только просмотр'}</span></div>
+ ${schedCanViewOthers()?`<div class="field"><label class="label">Просмотр календаря</label>
+  <select class="input" onchange="schedSetView(this.value)">
+   <option value="">— ${escapeHtml(state.user||'мой')} —</option>
+   ${activeWorkers().filter(function(u){return u.deviceId&&getUserName(u)!==state.user;}).map(function(u){
+     return '<option value="'+escapeHtml(String(u.deviceId))+'"'+(String(state.schedView||'')===String(u.deviceId)?' selected':'')+'>'+escapeHtml(getUserName(u))+'</option>';}).join('')}
+  </select></div>`:''}
+ <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+  <button class="btn-sm btn-outline" style="flex:none" onclick="schedSetMonth('${new Date(y,mo-2,1).getFullYear()+'-'+String(new Date(y,mo-2,1).getMonth()+1).padStart(2,'0')+'-01'}')">‹</button>
+  <b style="flex:1;text-align:center;font-size:13px">${['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][mo-1]} ${y}</b>
+  <button class="btn-sm btn-outline" style="flex:none" onclick="schedSetMonth('${new Date(y,mo,1).getFullYear()+'-'+String(new Date(y,mo,1).getMonth()+1).padStart(2,'0')+'-01'}')">›</button>
+ </div>
+ <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:9px">
+  ${head.map(h=>'<div style="text-align:center;color:var(--text-secondary);font-weight:700;padding:2px 0">'+h+'</div>').join('')}
+  ${cells.map(ds=>{
+   if(!ds)return '<div></div>';
+   const c=days[ds]||null;
+   const busy=schedBusyOrders(name,ds);
+   const off=!!(c&&c.off);
+   const slots=(c&&!off)?schedSlots(c.from,c.to):[];
+   const dnum=+ds.slice(8);
+   const style=off?'background:rgba(120,120,128,.28);color:var(--text-secondary)'
+    :(c?'background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.35)'
+       :'background:var(--bg-secondary);border:1px solid var(--border)');
+   let body='';
+   if(off)body='<div style="color:var(--text-secondary)">вых.</div>';
+   else if(slots.length)body=slots.map(function(s){
+     const o=busy.filter(function(x){return toMin(x.t1)<toMin(s[1])&&toMin(x.t2)>toMin(s[0]);});
+     return '<div style="color:'+(o.length?'#fca5a5':'var(--green)')+';line-height:1.25;white-space:nowrap;overflow:hidden">'+
+      (o.length?'№'+o.map(function(x){return x.id;}).join('№'):'▪')+'</div>';}).join('');
+   else if(busy.length)body='<div style="color:#fca5a5">🔴'+busy.length+'</div>';
+   else body='<div style="color:var(--text-secondary)">✏</div>';
+   return '<div'+(canEdit?' onclick="myDayModal(\''+ds+'\')"':'')+' style="'+style+';border-radius:6px;padding:3px 2px;min-height:44px;text-align:center'+
+    (canEdit?';cursor:pointer':'')+(ds===today?';outline:1px solid var(--accent)':'')+(ds<today?';opacity:.5':'')+'">'+
+    '<div style="font-weight:700;font-size:10px">'+dnum+'</div>'+body+(c&&!off?'<div style="color:var(--text-secondary)">'+c.from+'–'+c.to+'</div>':'')+'</div>';
+  }).join('')}
+ </div>
+ <div class="muted" style="margin-top:8px;font-size:11px">🟩 слот свободен • <span style="color:#fca5a5">№</span> слот занят моей заявкой • серый — выходной</div>
+</div>`}
+function schedSetView(uid){
+ if(!schedCanViewOthers())return alert('Нет прав на просмотр чужого календаря');
+ state.schedView=uid||'';
+ if(typeof schedWatchOther==='function'){ if(uid)schedWatchOther(uid); else schedStopOther(); }
+ render();
+}
+function myDayModal(date){
+ const canEdit=schedCanEdit();
+ if(!canEdit)return alert('Чужой календарь доступен только для просмотра');
+ const c=schedDaysOf(schedViewUid())[date]||null;
+ const busy=schedBusyOrders(state.user,date);
+ openModal(
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:340px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <b style="display:block;margin-bottom:10px">✏ День ${date.slice(8)}.${date.slice(5,7)}.${date.slice(0,4)}</b>
+    ${busy.length?'<div class="muted" style="margin-bottom:8px">Занято заявками: '+busy.map(function(o){return '№'+o.id+' '+o.t1+'–'+o.t2;}).join(', ')+'</div>':''}
+    <div class="tgl" style="border-top:none;padding-top:0;margin-bottom:8px"><span style="font-weight:500;font-size:14px">Выходной</span>
+     <label class="switch"><input type="checkbox" id="sd-off" ${c&&c.off?'checked':''} onchange="schedOffToggle(this.checked)"><span class="slider"></span></label></div>
+    <div id="sd-hours" style="display:${c&&c.off?'none':'block'}">
+     <div class="row2"><div><label class="label">С (from)</label><input class="input" id="sd-from" type="time" value="${c&&c.from?c.from:'09:00'}"></div>
+     <div><label class="label">По (to)</label><input class="input" id="sd-to" type="time" value="${c&&c.to?c.to:'18:00'}"></div></div>
+    </div>
+    <div class="row2" style="margin-top:12px">
+     <button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button>
+     <button class="btn-sm btn-blue" onclick="schedSaveDay('${date}')">💾 Сохранить</button></div>
+    ${c?`<button class="btn-sm btn-red" style="margin-top:8px" onclick="schedClearDay('${date}')">✕ Убрать настройку дня</button>`:''}
+   </div></div>`);
+}
+function schedOffToggle(on){
+ const r=document.getElementById('sd-hours');if(r)r.style.display=on?'none':'block';
+}
+function schedSaveDay(date){
+ if(!schedCanEdit())return alert('Чужой календарь доступен только для просмотра');
+ const off=document.getElementById('sd-off').checked;
+ if(off){ schedWriteDay(date,{off:true}); closeModal(); return; }
+ const from=(document.getElementById('sd-from').value||'').trim();
+ const to=(document.getElementById('sd-to').value||'').trim();
+ if(!from||!to)return alert('Укажите начало и конец дня (или отметьте «Выходной»)');
+ const a=toMin(from),b=toMin(to);
+ if(a==null||b==null)return alert('Неверный формат времени');
+ if(b<=a)return alert('Конец дня должен быть позже начала');
+ schedWriteDay(date,{from:from,to:to,off:false});
+ closeModal();
+}
+function schedWriteDay(date,rec){
+ if(typeof schedSetDayCloud==='function'){ schedSetDayCloud(date,rec); render(); return; }
+ alert('Облако недоступно — настройка дня не сохранена');
+}
+function schedClearDay(date){
+ if(!schedCanEdit())return alert('Чужой календарь доступен только для просмотра');
+ if(!confirm('Убрать настройку этого дня?'))return;
+ if(typeof schedSetDayCloud==='function'){ schedSetDayCloud(date,null); render(); }
+ closeModal();
+}
 function renderTasks(){
  // вкладки: Доступные / В работе / Завершённые (выбор в localStorage, посадка — «Доступные»)
  const tabRaw=state.tasksTab||(function(){try{return localStorage.getItem('crm_tasks_tab')||'free'}catch(e){return 'free'}})();

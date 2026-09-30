@@ -592,6 +592,11 @@ function flushQueue(){
   else if(it&&it.kind==='photo'){
    fs.collection('photos').doc(it.docId).set(it.doc).then(ok).catch(function(e){ console.warn('photo flush err',e); if(isPermErr(e))permSkip(e); else netFail(e); });
   }
+  // sched: в очереди лежит полный снимок days конкретного устройства —
+  // повтор последних правок корректен (более новые элементы идут следом и перезаписывают)
+  else if(it&&it.kind==='sched'&&it.uid){
+   schedRef(it.uid).set({days:it.days||{}}).then(ok).catch(function(e){ console.warn('flush sched',e); if(isPermErr(e))permSkip(e); else netFail(e); });
+  }
   else if(it&&it.kind==='settings'){ saveSettings(); ok(); }
   else ok();
  }
@@ -1851,3 +1856,89 @@ function applyPermsUI(){
    });
  }
 }
+
+// ============================================================
+// «МОЙ КАЛЕНДАРЬ» (sched1): Firestore sched/{deviceId}
+// {days:{'YYYY-MM-DD':{from:'HH:MM',to:'HH:MM',off:bool}}}
+// Занятость здесь НЕ хранится — её считает index.html из DB.orders.
+// Подписка ленивая: поднимается при первом открытии таба «Мой»,
+// идемпотентна (render вызывает её на каждой перерисовке).
+// ============================================================
+var SCHED_CACHE={};            // uid -> {days:{...}} (последний снимок/локальная оптимистичная правка)
+var SCHED_UNSUB={};            // uid -> функция отписки
+var SCHED_SUB_OK={};           // uid -> подписка реально получила данные (кэш больше не нужен)
+
+function schedRef(uid){ return fs.collection('sched').doc(String(uid)); }
+function schedCacheKey(uid){ return String(uid||''); }
+function schedLocalGet(uid){ try{ return lsGet('crm_cache_sched',{})[schedCacheKey(uid)]||null; }catch(e){ return null; } }
+function schedLocalSet(uid,days){
+ try{ var all=lsGet('crm_cache_sched',{}); all[schedCacheKey(uid)]=days; lsSet('crm_cache_sched',all); }catch(e){}
+}
+// синхронное чтение для рендера: снимок подписки, иначе локальный кэш (офлайн-старт)
+function schedDaysCloud(uid){
+ var k=schedCacheKey(uid);
+ if(!SCHED_CACHE[k]){
+  var cached=schedLocalGet(uid);
+  if(cached)SCHED_CACHE[k]=cached;
+ }
+ var v=SCHED_CACHE[k];
+ return (v&&v.days&&typeof v.days==='object')?v.days:{};
+}
+function schedWatch(uid){
+ var k=schedCacheKey(uid);
+ if(!uid||SCHED_UNSUB[k])return;
+ try{
+  SCHED_UNSUB[k]=schedRef(uid).onSnapshot(function(doc){
+   SCHED_SUB_OK[k]=true;
+   var d=doc.exists?doc.data():{days:{}};
+   SCHED_CACHE[k]={days:(d&&d.days&&typeof d.days==='object')?d.days:{}};
+   schedLocalSet(uid,SCHED_CACHE[k]);
+   if(typeof render==='function')render();
+  },function(err){
+   console.warn('sched snapshot',err);
+   delete SCHED_UNSUB[k];
+   if(typeof render==='function')render();
+  });
+ }catch(e){ console.warn('sched watch',e); }
+}
+function schedWatchMine(){ schedWatch((typeof deviceId==='function')?deviceId():''); }
+function schedWatchOther(uid){ schedWatch(uid); }
+function schedStopOther(){
+ var k=schedCacheKey((typeof deviceId==='function')?deviceId():'');
+ Object.keys(SCHED_UNSUB).forEach(function(key){
+  if(key===k)return;                        // свою подписку не трогаем
+  try{ SCHED_UNSUB[key](); }catch(e){}
+  delete SCHED_UNSUB[key];
+ });
+}
+// запись дня: rec — объект (новый/изменённый день) или null (убрать день).
+// Пишем ВЕСЬ days целиком: set() без merge, иначе удаление дня не отобразится на сервере.
+function schedSetDayCloud(date,rec){
+ var uid=(typeof deviceId==='function')?deviceId():'';
+ if(!uid||!date)return;
+ var k=schedCacheKey(uid);
+ var days={};
+ var src=schedDaysCloud(uid);
+ Object.keys(src).forEach(function(d){ days[d]=src[d]; });
+ if(rec===null||rec===undefined)delete days[date];
+ else days[date]=rec;
+ var payload={days:days};
+ (function sanitize(o){for(var key in o){if(o[key]===undefined)delete o[key];else if(o[key]&&typeof o[key]==='object'&&!Array.isArray(o[key]))sanitize(o[key]);}return o;})(payload);
+ // оптимистично: локальный снимок обновляем сразу (серверный снапшот придёт поверх)
+ SCHED_CACHE[k]=payload;
+ schedLocalSet(uid,payload);
+ if(OFFLINE){ queuePush({kind:'sched',uid:uid,days:days}); return; }
+ schedRef(uid).set(payload).catch(function(e){
+  console.warn('sched save err',e);
+  if(isPermErr(e)){ writeDeniedBanner(e); return; }
+  OFFLINE=true;
+  queuePush({kind:'sched',uid:uid,days:days});
+  if(typeof render==='function')render();
+ });
+}
+window.schedDaysCloud=schedDaysCloud;
+window.schedWatchMine=schedWatchMine;
+window.schedWatchOther=schedWatchOther;
+window.schedStopOther=schedStopOther;
+window.schedSetDayCloud=schedSetDayCloud;
+window.schedWatch=schedWatch;
