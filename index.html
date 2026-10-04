@@ -687,7 +687,7 @@ function renderOrders(){
  ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
   `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
 </div>
-${list.map(o=>`<div class="ord" onclick="go('details',${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
+${list.map(o=>`<div class="ord" onclick="orderDossier(${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
  <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро, нет исполнителя</b>':''}${(burnVisible()&&isBurning(o))?' <b style="color:#dc2626">🔴 горит</b>':''}</div>
@@ -1044,7 +1044,7 @@ const past=slotIsPast(state.calDate,sStart,sEnd);
     <b style="font-size:13px">${slot}</b>
     ${inSlot.length?inSlot.map(o=>`<div class="cal-order" data-oid="${o.id}" draggable="true" ondragstart="CAL_DRAG=${o.id};event.stopPropagation()" style="font-size:13px;margin-top:4px;cursor:grab${urgentSoon(o)?';background:rgba(245,158,11,.2);border-left:3px solid #f59e0b;padding-left:4px':''}"
      onmousedown="calOrderDown(event,${o.id},${si})" ontouchstart="calOrderDown(event,${o.id},${si})"
-     onclick="if(Date.now()-(CAL_HELD||0)<700)return;event.stopPropagation();go('details',${o.id})">
+     onclick="if(Date.now()-(CAL_HELD||0)<700)return;event.stopPropagation();orderDossier(${o.id})">
      ${o.worker?'🔴':'🟦'} ${o.t1}–${o.t2} • ${escapeHtml(o.client)} ${o.worker?'• <b>'+escapeHtml(o.worker)+'</b>':''} <span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span></div>`).join('')
     :'<div class="muted" style="margin-top:2px">🟩 свободно — клик для новой заявки</div>'}
    </div>`}).join('')}
@@ -1881,6 +1881,38 @@ function closeModal(){
 function modalIsOpen(){
  var root=document.getElementById('modal-root');
  return !!(root&&root.firstElementChild);
+}
+// === ДОСЬЕ ЗАЯВКИ: компактная модалка по клику в списке и в календаре ===
+// Полный экран не дублируем: «Развернуть» закрывает модалку и ведёт go('details',id).
+function orderDossier(id){
+ const o=byId(id);
+ if(!o)return;
+ const st=ST[o.status]||{t:o.status,c:'#e5e7eb',tc:'#374151'};
+ const ws=(o.works||[]).filter(function(x){return !x.skipped;});
+ const rows=ws.slice(0,4).map(function(x){
+  return '<div style="padding:2px 0">'+escapeHtml(x.title)+' <span class="muted">— '+(+x.qty||1)+' '
+   +unitLabel(x.unit)+' × '+money(+x.price||0)+'</span></div>';}).join('');
+ const tel=String(o.phone||'').replace(/[^+\d]/g,'');
+ openModal(
+  `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+   <div style="background:var(--bg-secondary);border-radius:12px;max-width:360px;width:100%;padding:18px;max-height:82vh;overflow:auto" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+     <b style="font-size:15px">№${o.id} • ${escapeHtml(o.client||'—')}</b>
+     <span class="badge" style="background:${st.c};color:${st.tc};flex:none">${st.t}</span></div>
+    ${orderType(o)!=='standard'?`<div style="margin-bottom:6px"><span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span></div>`:''}
+    <div style="font-size:13px">${tel?`<a href="tel:${tel}" style="color:var(--accent)">${escapeHtml(o.phone)}</a>`:'<span class="muted">телефон не указан</span>'}</div>
+    <div class="muted" style="font-size:13px;margin-top:2px">📍 ${escapeHtml(o.address||'—')}</div>
+    <div class="muted" style="font-size:13px;margin-top:2px">📅 ${o.date.slice(8)}.${o.date.slice(5,7)}.${o.date.slice(0,4)} • ⏰ ${o.t1}–${o.t2}</div>
+    <div class="muted" style="font-size:13px;margin-top:2px">${o.worker?'🚜 '+escapeHtml(o.worker):'<span style="color:#b45309">🚜 исполнитель не назначен</span>'}</div>
+    <div style="font-weight:700;color:var(--green);margin:8px 0">${money(total(o))}</div>
+    <div style="border-top:1px solid var(--border);padding-top:8px;font-size:13px">
+     <div class="muted" style="margin-bottom:2px">Примерные работы</div>
+     ${ws.length?rows+(ws.length>4?'<div class="muted">+'+(ws.length-4)+' ещё</div>':''):'<div class="muted">работы не указаны</div>'}</div>
+    <div class="row2" style="margin-top:12px">
+     ${tel?`<button class="btn-sm btn-blue" onclick="location.href='tel:${tel}'">📞 Позвонить</button>`
+          :'<button class="btn-sm btn-outline" disabled>📞 нет телефона</button>'}
+     <button class="btn-sm btn-outline" onclick="closeModal();go('details',${o.id})">⤢ Развернуть</button></div>
+   </div></div>`);
 }
 // B2 (этап 2): вознаграждение из формы создания (c-rw-type/c-rw-val); пусто → дефолт-доля работника
 function readRewardFromForm(){
