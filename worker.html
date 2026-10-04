@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ServiceCRM — Исполнитель</title>
+<link rel="manifest" href="manifest.json">
+<style>
+:root{--accent:#f59e0b;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#8b5cf6;--bg:#f8fafc;--text:#1e293b;--muted:#64748b;--border:#e2e8f0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+.header{background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:18px;font-weight:700}
+.card{background:#fff;border-radius:12px;margin:16px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .15s}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#16a34a}
+.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:#2563eb}
+.btn-red{background:var(--red);color:#fff}.btn-red:hover{background:#dc2626}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-outline:hover{background:#f1f5f9}
+.btn-sm{padding:6px 12px;font-size:13px;border-radius:6px}
+.btn-full{width:100%}
+.row2{display:flex;gap:8px;align-items:center}
+.info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9}
+.info-row:last-child{border-bottom:none}
+.muted{color:var(--muted);font-size:13px}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600}
+input[type="text"],input[type="password"],input[type="date"],input[type="number"],select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(245,158,11,.15)}
+label{font-size:13px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+.field{margin-bottom:12px}
+#login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+#login-screen .card{max-width:380px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+#login-screen h2{text-align:center;margin-bottom:16px;color:var(--text)}
+#login-screen .muted{text-align:center;margin-top:12px}
+#lk-screen{display:none;flex-direction:column;min-height:100vh}
+#lk-screen .header{justify-content:space-between}
+.tab-bar{display:flex;gap:4px;padding:8px 16px;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;transition:all .15s}
+.tab.active{background:var(--accent);color:#fff}
+.tab:not(.active){background:#f1f5f9;color:var(--muted)}
+.tab:not(.active):hover{background:#e2e8f0}
+.order-card{border-left:4px solid var(--border);margin-bottom:12px;padding:12px;border-radius:8px;background:#fff;cursor:pointer;transition:all .15s}
+.order-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.order-card.status-new{border-left-color:var(--blue)}.order-card.status-approved{border-left-color:var(--purple)}
+.order-card.status-inwork{border-left-color:var(--green)}.order-card.status-completed{border-left-color:#9ca3af}
+.order-card.status-paused{border-left-color:var(--accent)}
+.order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.order-header .id{font-weight:700;font-size:15px}
+.order-client{font-size:14px;font-weight:600;margin-bottom:2px}
+.order-meta{font-size:13px;color:var(--muted);margin-bottom:4px}
+.order-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+.modal{background:#fff;border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:85vh;overflow-y:auto}
+.modal h3{margin-bottom:12px;font-size:16px}
+.status-actions{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.detail-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:14px}
+.detail-row:last-child{border-bottom:none}
+.detail-label{color:var(--muted)}.detail-value{font-weight:600}
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;font-size:14px;font-weight:500;transition:background .15s}
+.nav-item:hover{background:rgba(255,255,255,.1)}
+.nav-item .icon{font-size:18px}
+@media(max-width:480px){.order-actions{flex-direction:column}.order-actions .btn{width:100%}}
+</style>
+</head>
+<body>
+
+<!-- ===== ЭКРАН ВХОДА ===== -->
+<div id="login-screen">
+  <div class="card">
+    <h2>🔧 ServiceCRM</h2>
+    <p class="muted">Вход для исполнителя</p>
+    <div style="margin-top:16px">
+      <div class="field">
+        <label>Логин (имя)</label>
+        <input type="text" id="w-login" placeholder="Введите ваше имя" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>PIN-код</label>
+        <input type="password" id="w-pin" placeholder="Введите PIN" inputmode="numeric" pattern="[0-9]*">
+        <p class="muted" style="margin-top:4px;font-size:12px">PIN установлен администратором</p>
+      </div>
+      <button class="btn btn-blue btn-full" onclick="workerLogin()">Войти</button>
+      <p class="muted" style="margin-top:12px">
+        <a href="index.html" style="color:var(--blue);text-decoration:none">← Вернуться в общую CRM</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ЭКРАН ЛК ===== -->
+<div id="lk-screen">
+  <div class="header">
+    <div>
+      <h1>👷 Мой кабинет</h1>
+      <div style="font-size:12px;opacity:.8" id="worker-name"></div>
+    </div>
+    <div class="nav-item" onclick="workerLogout()" style="color:#fff;cursor:pointer">
+      <span class="icon">🚪</span> Выйти
+    </div>
+  </div>
+  <div class="tab-bar" id="tab-bar"></div>
+  <div id="tab-content" style="flex:1;padding:16px;overflow-y:auto"></div>
+</div>
+
+<script>
+// === БАЗА ДАННЫХ (localStorage) ===
+var WDB={};
+var DB_ORDERS=[];
+var DB_USERS=[];
+var W_STATE={user:null,tab:'orders',orderId:null};
+var W_VERSION='1.0.0';
+
+function loadDB(){
+  try{
+    var raw=localStorage.getItem('crm_db');
+    if(raw){
+      WDB=JSON.parse(raw);
+      DB_ORDERS=WDB.orders||[];
+      DB_USERS=WDB.users||[];
+    }
+  }catch(e){}
+}
+function saveDB(){
+  try{
+    WDB.orders=DB_ORDERS;
+    WDB.users=DB_USERS;
+    localStorage.setItem('crm_db',JSON.stringify(WDB));
+  }catch(e){}
+}
+
+// === PIN-ХЕЛПЕРЫ (копия логики из firebase-access.js) ===
+var PIN_ITER=100000;
+var W_SUBTLE=(typeof crypto!=='undefined'&&crypto.subtle&&typeof crypto.subtle.importKey==='function');
+
+function workerEnc(pin){return new TextEncoder().encode(pin);}
+
+function workerPbkdf2(pin,salt){
+  if(!W_SUBTLE)return null;
+  return crypto.subtle.importKey('raw',workerEnc(pin),'PBKDF2',false,['deriveBits'])
+    .then(function(k){return crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:PIN_ITER,hash:'SHA-256'},k,256);})
+    .then(function(hash){return new Uint8Array(hash);});
+}
+
+function workerVerifyPin(profile,entered){
+  if(!W_SUBTLE)return null;
+  var p=profile||{};
+  if(p.pinHash&&p.pinSalt){
+    return workerPbkdf2(entered,p.pinSalt).then(function(h){
+      var arr1=new Uint8Array(h),arr2=new Uint8Array(p.pinHash);
+      if(arr1.length!==arr2.length)return false;
+      for(var i=0;i<arr1.length;i++){if(arr1[i]!==arr2[i])return false;}
+      return true;
+    });
+  }
+  return Promise.resolve(false);
+}
+
+function workerPinSet(profile){
+  var p=profile||{};
+  return !!(p.pinHash&&p.pinSalt||p.pin);
+}
+
+// === АВТОРИЗАЦИЯ =====
+function workerLogin(){
+  var login=document.getElementById('w-login').value.trim();
+  var pin=document.getElementById('w-pin').value;
+  if(!login)return alert('Введите имя');
+  
+  loadDB();
+  var user=DB_USERS.find(function(u){
+    var nm=(u.name||'').trim().toLowerCase();
+    return nm===login.toLowerCase()||u.deviceId===login;
+  });
+  if(!user)return alert('Пользователь не найден');
+  
+  if(workerPinSet(user.profile||{})){
+    workerVerifyPin(user.profile||{},pin).then(function(ok){
+      if(!ok)return alert('Неверный PIN');
+      W_STATE.user=user;
+      W_STATE.user.profile=user.profile||{};
+      showLK();
+    }).catch(function(){alert('Ошибка проверки PIN');});
+  }else{
+    // Если PIN не установлен — разрешаем вход только по имени
+    W_STATE.user=user;
+    W_STATE.user.profile=user.profile||{};
+    showLK();
+  }
+}
+
+function workerLogout(){
+  W_STATE.user=null;
+  W_STATE.tab='orders';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('lk-screen').style.display='none';
+  document.getElementById('w-login').value='';
+  document.getElementById('w-pin').value='';
+}
+
+// === ЭКРАН ЛК =====
+function showLK(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('lk-screen').style.display='flex';
+  document.getElementById('worker-name').textContent=W_STATE.user.name||W_STATE.user.deviceId;
+  renderTabs();
+  renderTab();
+}
+
+// === ВКЛАДКИ =====
+var TABS=[
+  {id:'orders',label:'📋 Мои заявки'},
+  {id:'schedule',label:'📅 Расписание'},
+  {id:'profile',label:'👤 Профиль'}
+];
+
+function renderTabs(){
+  var bar=document.getElementById('tab-bar');
+  bar.innerHTML=TABS.map(function(t){
+    return '<button class="tab'+(W_STATE.tab===t.id?' active':'')+'" onclick="switchTab(\''+t.id+'\')">'+t.label+'</button>';
+  }).join('');
+}
+
+function switchTab(tabId){
+  W_STATE.tab=tabId;
+  renderTabs();
+  renderTab();
+}
+
+// === РЕНДЕР ВКЛАДОК =====
+function renderTab(){
+  var content=document.getElementById('tab-content');
+  switch(W_STATE.tab){
+    case 'orders':renderOrdersTab(content);break;
+    case 'schedule':renderScheduleTab(content);break;
+    case 'profile':renderProfileTab(content);break;
+  }
+}
+
+// === ВКЛАДКА «МОИ ЗАЯВКИ» =====
+function renderOrdersTab(el){
+  loadDB();
+  var uname=W_STATE.user.name||'';
+  
+  // Фильтр: заявки где worker === имя ИЛИ helpers содержит имя
+  var myOrders=DB_ORDERS.filter(function(o){
+    if(o.worker===uname)return true;
+    if(o.helpers&&Array.isArray(o.helpers)&&o.helpers.indexOf(uname)>=0)return true;
+    return false;
+  }).sort(function(a,b){
+    // Сортировка: активные (inwork) первее, затем по дате
+    var order1=0,order2=0;
+    if(a.status==='inwork')order1=0;else if(a.status==='approved')order1=1;else order1=2;
+    if(b.status==='inwork')order2=0;else if(b.status==='approved')order2=1;else order2=2;
+    return order1-order2||(b.date||'').localeCompare(a.date||'');
+  });
+  
+  if(!myOrders.length){
+    el.innerHTML='<div class="empty-state"><div class="icon">📋</div><p>У вас пока нет назначенных заявок</p></div>';
+    return;
+  }
+  
+  var html='<div style="margin-bottom:12px"><b>Мои заявки ('+myOrders.length+')</b></div>';
+  
+  myOrders.forEach(function(o){
+    var statusCls='status-'+(o.status||'new');
+    var statusText=getStatusText(o.status);
+    var badges=getOrderBadges(o);
+    
+    html+='<div class="order-card '+statusCls+'" onclick="showOrderDetail('+o.id+')">';
+    html+='<div class="order-header">';
+    html+='<span class="id">Заявка №'+(o.id||'—')+'</span>';
+    html+='<span class="badge" style="background:'+getStatusColor(o.status)+';color:#fff">'+statusText+'</span>';
+    html+='</div>';
+    html+='<div class="order-client">'+escHtml(o.client||'Без клиента')+'</div>';
+    html+='<div class="order-meta">'+dateFormat(o.date)+' • '+escHtml(o.t1||'')+'–'+escHtml(o.t2||'')+' • '+escHtml(o.address||'')+'</div>';
+    if(badges)html+='<div style="margin-top:4px">'+badges+'</div>';
+    html+='<div class="order-actions">';
+    
+    // Кнопки действий в зависимости от статуса
+    if(o.status==='approved'){
+      html+='<button class="btn btn-green btn-sm" onclick="event.stopPropagation();takeOrder('+o.id+')">🚜 Взять в работу</button>';
+    }
+    if(o.status==='inwork'){
+      html+='<button class="btn btn-blue btn-sm" onclick="event.stopPropagation();startWork('+o.id+')">▶ Приступить</button>';
+      html+='<button class="btn btn-red btn-sm" onclick="event.stopPropagation();pauseOrder('+o.id+')">⏸ Пауза</button>';
+      html+='<button class="btn btn-green btn-sm" onclick="event.stopPropagation();completeOrder('+o.id+')">✅ Завершить</button>';
+    }
+    if(o.status==='paused'){
+      html+='<button class="btn btn-blue btn-sm" onclick="event.stopPropagation();resumeWork('+o.id+')">▶ Продолжить</button>';
+    }
+    
+    html+='</div></div>';
+  });
+  
+  el.innerHTML=html;
+}
+
+// === ПОКАЗ ДЕТАЛЕЙ ЗАЯВКИ =====
+function showOrderDetail(orderId){
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===orderId;});
+  if(!o)return;
+  
+  var uname=W_STATE.user.name||'';
+  var isMain=o.worker===uname;
+  var isHelper=o.helpers&&Array.isArray(o.helpers)&&o.helpers.indexOf(uname)>=0;
+  
+  var html='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">';
+  html+='<h3>Заявка №'+o.id+'</h3>';
+  html+='<div style="margin-bottom:12px">'+getBadgesHTML(o)+'</div>';
+  
+  html+='<div class="detail-row"><span class="detail-label">Клиент</span><span class="detail-value">'+escHtml(o.client||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Телефон</span><span class="detail-value"><a href="tel:'+escHtml(o.phone)+'">'+escHtml(o.phone||'—')+'</a></span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Адрес</span><span class="detail-value">'+escHtml(o.address||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Дата и время</span><span class="detail-value">'+dateFormat(o.date)+' '+escHtml(o.t1||'')+'–'+escHtml(o.t2||'')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Исполнитель</span><span class="detail-value">'+escHtml(o.worker||'—')+(isHelper?' (соисполнитель)':'')+'</span></div>';
+  if(o.helpers&&o.helpers.length){
+    html+='<div class="detail-row"><span class="detail-label">Соисполнители</span><span class="detail-value">'+escHtml(o.helpers.join(', '))+'</span></div>';
+  }
+  html+='<div class="detail-row"><span class="detail-label">Описание работ</span><span class="detail-value">'+escHtml(o.desc||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Сумма</span><span class="detail-value" style="color:var(--green)">'+money(o.price||0)+'</span></div>';
+  
+  // Кнопки действий
+  html+='<div class="status-actions">';
+  if(o.status==='approved'&&isMain){
+    html+='<button class="btn btn-green" onclick="takeOrder('+o.id+');closeModal()">🚜 Взять в работу</button>';
+  }
+  if(o.status==='inwork'){
+    html+='<button class="btn btn-blue" onclick="startWork('+o.id+');closeModal()">▶ Приступить</button>';
+    html+='<button class="btn btn-red" onclick="pauseOrder('+o.id+');closeModal()">⏸ Пауза</button>';
+    html+='<button class="btn btn-green" onclick="completeOrder('+o.id+');closeModal()">✅ Завершить</button>';
+  }
+  if(o.status==='paused'){
+    html+='<button class="btn btn-blue" onclick="resumeWork('+o.id+');closeModal()">▶ Продолжить</button>';
+  }
+  html+='<button class="btn btn-outline" onclick="closeModal()">Закрыть</button>';
+  html+='</div>';
+  
+  html+='</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function closeModal(){
+  var overlays=document.querySelectorAll('.modal-overlay');
+  overlays.forEach(function(ov){ov.remove();});
+}
+
+// === ДЕЙСТВИЯ С ЗАЯВКАМИ =====
+function takeOrder(id){
+  if(!confirm('Взять заявку в работу?'))return;
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===id;});
+  if(!o)return;
+  o.status='inwork';
+  o.takenBy=W_STATE.user.name;
+  o.takenTs=Date.now();
+  if(!o.worker)o.worker=W_STATE.user.name;
+  saveDB();
+  renderTab();
+  alert('Заявка принята в работу');
+}
+
+function startWork(id){
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===id;});
+  if(!o)return;
+  o.status='inwork';
+  o.startedTs=Date.now();
+  saveDB();
+  renderTab();
+  alert('Работа начата');
+}
+
+function pauseOrder(id){
+  if(!confirm('Поставить заявку на паузу?'))return;
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===id;});
+  if(!o)return;
+  o.status='paused';
+  saveDB();
+  renderTab();
+}
+
+function resumeWork(id){
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===id;});
+  if(!o)return;
+  o.status='inwork';
+  saveDB();
+  renderTab();
+}
+
+function completeOrder(id){
+  if(!confirm('Завершить заявку?'))return;
+  loadDB();
+  var o=DB_ORDERS.find(function(x){return x.id===id;});
+  if(!o)return;
+  o.status='completed';
+  o.completedBy=W_STATE.user.name;
+  o.completedTs=Date.now();
+  saveDB();
+  renderTab();
+  alert('Заявка завершена');
+}
+
+// === ВКЛАДКА «РАСПИСАНИЕ» =====
+function renderScheduleTab(el){
+  loadDB();
+  var uname=W_STATE.user.name||'';
+  var today=new Date().toISOString().slice(0,10);
+  
+  // Заявки на сегодня
+  var todayOrders=DB_ORDERS.filter(function(o){
+    return o.date===today&&(o.worker===uname||(o.helpers&&Array.isArray(o.helpers)&&o.helpers.indexOf(uname)>=0));
+  }).sort(function(a,b){return(a.t1||'').localeCompare(b.t1||'');});
+  
+  // Заявки на ближайшую неделю
+  var weekAgo=new Date();weekAgo.setDate(weekAgo.getDate()+7);
+  var weekOrders=DB_ORDERS.filter(function(o){
+    if(!o.date)return false;
+    var d=new Date(o.date);
+    return d>=new Date()&&d<=weekAgo&&(o.worker===uname||(o.helpers&&Array.isArray(o.helpers)&&o.helpers.indexOf(uname)>=0));
+  }).sort(function(a,b){return(a.date||'').localeCompare(b.date||'')||(a.t1||'').localeCompare(b.t1||'');});
+  
+  var html='<h3 style="margin-bottom:12px">📅 Расписание</h3>';
+  
+  if(todayOrders.length){
+    html+='<div style="margin-bottom:16px"><h4 style="margin-bottom:8px">Сегодня ('+dateFormat(today)+')</h4>';
+    todayOrders.forEach(function(o){
+      html+='<div class="order-card status-'+o.status+'" style="margin-bottom:8px">';
+      html+='<div class="order-header"><span class="id">'+escHtml(o.client)+'</span><span class="badge" style="background:'+getStatusColor(o.status)+';color:#fff">'+getStatusText(o.status)+'</span></div>';
+      html+='<div class="order-meta">'+escHtml(o.t1||'')+'–'+escHtml(o.t2||'')+' • '+escHtml(o.address||'')+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  
+  html+='<h4 style="margin-bottom:8px">Ближайшие 7 дней</h4>';
+  if(!weekOrders.length){
+    html+='<p class="muted">Нет назначений на ближайшую неделю</p>';
+  }else{
+    weekOrders.forEach(function(o){
+      html+='<div class="order-card" style="margin-bottom:8px">';
+      html+='<div class="order-header"><span class="id">'+escHtml(o.client)+'</span><span class="badge" style="background:'+getStatusColor(o.status)+';color:#fff">'+getStatusText(o.status)+'</span></div>';
+      html+='<div class="order-meta">'+dateFormat(o.date)+' • '+escHtml(o.t1||'')+'–'+escHtml(o.t2||'')+' • '+escHtml(o.address||'')+'</div>';
+      html+='</div>';
+    });
+  }
+  
+  el.innerHTML=html;
+}
+
+// === ВКЛАДКА «ПРОФИЛЬ» =====
+function renderProfileTab(el){
+  loadDB();
+  var u=W_STATE.user;
+  var pr=u.profile||{};
+  
+  var html='<h3 style="margin-bottom:12px">👤 Профиль исполнителя</h3>';
+  html+='<div class="card">';
+  html+='<div class="detail-row"><span class="detail-label">Имя</span><span class="detail-value">'+escHtml(u.name||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Устройство</span><span class="detail-value">'+escHtml(u.deviceId||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Роль</span><span class="detail-value">'+escHtml(u.role||'—')+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Статус</span><span class="detail-value">'+escHtml(u.status||'approved')+'</span></div>';
+  
+  var specs=(pr.specs||[]);
+  if(specs.length){
+    html+='<div class="detail-row"><span class="detail-label">Специализации</span><span class="detail-value">'+escHtml(specs.join(', '))+'</span></div>';
+  }
+  html+='</div>';
+  
+  // Статистика
+  var totalOrders=DB_ORDERS.filter(function(o){return o.worker===u.name;});
+  var completedOrders=DB_ORDERS.filter(function(o){return o.worker===u.name&&o.status==='completed';});
+  var totalSum=completedOrders.reduce(function(s,o){return s+(o.price||0);},0);
+  
+  html+='<div class="card" style="margin-top:16px">';
+  html+='<h4 style="margin-bottom:8px">📊 Статистика</h4>';
+  html+='<div class="detail-row"><span class="detail-label">Всего заявок</span><span class="detail-value">'+totalOrders.length+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Завершённых</span><span class="detail-value">'+completedOrders.length+'</span></div>';
+  html+='<div class="detail-row"><span class="detail-label">Общая сумма</span><span class="detail-value" style="color:var(--green)">'+money(totalSum)+'</span></div>';
+  html+='</div>';
+  
+  // Версия
+  html+='<p class="muted" style="margin-top:16px;text-align:center">ServiceCRM Исполнитель v'+W_VERSION+'</p>';
+  
+  el.innerHTML=html;
+}
+
+// === ХЕЛПЕРЫ =====
+function escHtml(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function money(n){
+  return (n||0).toLocaleString('ru-RU')+' ₽';
+}
+
+function dateFormat(dateStr){
+  if(!dateStr)return '—';
+  var parts=dateStr.split('-');
+  if(parts.length===3)return parts[2]+'.'+parts[1]+'.'+parts[0];
+  return dateStr;
+}
+
+function getStatusText(status){
+  var map={
+    'new':'Новая',
+    'inspection':'Осмотр',
+    'approved':'Согласована',
+    'inwork':'В работе',
+    'paused':'Пауза',
+    'completed':'Завершена',
+    'paid':'Оплачена',
+    'canceled':'Отменена',
+    'waiting':'Ожидание'
+  };
+  return map[status]||status||'—';
+}
+
+function getStatusColor(status){
+  var map={
+    'new':'#3b82f6',
+    'inspection':'#f59e0b',
+    'approved':'#8b5cf6',
+    'inwork':'#22c55e',
+    'paused':'#f59e0b',
+    'completed':'#9ca3af',
+    'paid':'#22c55e',
+    'canceled':'#ef4444',
+    'waiting':'#f59e0b'
+  };
+  return map[status]||'#9ca3af';
+}
+
+function getOrderBadges(o){
+  var badges=[];
+  if(o.photoReport)badges.push('📸 фотоотчёт');
+  if(o.materials&&o.materials.length){
+    var pending=o.materials.filter(function(m){return m.status!=='bought';});
+    if(pending.length)badges.push('🛒 '+pending.length);
+  }
+  return badges.length?'<div style="font-size:12px;color:var(--muted)">'+badges.join(' • ')+'</div>':'';
+}
+
+function getBadgesHTML(o){
+  var html='';
+  var statusText=getStatusText(o.status);
+  var color=getStatusColor(o.status);
+  html+='<span class="badge" style="background:'+color+';color:#fff">'+statusText+'</span>';
+  if(o.diagnostician)html+=' <span class="badge" style="background:#f1f5f9;color:#64748b">диагност: '+escHtml(o.diagnostician)+'</span>';
+  return html;
+}
+
+// === ИНИЦИАЛИЗАЦИЯ =====
+(function init(){
+  loadDB();
+  // Если уже авторизован — показываем ЛК
+  if(W_STATE.user&&W_STATE.user.name){
+    showLK();
+  }else{
+    document.getElementById('login-screen').style.display='flex';
+  }
+  
+  // Enter на форме входа
+  document.getElementById('w-login').addEventListener('keydown',function(e){
+    if(e.key==='Enter')document.getElementById('w-pin').focus();
+  });
+  document.getElementById('w-pin').addEventListener('keydown',function(e){
+    if(e.key==='Enter')workerLogin();
+  });
+})();
+</script>
+</body>
+</html>

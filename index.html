@@ -177,6 +177,38 @@ const BUYER={worker:'Работник перед выездом',manager:'Диа
 // === тестовые заявки и отмена ===
 function showTest(){return !!(DB&&DB.showTest)}
 function isTest(o){return !!o.test}
+// === helpers для нескольких исполнителей на заявку ===
+// o.helpers — массив имён соисполнителей; у старых заявок [] или undefined
+function helpersOf(o){ return Array.isArray(o.helpers)? o.helpers.slice() : []; }
+function allWorkersOf(o){
+ var w=[o.worker].concat(helpersOf(o)).filter(Boolean);
+ var out=[]; for(var i=0;i<w.length;i++){if(out.indexOf(w[i])<0)out.push(w[i]);} return out;
+}
+// «Моя заявка» — основной исполнитель ИЛИ соисполнитель. isMeName уже учитывает
+// симуляцию роли (совпадение со строкой «Владелец»).
+function isAssignedToMe(o){
+ if(!o)return false;
+ if(isMeName(o.worker))return true;
+ return helpersOf(o).some(function(h){return isMeName(h);});
+}
+function helpersSelect(prefix,selected,excl){
+ var sel=selected||[];
+ var opts=activeWorkers().filter(function(u){return getUserName(u)!==excl;}).map(function(u){
+  var nm=getUserName(u);
+  return '<option value="'+escapeHtml(nm)+'"'+(sel.indexOf(nm)>=0?' selected':'')+'>'+escapeHtml(nm)+'</option>';
+ }).join('');
+ return '<div class="field"><label class="label">Соисполнители (можно несколько)</label>'+
+  '<select class="input" id="'+prefix+'-helpers" multiple size="4" style="height:auto">'+
+   (opts||'<option value="" disabled>нет сотрудников</option>')+'</select>'+
+  '<div class="muted" style="margin-top:4px">Ctrl/Cmd — выбрать нескольких</div></div>';
+}
+function readHelpers(prefix){
+ var sel=document.getElementById(prefix+'-helpers'); if(!sel)return [];
+ var out=[]; for(var i=0;i<sel.options.length;i++){if(sel.options[i].selected)out.push(sel.options[i].value);}
+ return out;
+}
+// === helpers end ===
+
 // тестовые скрыты при showTest=false (списки/календарь/задачи/схема/уведомления);
 // из отчётов/финансов/CSV/долей исключены ВСЕГДА.
 // Честная симуляция: реальный владелец ВНЕ симуляции видит тестовые всегда (isOwner&&!simOn).
@@ -185,10 +217,9 @@ function visOrder(o){return !isTest(o)||((showTest()&&adminLike())||uiOwner())}
 // (new/approved без исполнителя); свои (worker=я) и созданные мной (by=я) — любых статусов
 function visibleOrders(){
  if(typeof can==='function'&&can('orders_view'))return DB.orders.slice().filter(function(o){return visOrder(o);});
- var me=state.user;
  return DB.orders.filter(function(o){
   if(!visOrder(o))return false;
-  if(o.worker===me||o.by===me)return true;           // свои любые + созданные мной
+  if(isAssignedToMe(o)||o.by===state.user)return true; // свои (worker+helpers) + созданные мной
   if(['new','approved'].includes(o.status)&&!o.worker)return true; // пул
   return false;                                       // чужие inwork/completed/paid/canceled — скрыты
  });
@@ -204,7 +235,7 @@ function adminLike(){if(uiOwner())return true;return state.role==='admin'||state
 // В симуляции роли владельцем считается и заявка, назначенная на «Владелец».
 function isMyInwork(o){
  if(!o||!isInwork(o))return false;
- if(o.worker===state.user)return true;
+ if(isAssignedToMe(o))return true;
  return isSim()&&(typeof isOwner==='function')&&isOwner()&&o.worker==='Владелец';
 }
 // имя пользователя для сверки с полями заявок (worker/by/diagnostician).
@@ -214,7 +245,7 @@ function isMeName(nm){return !!nm&&(nm===state.user||(isSim()&&nm==='Владе�
 // F1: исполнитель своей inwork-заявки правит работы/материалы/закупки/доп-работы.
 // isMyInwork покрывает и legacy in_progress, плюс — симуляцию роли; явное условие ниже
 // фиксирует контракт «status==='inwork' && worker===state.user» независимо от isMyInwork.
-function canEditWorks(o){return (typeof isOrderEditor==='function'&&isOrderEditor(o))||isMyInwork(o)||(!!o&&o.status==='inwork'&&o.worker===state.user);}
+function canEditWorks(o){return (typeof isOrderEditor==='function'&&isOrderEditor(o))||isMyInwork(o)||(!!o&&o.status==='inwork'&&isAssignedToMe(o));}
 // контрагенты: правка = orders_edit/владелец; новый заказ от клиента = orders_create/владелец
 function canEditClient(){return uiOwner()||((typeof can==='function')&&can('orders_edit'));}
 function canCreateOrder(){return uiOwner()||((typeof can==='function')&&can('orders_create'));}
@@ -233,7 +264,8 @@ function isInwork(o){return !!o&&(o.status==='inwork'||o.status==='in_progress')
 // чужие взятые заявки: владелец/админ или право orders_view_all
 function canViewAllOrders(){if(typeof adminLike==='function'&&adminLike())return true;if(typeof can==='function')return can('orders_view_all');return false}
 // взятая другим работником заявка скрыта тем, у кого нет orders_view_all
-function hiddenTakeFromMe(o){return isInwork(o)&&!!o.worker&&o.worker!==state.user&&!canViewAllOrders()}
+// «другим» = не основной исполнитель и не соисполнитель (isAssignedToMe)
+function hiddenTakeFromMe(o){return isInwork(o)&&!!o.worker&&!isAssignedToMe(o)&&!canViewAllOrders()}
 // F2: сегодня, без исполнителя, до начала <=1 часа — срочная (жёлтая подсветка, вверх списка)
 function urgentSoon(o){
  if(!o||o.worker||o.date!==d0)return false;
@@ -251,7 +283,7 @@ function showStartWorkBtn(o){
  if(!['new','inspection'].includes(o.status))return false;
  if(orderType(o)==='manufacture')return false;
  if(showTakeBtn(o))return false;
- return o.worker===state.user||((typeof can==='function')&&can('orders_status'));
+ return isAssignedToMe(o)||((typeof can==='function')&&can('orders_status'));
 }
 // кнопка «Взять в работу»: статус new/approved + право + (исполнитель пуст ИЛИ я создатель/owner/admin)
 function showTakeBtn(o){
@@ -600,6 +632,7 @@ function badges(o){
  if(isTest(o))b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">🧪 тест</span>`;
  if(o.diagnostician)b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">👤 диагност: ${escapeHtml(o.diagnostician)}</span>`;
  if(o.worker&&['new','approved'].includes(o.status)&&!isInwork(o))b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🎯 назначен: ${escapeHtml(o.worker)}</span>`;
+  if((helpersOf(o)||[]).length&&['new','approved'].includes(o.status)&&!isInwork(o))b+=`<span class="badge" style="background:#fef3c7;color:#92400e">👥 ${helpersOf(o).map(escapeHtml).join(', ')}</span>`;
  if(o.backfill)b+=`<span class="badge" style="background:#fef3c7;color:#92400e">⏪ задним числом</span>`;
  if(o.status==='canceled')b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">отменена</span>`;
  if(orderType(o)!=='standard')b+=`<span class="badge" style="background:#fef3c7;color:#92400e">${OTYPE[orderType(o)]}</span>`;
@@ -643,7 +676,7 @@ function login(role,name){
 // проверка просроченных
 const overdue=DB.orders.filter(o=>{
 const od=o.date?new Date(o.date.replace(/-/g,'/')):null;
-return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&o.worker===state.user;
+return od&&od<new Date()&&!['completed','paid','canceled'].includes(o.status)&&isAssignedToMe(o);
 });
 if(overdue.length&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&typeof showAppNotif==='function'){
 showAppNotif('⏰ Просроченные заказы',{body:'У вас '+overdue.length+' невыполнен'+(overdue.length===1?'ый заказ':'ых заказа'),tag:'crm-overdue'});
@@ -652,7 +685,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.5</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.6</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -718,7 +751,7 @@ function routeProgress(o){
  return routeDone(o)+'/'+r.length+' точек';
 }
 function canEditRoute(o){return can('orders_edit')}
-function canDoRoute(o){return can('orders_edit')||(o.worker&&(o.worker===state.user))}
+function canDoRoute(o){return can('orders_edit')||isAssignedToMe(o)}
 function routeNavLinks(address){
  var a=encodeURIComponent(address||'');
  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+
@@ -783,7 +816,7 @@ function routeAddPoint(id){
 }
 function routeArrive(id,i){
  const o=byId(id);
- const isExec=(typeof state!=='undefined'&&state.user===o.worker);
+ const isExec=(typeof state!=='undefined'&&isAssignedToMe(o));
  if(!isExec&&!canDoRoute(o))return alert('Нет прав');
  const p=o.route[i];
  p.status='arrived';p.ts_arrived=Date.now();
@@ -834,6 +867,7 @@ return `
 <div class="info-row"><span class="muted">Адрес</span><b style="text-align:right">${escapeHtml(o.address)}</b></div>
 <div class="info-row"><span class="muted">Дата</span><b>${o.date.slice(8)}.${o.date.slice(5,7)} • ${o.t1}–${o.t2}</b></div>
 <div class="info-row"><span class="muted">Исполнитель</span><b>${escapeHtml(o.worker||'—')}</b></div>
+${(helpersOf(o)||[]).length?`<div class="info-row"><span class="muted">Соисполнители</span><b>${helpersOf(o).map(escapeHtml).join(', ')}</b></div>`:''}
 </div>
 <div class="card"><div class="sec-title">🔧 Выполненные работы</div>
 ${worksSummary(o)}
@@ -997,6 +1031,7 @@ function renderCreate(){
   <select class="input" id="c-worker"><option value="">— не назначен (заявка в пуле) —</option>
   ${creatorOption(state.user)}
   ${activeWorkers().map(u=>`<option>${escapeHtml(getUserName(u))}</option>`).join('')}</select></div>
+ ${helpersSelect('c',[],'')}
  <div class="tgl"><span style="font-weight:500;font-size:14px">📸 Требовать фотоотчет</span>
   <label class="switch"><input type="checkbox" id="c-photo"><span class="slider"></span></label></div>
  ${uiOwner()||canFinance()?`<div class="tgl"><span style="font-weight:500;font-size:14px">🧪 Тестовая заявка</span>
@@ -1217,11 +1252,12 @@ function renderTasks(){
  const tabRaw=state.tasksTab||(function(){try{return localStorage.getItem('crm_tasks_tab')||'free'}catch(e){return 'free'}})();
  const tab=tabRaw==='mine'?'work':tabRaw; // старый ключ «Мои» → «В работе»
  const vis=visibleOrders();
- const own=vis.filter(o=>o.worker===state.user&&o.status!=='canceled');
+ // «свои» — где я основной исполнитель ИЛИ соисполнитель
+ const own=vis.filter(o=>isAssignedToMe(o)&&o.status!=='canceled');
  // «Доступные»: new/approved, исполнитель пуст или я; чужие взятые (inwork) скрыты
  const free=vis.filter(o=>['new','approved'].includes(o.status)&&!o.worker&&!hiddenTakeFromMe(o)).sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
- // E3: назначенные лично мне (new/approved, worker=я, ещё не в работе)
- const assigned=vis.filter(o=>o.worker===state.user&&['new','approved'].includes(o.status)&&!isInwork(o));
+ // E3: назначенные лично мне (new/approved, worker или helpers, ещё не в работе)
+ const assigned=vis.filter(o=>isAssignedToMe(o)&&['new','approved'].includes(o.status)&&!isInwork(o));
  const work=own.filter(o=>(isInwork(o)||o.status==='paused')&&!hiddenTakeFromMe(o));
  const doneT=own.filter(o=>['completed','paid'].includes(o.status));
  return `
@@ -1652,7 +1688,7 @@ function doCompleteOrder(id){const o=byId(id);var sd=(o.stages||[]).find(functio
   return;
  }
  o.status='completed';markOrder(o);save();completeModal(id);}
-function canAddPhoto(o){if(typeof can==='function')return can('orders_edit')||o.worker===state.user;if(!['admin','operator','manager'].includes(state.role))return o.worker===state.user;return true}
+function canAddPhoto(o){if(typeof can==='function')return can('orders_edit')||isAssignedToMe(o);if(!['admin','operator','manager'].includes(state.role))return isAssignedToMe(o);return true}
 function viewPhoto(id,i){
  const docs=(typeof PHOTOS_CACHE!=='undefined'&&PHOTOS_CACHE[id])||[];
  const all=docs.concat(byId(id)?byId(id).photos||[]:[]);
@@ -1791,7 +1827,8 @@ function findConflicts(worker,date,t1,t2,skipId){
  if(!worker||!date)return [];
  const s1=toMin(t1),e1=toMin(t2);
  if(s1==null||e1==null)return [];
-  return DB.orders.filter(o=>o.id!==skipId&&o.worker===worker&&o.date===date&&['new','inspection','approved','in_progress','inwork','waiting','postponed'].includes(o.status))
+  // занятость считаем по ВСЕМ исполнителям заявки: основной + соисполнители
+  return DB.orders.filter(o=>o.id!==skipId&&allWorkersOf(o).indexOf(worker)>=0&&o.date===date&&['new','inspection','approved','in_progress','inwork','waiting','postponed'].includes(o.status))
   .filter(o=>{const s2=toMin(o.t1),e2=toMin(o.t2);return s2!=null&&e2!=null&&s1<e2&&s2<e1;});
 }
 function canOverrideConflict(){if(typeof can==='function')return uiOwner()||can('orders_edit');return (typeof isOwner==='function'&&uiOwner())||['admin'].includes(state.role)}
@@ -1936,6 +1973,7 @@ const g=x=>document.getElementById(x).value;
    status:g('c-type'),date:g('c-date'),t1:g('c-t1'),t2:g('c-t2'),price:+g('c-price')||0,extras:[],
    photoReport:document.getElementById('c-photo').checked,
    worker:g('c-worker')||null, // не выбран → заявка в пуле (назначение/взятие через гейт)
+   helpers:readHelpers('c'),
    by:state.user,byDev:(typeof deviceId==='function')?deviceId():'',
    test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
    materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:readRewardFromForm()||null,photos:[],type:otype,payments:[],history:[],
@@ -2092,6 +2130,7 @@ function editOrderModal(id){
     <select class="input" id="e-worker" style="margin-bottom:6px"><option value="">— без исполнителя —</option>
      ${creatorOption(o.by,o.worker)}
      ${activeWorkers().map(u=>`<option ${o.worker===getUserName(u)?'selected':''}>${escapeHtml(getUserName(u))}</option>`).join('')}</select>
+    ${helpersSelect('e',helpersOf(o),o.worker)}
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px"><input type="checkbox" id="e-photo" ${o.photoReport?'checked':''}> 📸 Требовать фотоотчёт</label>
     ${(typeof isOwner==='function'&&uiOwner())||canFinance()?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="e-test" ${o.test?'checked':''}> 🧪 Тестовая заявка</label>`:'<div style="margin-bottom:10px"></div>'}
     <div class="row2"><button class="btn" style="background:var(--bg-secondary);color:var(--text-secondary)" onclick="closeModal()">Отмена</button>
@@ -2121,8 +2160,13 @@ if(slotIsPast(g('e-date'),g('e-t1'),g('e-t2')))return alert('Выбранное 
  Object.keys(after).forEach(function(k){
   if(String(before[k])!==String(after[k]))changed.push(k+': '+String(before[k]==null?'':before[k])+' → '+String(after[k]==null?'':after[k]));
  });
+ // соисполнители: сравниваем и пишем отдельно (после общего цикла присваивания)
+ const newHelpers=readHelpers('e').filter(function(n){return n&&n!==newWorker;});
+ const hBefore=helpersOf(o).slice().sort().join(','),hAfter=newHelpers.slice().sort().join(',');
+ if(hBefore!==hAfter)changed.push('соисполнители: '+(hBefore||'—')+' → '+(hAfter||'—'));
  if(!changed.length){closeModal();return}
  Object.keys(after).forEach(function(k){o[k]=after[k]});
+ o.helpers=newHelpers;
  logAction(o,'edit',{fields:changed});
  markOrder(o);save();
  closeModal();
@@ -3119,7 +3163,7 @@ function secSpy(force){
  },{passive:true});
 })();
 // === ПАКЕТ C: документы «Смета» и «Акт выполненных работ» (печать/шаринг/скачивание) ===
-function docPerm(o){return uiOwner()||o.diagnostician===state.user||o.worker===state.user||o.by===state.user;}
+function docPerm(o){return uiOwner()||o.diagnostician===state.user||isAssignedToMe(o)||o.by===state.user;}
 function docOrg(){var s=(DB.settings||{}).org||{};var has=(s.name&&String(s.name).trim())||(s.inn&&String(s.inn).trim())||(s.phone&&String(s.phone).trim());return has?s:{}}
 function docHeadHtml(title,o){
  var org=docOrg();
@@ -3238,11 +3282,11 @@ function nextActionHint(o){
  if(bal>0)return {k:'pay',id:0,txt:'возьми оплату (остаток '+money(bal)+')'};
  return {k:'done',id:0,txt:'всё готово — завершай'};
 }
-function hintCls(o,kind,id){try{if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' hint-pulse':'';}catch(e){return '';}}
-function hintData(o,kind,id){try{if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' data-hint="'+kind+'-'+id+'"':'';}catch(e){return '';}}
+function hintCls(o,kind,id){try{if(!hintsOn()||!isInwork(o)||!isAssignedToMe(o)||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' hint-pulse':'';}catch(e){return '';}}
+function hintData(o,kind,id){try{if(!hintsOn()||!isInwork(o)||!isAssignedToMe(o)||orderType(o)==='manufacture')return '';const h=nextActionHint(o);return (h.k===kind&&h.id===id)?' data-hint="'+kind+'-'+id+'"':'';}catch(e){return '';}}
 function hintBarHtml(o){
  try{
-  if(!hintsOn()||!isInwork(o)||o.worker!==state.user||orderType(o)==='manufacture')return '';
+  if(!hintsOn()||!isInwork(o)||!isAssignedToMe(o)||orderType(o)==='manufacture')return '';
   const h=nextActionHint(o);
   return '<div class="hint-bar">Следующий шаг: '+escapeHtml(h.txt)+'</div>';
  }catch(e){return '';}
@@ -3406,7 +3450,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.6.5';
+const APP_VERSION='2.6.6';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
