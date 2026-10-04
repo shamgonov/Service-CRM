@@ -390,10 +390,12 @@ function watchNewOrders(prev, next){
   (prev.orders||[]).forEach(function(o){prevById[o.id]=o;});
   (next.orders||[]).forEach(function(o){
    var p=prevById[o.id];
-   var byMe=lastByDeviceId(o)===dev;
+   var byMe=lastByDeviceId(o)===dev||(p&&lastByDeviceId(p)===dev);
    if(o.test)return; // тестовые заявки — без событий/уведомлений
    if(!p){ // новая заявка
-    if(o.worker&&(o.worker===dev||o.worker===myName())&&o.status==='approved'&&!byMe)
+    // Назначение приходит и в пуловом статусе 'new' (assignWorkerApply статус не меняет),
+    // поэтому гейт 'approved' терял уведомление при типичном назначении — допускаем new+approved.
+    if(o.worker&&(o.worker===dev||o.worker===myName())&&['new','approved'].indexOf(o.status)>=0&&!byMe)
      pushEvent('assigned','📋 Назначена заявка №'+o.id,'Вас назначили исполнителем: '+esc(o.client||''),o.id);
     return;
    }
@@ -402,7 +404,7 @@ function watchNewOrders(prev, next){
    var nowMine=o.worker&&(o.worker===dev||o.worker===myName());
    if(wasMine&&!nowMine&&!byMe)
     pushEvent('order','↩️ Заявку №'+o.id+' переназначили','Заявка больше не ваша',o.id);
-   if(!wasMine&&nowMine&&o.status==='approved'&&!byMe)
+   if(!wasMine&&nowMine&&['new','approved'].indexOf(o.status)>=0&&!byMe)
     pushEvent('assigned','📋 Назначена заявка №'+o.id,'Вас назначили исполнителем: '+esc(o.client||''),o.id);
    if(wasMine&&nowMine&&(p.date!==o.date||p.t1!==o.t1||p.t2!==o.t2)&&!byMe)
     pushEvent('calendar','📅 Изменён календарь — заявка №'+o.id,'Новое время: '+esc(o.date||'')+' '+esc(o.t1||'')+'–'+esc(o.t2||''),o.id);
