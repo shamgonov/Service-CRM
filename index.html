@@ -180,6 +180,13 @@ function isTest(o){return !!o.test}
 // === helpers для нескольких исполнителей на заявку ===
 // o.helpers — массив имён соисполнителей; у старых заявок [] или undefined
 function helpersOf(o){ return Array.isArray(o.helpers)? o.helpers.slice() : []; }
+// соисполнитель, ждущий подтверждения участия по этой заявке (я — он)
+function isHelperPending(o){
+ if(!o||!Array.isArray(o.helpers))return false;
+ if(o.helpers.indexOf(state.user)<0)return false;
+ if(['completed','paid','canceled'].indexOf(o.status)>=0)return false;
+ return (o.confirm&&o.confirm[state.user])==='pending';
+}
 function allWorkersOf(o){
  var w=[o.worker].concat(helpersOf(o)).filter(Boolean);
  var out=[]; for(var i=0;i<w.length;i++){if(out.indexOf(w[i])<0)out.push(w[i]);} return out;
@@ -313,7 +320,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре',enroute:'Я поехал',enroute_cancel:'Экстренная ситуация',late:'Задержка (звонок клиенту)',conflict_accept:'Конфликт принят'};
+const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре',enroute:'Я поехал',enroute_cancel:'Экстренная ситуация',late:'Задержка (звонок клиенту)',conflict_accept:'Конфликт принят',accept_helper:'Принято участие соисполнителя',decline_helper:'Отказ соисполнителя от участия'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -338,6 +345,8 @@ function histLine(h){
  else if(h.action==='late')txt='звонок клиенту: задержка '+(d.mins!=null?d.mins:'?')+' мин • '+(d.from||'')+' → '+(d.to||'')+(d.also?' • + перенос №'+d.also:'');
  else if(h.action==='conflict_accept')txt='конфликт с №'+(d.order!=null?d.order:'—')+' принят, следующую заявку не сдвигаем';
  else if(h.action==='edit')txt=(d.fields||[]).join(', ');
+ else if(h.action==='accept_helper')txt='соисполнитель '+escapeHtml(d.helper||'')+' подтвердил участие';
+ else if(h.action==='decline_helper')txt='соисполнитель '+escapeHtml(d.helper||'')+' отказался: '+escapeHtml(d.reason||'—');
  return txt;
 }
 // Секция свёрнута по умолчанию: на длинной истории (до 100 записей) журнал вытеснял
@@ -980,6 +989,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 ${isW||canManage||showTakeBtn(o)||showStartWorkBtn(o)?`<div class="card">
   ${hintBarHtml(o)}
   ${showTakeBtn(o)?`<button class="btn btn-green" onclick="takeOrder(${o.id})">🚜 Взять в работу</button>`:''}
+  ${isHelperPending(o)?`<button class="btn btn-green" onclick="confirmHelper(${o.id})">✅ Подтвердить участие</button><button class="btn btn-red" onclick="declineHelper(${o.id})">🚫 Отказаться</button>`:''}
   ${(uiOwner()||can('orders_edit')||(o.by&&o.by===state.user))&&['new','approved'].includes(o.status)?`<button class="btn btn-blue" onclick="assignWorkerModal(${o.id})">🎯 Назначить исполнителя</button>`:''}
   ${o.status==='approved'&&o.worker&&orderType(o)!=='manufacture'?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
   ${showStartWorkBtn(o)?`<button class="btn btn-blue" onclick="setStatus(${o.id},'inwork')">🚗 Приступил (на адресе)</button>`:''}
@@ -1001,6 +1011,51 @@ ${paymentsBlock(o)}
 ${historyBlock(o)}
 </div>`}
 
+// === СОИСПОЛНИТЕЛЬ: подтверждение / отказ ===
+function confirmHelper(id){
+ var o=byId(id);if(!o)return;
+ if(!isHelperPending(o))return alert('Нет ожидающего подтверждения по этой заявке');
+ var c=o.confirm||{};c[state.user]='ok';o.confirm=c;
+ logAction(o,'accept_helper',{helper:state.user});
+ markOrder(o);save();
+ if(typeof pushEvent==='function')pushEvent('helper_accept','✅ Подтверждено участие в заявке №'+o.id,state.user+' подтвердил участие',o.id);
+ render();
+}
+function declineHelper(id){
+ var o=byId(id);if(!o)return;
+ if(!isHelperPending(o))return alert('Нет ожидающего подтверждения по этой заявке');
+ var reason=prompt('Причина отказа (обязательна):');
+ if(!reason||!reason.trim())return alert('Укажите причину отказа');
+ o.helpers=helpersOf(o).filter(function(h){return h!==state.user;});
+ var c=o.confirm||{};c[state.user]='no';o.confirm=c;
+ logAction(o,'decline_helper',{helper:state.user,reason:reason.trim()});
+ markOrder(o);save();
+ if(typeof pushEvent==='function')pushEvent('helper_decline','❌ Отказ от участия в заявке №'+o.id,state.user+': '+reason.trim(),o.id);
+ render();
+}
+function helperPendingModal(){
+ if(!state||!state.user||typeof DB==='undefined'||!DB||!DB.orders)return;
+ var pend=DB.orders.filter(function(o){return isHelperPending(o);});
+ if(!pend.length)return;
+ var rows=pend.map(function(o){
+  return '<div class="mat" style="margin-bottom:8px"><b>№'+o.id+' • '+escapeHtml(o.client||'')+'</b>'+((o.date)?('<div class="muted">'+o.date.slice(8)+'.'+o.date.slice(5,7)+' '+(o.t1||'')+'–'+(o.t2||'')+'</div>'):'')+((o.address)?('<div class="muted">'+escapeHtml(o.address)+'</div>'):'')+'<div class="row2" style="margin-top:6px"><button class="btn-sm btn-green" onclick="closeModal();confirmHelper('+o.id+')">✅ Принять</button><button class="btn-sm btn-red" onclick="closeModal();declineHelper('+o.id+')">🚫 Отказаться</button></div></div>';
+ }).join('');
+ openModal('<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto" onclick="if(event.target===this)closeModal()"><div class="card" style="max-width:420px;width:100%;margin:0" onclick="event.stopPropagation()"><div class="sec-title">👥 Подтвердите участие</div>'+rows+'</div></div>');
+}
+// автопоказ окна один раз за сессию, когда данные готовы
+(function(){var done=false,n=0;
+ if(typeof setInterval==='undefined')return;
+ var iv=setInterval(function(){n++;
+  try{
+   if(!done&&typeof state!=='undefined'&&state&&state.user&&typeof DB!=='undefined'&&DB&&Array.isArray(DB.orders)){
+    done=true;clearInterval(iv);
+    try{ if(typeof openModal==='function') helperPendingModal(); }catch(e){}
+   }
+  }catch(e){}
+  if(done||n>40)clearInterval(iv);
+ },500);
+})();
+// === СОИСПОЛНИТЕЛЬ: конец ===
 function renderCreate(){
  return `
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
@@ -1974,6 +2029,7 @@ const g=x=>document.getElementById(x).value;
    photoReport:document.getElementById('c-photo').checked,
    worker:g('c-worker')||null, // не выбран → заявка в пуле (назначение/взятие через гейт)
    helpers:readHelpers('c'),
+   confirm:(function(){var c={};readHelpers('c').forEach(function(n){if(n)c[n]='pending';});return c;})(),
    by:state.user,byDev:(typeof deviceId==='function')?deviceId():'',
    test:(document.getElementById('c-test')&&document.getElementById('c-test').checked)||false,
    materials:state.newMats.slice(),works:(state.newWorks||[]).slice(),matsInTotal:false,reward:readRewardFromForm()||null,photos:[],type:otype,payments:[],history:[],
@@ -2167,6 +2223,7 @@ if(slotIsPast(g('e-date'),g('e-t1'),g('e-t2')))return alert('Выбранное 
  if(!changed.length){closeModal();return}
  Object.keys(after).forEach(function(k){o[k]=after[k]});
  o.helpers=newHelpers;
+ (function(){var c=o.confirm||{};newHelpers.forEach(function(n){if(n&&c[n]!=='ok'&&c[n]!=='no')c[n]='pending';});for(var k in c){if(newHelpers.indexOf(k)<0&&c[k]==='pending')delete c[k];}o.confirm=c;})();
  logAction(o,'edit',{fields:changed});
  markOrder(o);save();
  closeModal();
