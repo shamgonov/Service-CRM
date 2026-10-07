@@ -320,7 +320,7 @@ function logAction(order,action,details){
  if(order.history.length>100)order.history=order.history.slice(-100);
  return order;
 }
-const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре',enroute:'Я поехал',enroute_cancel:'Экстренная ситуация',late:'Задержка (звонок клиенту)',conflict_accept:'Конфликт принят',accept_helper:'Принято участие соисполнителя',decline_helper:'Отказ соисполнителя от участия'};
+const HIST_A={view:'Просмотрен',pause:'Пауза',create:'Создана',assign:'Назначен исполнитель',take:'Взят в работу',status_change:'Смена статуса',payment_received:'Платёж получен',payment_materials:'Выдано на материалы',stage_add:'Добавлен этап',stage_complete:'Этап завершён',stage_reopen:'Этап возвращён в работу',cancel:'Отменена',photo_add:'Добавлено фото',edit:'Правка заявки',calendar_move:'Перенос в календаре',enroute:'Я поехал',enroute_cancel:'Экстренная ситуация',late:'Задержка (звонок клиенту)',conflict_accept:'Конфликт принят',accept_helper:'Принято участие соисполнителя',decline_helper:'Отказ соисполнителя от участия',purchase_spoiled:'Испорчен',purchase_refund:'Компенсация'};
 function userNameById(devId){
  if(!devId)return '';
  if(devId==='system')return 'система';
@@ -347,6 +347,8 @@ function histLine(h){
  else if(h.action==='edit')txt=(d.fields||[]).join(', ');
  else if(h.action==='accept_helper')txt='соисполнитель '+escapeHtml(d.helper||'')+' подтвердил участие';
  else if(h.action==='decline_helper')txt='соисполнитель '+escapeHtml(d.helper||'')+' отказался: '+escapeHtml(d.reason||'—');
+ else if(h.action==='purchase_spoiled')txt='испорчен: '+escapeHtml(d.name||'')+' — '+escapeHtml(d.reason||'');
+ else if(h.action==='purchase_refund')txt='компенсация выплачена: '+escapeHtml(d.by||'');
  return txt;
 }
 // Секция свёрнута по умолчанию: на длинной истории (до 100 записей) журнал вытеснял
@@ -694,7 +696,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.6</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.8</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -954,13 +956,15 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  ${o.materials.length?o.materials.map((m,i)=>{const s=matState(o,m);return`
  <div class="mat" style="border-left:4px solid ${s.tc}">
   <div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span>
-   <span style="display:flex;align-items:center;gap:6px">${canShopMats(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="matEdit(${o.id},${i})">✏️</span>${m.status!=='bought'?`<span class="muted" style="cursor:pointer" title="Удалить" onclick="matDel(${o.id},${i})">✕</span>`:''}`:''}<span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span></span></div>
+   <span style="display:flex;align-items:center;gap:6px">${canShopMats(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="matEdit(${o.id},${i})">✏️</span>${m.status!=='bought'?`<span class="muted" style="cursor:pointer" title="Удалить" onclick="matDel(${o.id},${i})">✕</span>`:''}`:''}<span class="badge" style="background:${s.c};color:${s.tc}">${s.t}</span>${m.spoiled?'<span class="badge" style="background:#fee2e2;color:#991b1b">⚠️ испорчен</span>':''}${m.payer&&m.payer!=='company'?`<span class="badge" style="background:#fef3c7;color:#92400e">💳 свои: ${escapeHtml(m.payer)}</span>`:''}</span></div>
    <div class="muted">${money(m.price)} • ${BUYER[m.buyer]}<br>📍 ${escapeHtml(m.where||'—')}<br>⏳ Дедлайн: за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ ${s.cd?'• <b data-tleft="'+o.id+':'+i+'">'+s.cd+'</b>':''}</div>
   ${(['new','approved','inwork'].includes(o.status)&&(canEditOrder(o)||o.worker===state.user))?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:rgba(251,191,36,.06);border-radius:6px"><span>🧾 Материалы в сумме клиента</span><input type="checkbox" ${o.matsInTotal?'checked':''} onchange="setMatsInTotal(${o.id},this.checked)" style="width:18px;height:18px"></div>`:(['completed','paid'].includes(o.status)?`<div class="info-row" style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px"><span class="muted">🧾 Материалы в сумме клиента</span><b>${o.matsInTotal?'включены':'не включены'}</b></div>`:'')}
   ${(['todo'].includes(m.status)||['urgent','critical'].includes(s.k))&&canShopMats(o)?`
   <div style="display:flex;gap:6px;margin-top:8px">
    <button class="btn-sm btn-green${hintCls(o,'mat',i)}"${hintData(o,'mat',i)} onclick="matAct(${o.id},${i},'bought')">✅ Куплено</button>
    <button class="btn-sm btn-red" onclick="matAct(${o.id},${i},'issue')">❌ Не найти</button>
+ ${(!m.spoiled&&canSpoilGate(o))?`<button class="btn-sm btn-outline" onclick="markSpoiled(${o.id},${i})">⚠️ Испорчен</button>`:''}
+ ${m.payer&&m.payer!=='company'&&m.refund!=='paid'&&canRefundGate()?`<button class="btn-sm btn-green" onclick="refundCompensation(${o.id},${i})">💳 Компенсация: ${m.refund==='pending'?'ожидает':'нет'}</button>`:''}
   </div>`:''}
   ${m.status==='issue'?`<div style="background:#fef3c7;border-radius:6px;padding:8px;margin-top:8px;font-size:12px">
    ⚠ Требуется решение: заменить / ждать / купить дороже / убрать<br>
@@ -970,6 +974,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
   <input class="input" id="mf-name" placeholder="Наименование *" style="margin-bottom:6px">
   <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-qty" placeholder="Кол-во"><input class="input" id="mf-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="mf-munit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div>
   <select class="input" id="mf-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
+<select class="input" id="mf-payer" style="margin-bottom:6px"><option value="company">Оплачено: Компания</option>${activeWorkers().map(function(u){var w=getUserName(u);return '<option value="'+escapeHtml(w)+'">Оплачено: '+escapeHtml(w)+'</option>';}).join('')}</select>
   <input class="input" id="mf-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
   <div class="row2" style="margin-bottom:6px"><input class="input" id="mf-dl" type="number" value="3" min="1"><select class="input" id="mf-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
   <div class="row2"><button class="btn-sm btn-outline" onclick="document.getElementById('matform').style.display='none'">Отмена</button>
@@ -981,6 +986,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
  ${worksSummary(o)}
  ${(o.extras||[]).map((e,i)=>`<div class="info-row"><span>＋ ${escapeHtml(e.name)}${(+e.qty||1)!=1?' × '+(+e.qty||1):''} ${canEditWorks(o)?`<span class="muted" style="cursor:pointer" title="Изменить" onclick="extraEdit(${o.id},${i})">✏️</span><span class="muted" style="cursor:pointer" title="Удалить" onclick="delExtra(${o.id},${i})">✕</span>`:''}</span><b>${money((+e.price||0)*(+e.qty||1))}</b></div>`).join('')}
  <div class="total"><span>Итого</span><span style="color:var(--green)">${money(total(o))}</span></div>
+ <div id="sec-money-extras">${moneyExtrasBlock(o)}</div>
  <div class="row2" style="margin-top:8px">
   ${canEditWorks(o)?`<button class="btn-sm btn-outline" onclick="addExtra(${o.id})">＋ Доп. работа</button>`:''}
   ${canManage&&o.status==='completed'?`<button class="btn-sm btn-green" onclick="setStatus(${o.id},'paid')">💰 Оплачено</button>`:''}
@@ -1056,6 +1062,38 @@ function helperPendingModal(){
  },500);
 })();
 // === СОИСПОЛНИТЕЛЬ: конец ===
+// === ЗАКУПКИ: брак и свои средства ===
+// гейты прав: spoiled — правка материалов заявки (orders_edit/автор), refund — финансы (finance_edit)
+function canSpoilGate(o){if(typeof can==='function')return uiOwner()||can('orders_edit')||(o&&o.by&&o.by===state.user);return uiOwner()||['admin','operator','manager'].includes(state.role)||(o&&o.by&&o.by===state.user);}
+function canRefundGate(){if(typeof can==='function')return uiOwner()||can('finance_edit');return uiOwner()||['admin','operator','manager'].includes(state.role);}
+function moneyExtrasBlock(o){
+ var spoiled=[],other=[],totalRef=0;
+ (o.materials||[]).forEach(function(m){if(m.spoiled)spoiled.push(m);else if(m.payer&&m.payer!=='company'&&m.refund!=='paid')other.push(m);});
+ if(!spoiled.length&&!other.length)return '';
+ var rows='<div class="muted" style="margin-top:6px">';
+ spoiled.forEach(function(m){rows+='⚠️ '+escapeHtml(m.name)+' — '+escapeHtml(m.spoiled.reason)+'<br>';});
+ other.forEach(function(m){rows+='💳 '+escapeHtml(m.name)+' (свои: '+escapeHtml(m.payer)+') — '+money(m.price)+'<br>'; totalRef+=+m.price;});
+ rows+='</div>';
+ return '<div style="margin-top:8px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px">'+rows+'<b>К компенсации: '+money(totalRef)+'</b></div>'
+}
+function markSpoiled(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canSpoilGate(o))return alert('Нет права');
+ if(o.materials[i]&&o.materials[i].spoiled)return alert('Позиция уже списана как брак');
+ var reason=prompt('Причина брака (обязательна):');if(!reason||!reason.trim())return alert('Укажите причину');
+ o.materials[i].spoiled={reason:reason.trim(),dt:new Date().toISOString(),by:state.user};
+ logAction(o,'purchase_spoiled',{name:o.materials[i].name,reason:reason.trim()});
+ markOrder(o);save();render();
+}
+function refundCompensation(id,i){
+ var o=byId(id);if(!o)return;
+ if(!canRefundGate())return alert('Нет права');
+ var m=(o.materials||[])[i];if(!m||!m.payer||m.payer==='company'||m.refund==='paid')return;
+ m.refund='paid';
+ logAction(o,'purchase_refund',{by:m.payer});
+ markOrder(o);save();render();
+}
+// === ЗАКУПКИ: конец ===
 function renderCreate(){
  return `
 <div class="header"><button class="back" onclick="go('orders')">←</button><h1>Новая заявка</h1></div>
@@ -1101,6 +1139,7 @@ function renderCreate(){
  <div class="field"><input class="input" id="nm-name" placeholder="Наименование *" style="margin-bottom:6px">
  <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-qty" placeholder="Кол-во"><input class="input" id="nm-price" type="number" placeholder="Цена ₽/ед."><select class="input" id="nm-munit" style="max-width:110px"><option value="pcs">шт</option><option value="m">пог. м</option><option value="m2">м²</option><option value="kg">кг</option><option value="l">л</option><option value="h">час</option></select></div>
  <select class="input" id="nm-buyer" style="margin-bottom:6px">${Object.keys(BUYER).map(k=>`<option value="${k}">${BUYER[k]}</option>`).join('')}</select>
+ <select class="input" id="nm-payer" style="margin-bottom:6px"><option value="company">Оплачено: Компания</option>${activeWorkers().map(function(u){var w=getUserName(u);return '<option value="'+escapeHtml(w)+'">Оплачено: '+escapeHtml(w)+'</option>';}).join('')}</select>
  <input class="input" id="nm-where" placeholder="Где купить / забрать" style="margin-bottom:6px">
  <div class="row2" style="margin-bottom:6px"><input class="input" id="nm-dl" type="number" value="3" min="1"><select class="input" id="nm-unit"><option value="h">часов до работ</option><option value="d">дней до работ</option></select></div>
  <button class="btn btn-outline" onclick="addNewMat()">＋ Добавить материал</button></div>
@@ -1831,6 +1870,7 @@ function matEdit(id,i){
   '<select class="input" id="me-munit" style="max-width:110px">'+Object.keys(UNITS).map(function(k){return '<option value="'+k+'"'+((m.munit||'pcs')===k?' selected':'')+'>'+UNITS[k]+'</option>';}).join('')+'</select></div>'+
   '<input class="input" id="me-price" type="number" min="0" value="'+(+m.price||0)+'" placeholder="Цена ₽/ед." style="margin-bottom:6px">'+
   '<select class="input" id="me-buyer" style="margin-bottom:6px">'+Object.keys(BUYER).map(function(k){return '<option value="'+k+'"'+((m.buyer||'worker')===k?' selected':'')+'>'+BUYER[k]+'</option>';}).join('')+'</select>'+
+'<select class="input" id="me-payer" style="margin-bottom:6px"><option value="company"' + ((!m.payer||m.payer==='company')?' selected':'') + '>Оплачено: Компания</option>'+activeWorkers().map(function(u){var w=getUserName(u);return '<option value="'+escapeHtml(w)+'"'+(m.payer===w?' selected':'')+'>Оплачено: '+escapeHtml(w)+'</option>';}).join('')+'</select>'+
   '<input class="input" id="me-where" value="'+escapeHtml(m.where||'')+'" placeholder="Где купить / забрать" style="margin-bottom:8px">'+
   '<div class="row2"><button class="btn-sm btn-outline" onclick="closeModal()">Отмена</button><button class="btn-sm btn-blue" onclick="matSave('+o.id+','+i+')">💾 Сохранить</button></div>'+
   '</div></div>');
@@ -1843,6 +1883,7 @@ function matSave(id,i){
  var ms=o.materials||[];var m=ms[i];if(!m)return;
  m.name=nm;m.qty=g('me-qty')||m.qty||'1';m.price=+g('me-price')||0;
  m.munit=g('me-munit')||m.munit||'pcs';m.buyer=g('me-buyer')||m.buyer;m.where=g('me-where');
+ var np=g('me-payer');if(np)m.payer=np;
  logAction(o,'edit',{fields:['материал изменён: '+nm]});
  markOrder(o);save();closeModal();render();
 }
@@ -1861,11 +1902,11 @@ function toggleStages(id){state.stagesOpen=state.stagesOpen===id?null:id;render(
 function addMat(id){const g=x=>document.getElementById(x).value;
  if(!g('mf-name'))return alert('Введите наименование');
  if(!canShopMats(byId(id)))return alert('Нет права orders_edit');
- byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,munit:g('mf-munit')||'pcs',buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo'});
+ byId(id).materials.push({name:g('mf-name'),qty:g('mf-qty')||'1',price:+g('mf-price')||0,munit:g('mf-munit')||'pcs',buyer:g('mf-buyer'),where:g('mf-where'),deadline:+g('mf-dl')||3,unit:g('mf-unit'),status:'todo',payer:g('mf-payer')||'company',refund:(g('mf-payer')||'company')!=='company'?'pending':'none'});
  markOrder(byId(id));save();render()}
 function addNewMat(){const g=x=>document.getElementById(x).value;
  if(!g('nm-name'))return alert('Введите наименование');
- state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,munit:g('nm-munit')||'pcs',buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo'});
+ state.newMats.push({name:g('nm-name'),qty:g('nm-qty')||'1',price:+g('nm-price')||0,munit:g('nm-munit')||'pcs',buyer:g('nm-buyer'),where:g('nm-where'),deadline:+g('nm-dl')||3,unit:g('nm-unit'),status:'todo',payer:g('nm-payer')||'company',refund:(g('nm-payer')||'company')!=='company'?'pending':'none'});
  ['nm-name','nm-qty','nm-price','nm-where'].forEach(x=>document.getElementById(x).value='');
  document.getElementById('newmats').innerHTML=state.newMats.map((m,i)=>`<div class="mat"><div class="mat-head"><span class="mat-name">${escapeHtml(m.name)} (${escapeHtml(m.qty)} ${unitLabel(m.munit)})</span><span style="color:var(--red);cursor:pointer" onclick="state.newMats.splice(${i},1);renderCreate2()">✕</span></div><div class="muted">${money(m.price)} • ${BUYER[m.buyer]} • за ${m.deadline} ${m.unit==='h'?'ч':'дн'} до работ</div></div>`).join('');
 }
@@ -3084,7 +3125,7 @@ var w=o.works||[];
 if(!w.length)return '<div class="info-row"><span>Основная работа</span><b>'+money(o.price)+'</b></div>';
 return w.map(function(x){return '<div class="info-row"><span style="'+(x.skipped?'text-decoration:line-through;color:#999':'')+'">'+(x.skipped?'⛔ ':x.done?'✅ ':'◻ ')+escapeHtml(x.title)+(x.qty&&x.qty!=1?' '+x.qty+' '+unitLabel(x.unit)+' × '+money(+x.price||0)+'/'+unitLabel(x.unit):' '+money(+x.price||0)+'/'+unitLabel(x.unit))+'</span><b>'+money((+x.price||0)*(+x.qty||1))+'</b></div>';}).join('');
 }
-function matsSpent(o){return (o.materials||[]).filter(function(m){return m.status==='bought';}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0));},0);}
+function matsSpent(o){return (o.materials||[]).filter(function(m){return m.status==='bought'&&!m.spoiled;}).reduce(function(s,m){return s+(m.factPrice!=null?+m.factPrice:(+m.price||0));},0);}
 function profitOf(o){return total(o)-matsSpent(o);}
 // R1: база дележки — прибыль (по умолчанию) или выручка (DB.shareBase)
 function baseOf(o){return DB.shareBase==='revenue'?total(o):profitOf(o);}
@@ -3507,7 +3548,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.6.6';
+const APP_VERSION='2.6.8';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
