@@ -39,10 +39,7 @@ var BUILTIN_ROLES = [
  {id:'worker', name:'Работник', builtin:true, perms:['orders_view','tasks','calendar','shopping']}
 ];
 // Совместимость: старые константные права по ключу роли
-var PERMS = {
- admin:['all'], operator:['orders','calendar','shopping','create','reports'],
- manager:['orders','calendar','shopping'], worker:['tasks','shopping','calendar']
-};
+/* legacy PERMS удалён: единый источник прав — PERMS_CATALOG + unionPermsFor/roleById */
 
 function deviceId(){
  var d=localStorage.getItem('crm_device');
@@ -314,13 +311,7 @@ function pushEvent(type,title,body,orderId,silent){
  updateAppBadge();
  if(typeof render==='function')render();
 }
-function markEventsRead(screen){
- var orderTypes=['order','assigned','completed','overdue','route'];
- var t={orders:orderTypes,details:orderTypes,tasks:orderTypes,calendar:['calendar'],shopping:['material'],staff:['request']}[screen]||null;
- var ch=false;
- if(t)EVENTS.forEach(function(e){ if(!e.read&&t.indexOf(e.type)>=0){ e.read=true; ch=true; } });
- if(ch){ eventsSave(); updateAppBadge(); if(typeof render==='function')render(); }
-}
+/* markEventsRead — единая реализация см. выше (с персональной отметкой readEvents) */
 function clearOrdersBadge(){ markEventsRead('orders'); }
 // экран соответствия события → пункт меню для красного бейджа
 function screenForEvent(type){

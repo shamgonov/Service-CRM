@@ -696,7 +696,7 @@ showAppNotif('⏰ Просроченные заказы',{body:'У вас '+over
 function logout(){state.role=null;state.user=null;document.getElementById('nav').style.display='none';render()}
 function renderLogin(){return `
 <div class="header dark" style="flex-direction:column;align-items:flex-start;gap:4px">
- <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.8</div></div>
+ <h1>🔧 ServiceCRM</h1><div style="font-size:12px;opacity:.8">Версия v2.6.9</div></div>
 <div class="card"><div class="muted">Загрузка...</div></div>`}
 function markViewed(id){
  // персональный бейдж: открыл карточку → все события по заявке просмотрены (даже если заявка уже удалена)
@@ -936,7 +936,7 @@ ${secBarHtml([['main','Основное'],['scheme','Схема'],['estimate','�
 <div class="sec" id="sec-scheme"><div class="card"><div class="sec-title">🗺 Схема выполнения</div>
   ${(o.route&&o.route.length)||o.status==='approved'||isInwork(o)?routeTimeline(o,canEditRoute(o)&&!!(o.route&&o.route.length)):`<div class="muted">Схема появится после взятия заявки в работу</div>`}
  <button class="btn btn-outline" style="margin-top:8px" onclick="routeScreen(${o.id})">🗺 Открыть схему</button>
- ${orderType(o)==='manufacture'?`<div class="sec-title" style="margin-top:14px">🔧 Этапы работ</div>${orderStages(o).length?stageTimeline(o,canEditWorks(o)||isMyInwork(o)):'<div class="muted">Этапы появятся после взятия заявки в работу</div>'}`:`<div class="sec-title" style="margin-top:14px">🧩 Этапы схемы</div>${(o.stages||[]).length?(state.stagesOpen===o.id?`${stageTimeline(o,(canEditWorks(o)||isMyInwork(o))&&!['completed','paid'].includes(o.status))}<button class="btn-sm btn-outline" style="margin-top:6px" onclick="toggleStages(${o.id})">▲ Свернуть этапы</button>`:`<button class="btn-sm btn-outline" onclick="toggleStages(${o.id})">🧩 Показать этапы (${(o.stages||[]).filter(s=>s.done).length}/${(o.stages||[]).length})</button>`):'<div class="muted">Этапы появятся после взятия заявки в работу</div>'}`}
+ ${orderType(o)==='manufacture'?`<div class="sec-title" style="margin-top:14px">🔧 Этапы работ</div>${orderStages(o).length?stageTimeline(o,canEditWorks(o)):'<div class="muted">Этапы появятся после взятия заявки в работу</div>'}`:`<div class="sec-title" style="margin-top:14px">🧩 Этапы схемы</div>${(o.stages||[]).length?(state.stagesOpen===o.id?`${stageTimeline(o,(canEditWorks(o))&&!['completed','paid'].includes(o.status))}<button class="btn-sm btn-outline" style="margin-top:6px" onclick="toggleStages(${o.id})">▲ Свернуть этапы</button>`:`<button class="btn-sm btn-outline" onclick="toggleStages(${o.id})">🧩 Показать этапы (${(o.stages||[]).filter(s=>s.done).length}/${(o.stages||[]).length})</button>`):'<div class="muted">Этапы появятся после взятия заявки в работу</div>'}`}
 </div>
 <div class="card"><div class="sec-title">📸 Фото</div>
  <div class="photos" id="photoGrid">${(function(){
@@ -1386,7 +1386,7 @@ ${assigned.length?`<div class="card"><div class="sec-title">🎯 Назначе�
    <div class="muted">📍 ${escapeHtml(o.address)}<br>⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}</div>
    <div style="margin:4px 0">${badges(o)}</div>
    <div style="font-weight:700;color:var(--green)">${money(total(o))}</div></div>
-   ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,canEditWorks(o)||isMyInwork(o))}</div>`:''}
+   ${(o.stages||[]).length?`<div style="margin:6px 0">${stageTimeline(o,canEditWorks(o))}</div>`:''}
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="routeScreen(${o.id})">🗺 Схема</button>
    <button class="btn-sm btn-outline" style="margin-bottom:6px" onclick="go('details',${o.id})">ℹ️ Открыть</button>
    ${isInwork(o)&&o.worker===state.user&&orderType(o)!=='manufacture'?`${allStagesReadyForComplete(o)?`<button class="btn btn-purple${hintCls(o,'done',0)}"${hintData(o,'done',0)} onclick="finishOrder(${o.id})">✅ Завершить</button>`:(()=>{const st=o.stages||[];const leftIdx=st.findIndex(s=>s.id==='st_left');const leftDone=leftIdx>=0&&st[leftIdx].done;const hasUndoneAfter=st.slice(leftIdx+1).some(s=>!s.done&&!s.autoOnly);return leftDone&&hasUndoneAfter&&!isEnroute(o)?`<button class="btn btn-yellow" onclick="pauseOrder(${o.id})">⏸ Пауза</button><button class="btn btn-red" style="flex:1" onclick="refuseOrder(${o.id})">🚫 Отказаться</button>`:`<button class="btn btn-blue" onclick="openSchemeTray(${o.id})">${o.startedTs?'▶ Продолжить':'▶ Приступить'}</button>`;})()}`:''}
@@ -3548,7 +3548,7 @@ render();
  </div>
 </div>
 <script>
-const APP_VERSION='2.6.8';
+const APP_VERSION='2.6.9';
 function updNote(v){return (v.text&&v.text.length)?v.text:('Плановое обновление №'+v.deploy+' от '+v.dt);}
 function updStrip(on){document.getElementById('updStrip').style.display=on?'block':'none';document.body.style.paddingTop=on?'38px':'0';}
 function updOpenModal(){var v=window.__updCur;if(!v)return;
