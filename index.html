@@ -640,6 +640,8 @@ function tickTimeLabels(){
 setInterval(tickTimeLabels,1000);
 function badges(o){
  let b=`<span class="badge" style="background:${ST[o.status].c};color:${ST[o.status].tc}">${ST[o.status].t}</span>`;
+ if(isAssignedToMe(o))b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">${(o.worker&&isMeName(o.worker))?'👷 мой':'👥 соисполнитель'}</span>`;
+ if(isOverdue(o))b+=`<span class="badge" style="background:#fee2e2;color:#991b1b">⚠️ просрочка</span>`;
  if(isTest(o))b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">🧪 тест</span>`;
  if(o.diagnostician)b+=`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--text-secondary)">👤 диагност: ${escapeHtml(o.diagnostician)}</span>`;
  if(o.worker&&['new','approved'].includes(o.status)&&!isInwork(o))b+=`<span class="badge" style="background:#dbeafe;color:#1e40af">🎯 назначен: ${escapeHtml(o.worker)}</span>`;
@@ -723,15 +725,16 @@ function renderOrders(){
  if(state.filter==='today')list=list.filter(o=>o.date===d0);
   if(state.filter==='active')list=list.filter(o=>['new','inspection','approved','in_progress','inwork','waiting'].includes(o.status));
  if(state.filter==='done')list=list.filter(o=>['completed','paid'].includes(o.status));
+ if(state.filter==='mine')list=list.filter(o=>isAssignedToMe(o));
  // F2: срочные (сегодня, без исполнителя, до начала <=1 ч) — первыми
  list=list.slice().sort((a,b)=>(urgentSoon(b)?1:0)-(urgentSoon(a)?1:0));
  return `
 <div class="header"><h1>📋 Заявки</h1><span style="margin-left:auto;font-size:12px">${escapeHtml(state.user)} • <u onclick="logout()" style="cursor:pointer">выйти</u></span></div>
 <div class="filters">
- ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные']].map(f=>
+ ${[['all','Все'],['today','Сегодня'],['active','Активные'],['done','Завершенные'],['mine','👷 Мои']].map(f=>
   `<button class="fbtn ${state.filter===f[0]?'active':''}" onclick="state.filter='${f[0]}';render()">${f[1]}</button>`).join('')}
 </div>
-${list.map(o=>`<div class="ord" onclick="orderDossier(${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
+${list.map(o=>`<div class="ord" onclick="orderDossier(${o.id})" style="${urgentSoon(o)?'background:#fef9c3;border-left:4px solid #f59e0b;':''}${isAssignedToMe(o)?'background:#fff8e1;border-left:4px solid #fbbf24;':''}${o.status==='canceled'?'opacity:.55;filter:grayscale(.8)':''}">
  <div style="display:flex;justify-content:space-between"><b>${escapeHtml(o.client)}</b><span class="muted">№${o.id}</span></div>
  <div class="muted">📍 ${escapeHtml(o.address)}</div>
  <div class="muted">⏰ ${o.date.slice(8)}.${o.date.slice(5,7)} ${o.t1}–${o.t2}${o.worker?' • '+escapeHtml(o.worker):''}${urgentSoon(o)?' <b style="color:#b45309">⚡ скоро, нет исполнителя</b>':''}${(burnVisible()&&isBurning(o))?' <b style="color:#dc2626">🔴 горит</b>':''}</div>
@@ -2192,15 +2195,21 @@ function cancelOrderModal(id){
  }
 // === ПОЛНОЕ РЕДАКТИРОВАНИЕ ЗАЯВКИ ===
 // Доступ: владелец; completed/paid — только владелец; иначе orders_edit или создатель заявки
+// Контроль редактирования карточки: владелец/контролирующий (adminLike, canViewAllOrders)
+// ИЛИ назначенный (worker+helpers — isAssignedToMe), ИЛИ создатель заявки.
+// isOrderEditor остаётся источником права orders_edit для прочих гейтов (матрицу не трогаем).
 function canEditOrder(o){
  if(typeof isOwner==='function'&&uiOwner())return true;
  if(o.status==='completed'||o.status==='paid')return false;
- return isOrderEditor(o);
+ var ctrl=(typeof adminLike==='function'&&adminLike())||(typeof canViewAllOrders==='function'&&canViewAllOrders());
+ if(ctrl)return true;
+ if(typeof isAssignedToMe==='function'&&isAssignedToMe(o))return true;
+ return !!(o&&o.by&&o.by===state.user);
 }
 function setMatsInTotal(id,checked){var o=byId(id);if(!o)return;o.matsInTotal=!!checked;markOrder(o);save();render();}
 function editOrderModal(id){
  const o=byId(id);if(!o)return;
- if(!canEditOrder(o))return alert(o.status==='completed'||o.status==='paid'?'Завершённую заявку может редактировать только владелец':'Нет права orders_edit');
+ if(!canEditOrder(o))return alert(o.status==='completed'||o.status==='paid'?'Завершённую заявку может редактировать только владелец':'Редактировать могут исполнитель, соисполнитель, создатель заявки или руководитель');
  const workers=activeWorkers();
  openModal(
   `<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
@@ -2236,7 +2245,7 @@ function editOrderModal(id){
 }
 function doEditOrder(id){
  const o=byId(id);if(!o)return;
- if(!canEditOrder(o))return alert('Нет права orders_edit');
+ if(!canEditOrder(o))return alert('Редактировать могут исполнитель, соисполнитель, создатель заявки или руководитель');
  const g=x=>(document.getElementById(x).value||'').trim();
  if(!g('e-client'))return alert('Укажите клиента');
 if(slotIsPast(g('e-date'),g('e-t1'),g('e-t2')))return alert('Выбранное время уже прошло.');
@@ -2592,6 +2601,11 @@ function resumeWork(id){
 // === ЭТАП A: ОБЯЗАТЕЛЬСТВА ИСПОЛНИТЕЛЯ («я поехал» / «опаздываю» / конфликт времени) ===
 // o.enroute = ISO-метка выезда. Статус заявки НЕ меняется. История — только через logAction.
 function isEnroute(o){return !!(o&&o.enroute);}
+// «Просрочка»: активная (не completed/paid/canceled/postponed) заявка с датой раньше сегодня.
+// Визуальный критерий списка/бейджей; сетевые события считает свой интервал в firebase-access.js.
+function isOverdue(o){
+ return !!o&&!!o.date&&o.date<localToday()&&['new','inspection','approved','in_progress','inwork','waiting','paused'].indexOf(o.status)>=0;
+}
 // «горение»: inwork, от начала интервала >30 мин, и за 30 мин в истории нет
 // действий выезда/задержки (enroute/late/enroute_cancel/conflict_accept).
 function isBurning(o){
