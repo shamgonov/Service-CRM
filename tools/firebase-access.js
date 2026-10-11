@@ -405,6 +405,15 @@ function watchNewOrders(prev, next){
    // перенос/отмена
    if(p.status!=='postponed'&&o.status==='postponed'&&(wasMine||isOwner())&&!byMe)
     pushEvent('order','📅 Заявку №'+o.id+' перенесли','Статус: перенос',o.id);
+   // просрочка: дата прошла, заявка всё ещё активна — переход не-просрочка → просрочка
+   var OD_ST=['new','inspection','approved','in_progress','inwork','waiting','paused'];
+   var _tn=new Date(),_td=_tn.getFullYear()+'-'+String(_tn.getMonth()+1).padStart(2,'0')+'-'+String(_tn.getDate()).padStart(2,'0');
+   var wasOd=p.date&&p.date<_td&&OD_ST.indexOf(p.status)>=0;
+   var nowOd=o.date&&o.date<_td&&OD_ST.indexOf(o.status)>=0;
+   if(nowOd&&!wasOd&&!byMe&&(wasMine||nowMine||isOwner())){
+    var _st=(typeof ST!=='undefined'&&ST[o.status])?ST[o.status].t:o.status;
+    pushEvent('overdue','⏰ Просрочка — заявка №'+o.id,'Дата '+esc(o.date)+' прошла, статус: '+esc(_st),o.id);
+   }
    // материал «не найти» → ролям с shopping
    if(o.materials&&p.materials){
     var wasIssue=p.materials.some(function(m){return m.status==='issue';});
